@@ -58,10 +58,21 @@ func NewGaussian(numElements int, mean, variance *matrix.Dense,
 	log := func(r, c int, v float64) float64 { return math.Log(v) }
 	g.tmpArray = matrix.MustDense(matrix.ZeroDense(numElements, 1))
 	g.tmpArray = g.variance.ApplyDense(log, g.tmpArray)
-	g.const1 = -float64(numElements) * math.Log(2*math.Pi) / 2
+	g.const1 = -float64(numElements) * math.Log(2.0*math.Pi) / 2.0
 	g.const2 = g.const1 - g.tmpArray.Sum()/2.0
 
 	return
+}
+
+func (g *Gaussian) LogProb(obs *matrix.Dense) float64 {
+
+	g.tmpArray = g.mean.SubDense(obs, g.tmpArray)
+	sq := func(r, c int, v float64) float64 { return v * v }
+	g.tmpArray.ApplyDense(sq, g.tmpArray)
+
+	inv := func(r, c int, v float64) float64 { return 1.0 / v }
+	tmp2 := g.variance.ApplyDense(inv, g.variance)
+	return g.const2 - tmp2.InnerDense(g.tmpArray)/2.0
 }
 
 func (g *Gaussian) Mean() *matrix.Dense {
