@@ -12,7 +12,7 @@ type ModelRO interface {
 
 // A trainable model.
 type Model interface {
-	ModelR0
+	ModelRO
 
 	Update(a []float64) error
 	Estimate() error
@@ -30,5 +30,5 @@ type model struct {
 
 func (M *model) Name() string        { return M.name }
 func (M *model) NumElements() int    { return M.numElements }
-func (M *model) Trainable() int      { return M.trainable }
+func (M *model) Trainable() bool     { return M.trainable }
 func (M *model) NumSamples() float64 { return M.numSamples }

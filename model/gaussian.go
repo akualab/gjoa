@@ -1,8 +1,9 @@
 package model
 
 import (
+	"code.google.com/p/biogo.matrix"
 	"fmt"
-	"github.com/skelterjohn/go.matrix"
+	"math"
 )
 
 const (
@@ -14,18 +15,17 @@ type Gaussian struct {
 	model
 
 	diagonal   bool
-	sumx       *matrix.DenseMatrix
-	sumxsq     *matrix.DenseMatrix
+	sumx       *matrix.Dense
+	sumxsq     *matrix.Dense
 	numSamples uint64
-	mean       *matrix.DenseMatrix
-	variance   *matrix.DenseMatrix
-
-	tmpArray matrix.DenseMatrix
-	const1   float64 // -(N/2)log(2PI) Depends only on numElements.
-	const2   float64 // const1 - sum(log sigma_i) Also depends on variance.
+	mean       *matrix.Dense
+	variance   *matrix.Dense
+	tmpArray   *matrix.Dense
+	const1     float64 // -(N/2)log(2PI) Depends only on numElements.
+	const2     float64 // const1 - sum(log sigma_i) Also depends on variance.
 }
 
-func NewGaussian(numElements int, mean, variance matrix.DenseMatrix,
+func NewGaussian(numElements int, mean, variance *matrix.Dense,
 	trainable, diagonal bool, name string) (g *Gaussian, e error) {
 
 	if !diagonal {
@@ -33,22 +33,41 @@ func NewGaussian(numElements int, mean, variance matrix.DenseMatrix,
 		return
 	}
 
-	g = Gaussian{
-		numElements: numElements,
-		name:        name,
-		trainable:   trainable,
-		mean:        mean,
-		variance:    variance,
-		diagonal:    true,
+	g = &Gaussian{
+		mean:     mean,
+		variance: variance,
+		diagonal: true,
 	}
+	g.numElements = numElements
+	g.name = name
+	g.trainable = trainable
+
+	if mean == nil {
+		g.mean = matrix.MustDense(matrix.ZeroDense(numElements, 1))
+	}
+	if variance == nil {
+		sv := func(r, c int, v float64) float64 { return SMALL_VARIANCE }
+		g.variance = matrix.MustDense(matrix.ZeroDense(numElements, 1))
+		g.variance.ApplyDense(sv, g.variance)
+	}
+	if trainable {
+		g.sumx = matrix.MustDense(matrix.ZeroDense(numElements, 1))
+		g.sumxsq = matrix.MustDense(matrix.ZeroDense(numElements, 1))
+	}
+
+	log := func(r, c int, v float64) float64 { return math.Log(v) }
+	g.tmpArray = matrix.MustDense(matrix.ZeroDense(numElements, 1))
+	g.tmpArray = g.variance.ApplyDense(log, g.tmpArray)
+	g.const1 = -float64(numElements) * math.Log(2*math.Pi) / 2
+	g.const2 = g.const1 - g.tmpArray.Sum()/2.0
 
 	return
 }
 
-func (g *Gaussian) Mean() *matrix.DenseMatrix {
+func (g *Gaussian) Mean() *matrix.Dense {
 	return g.sumx
 }
 
-func (g *Gaussian) Variance() *matrix.DenseMatrix {
+func (g *Gaussian) Variance() *matrix.Dense {
 	return g.variance
 }
