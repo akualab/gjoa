@@ -13,7 +13,6 @@ const (
 
 type Gaussian struct {
 	model
-
 	diagonal bool
 	sumx     *matrix.Dense
 	sumxsq   *matrix.Dense
@@ -54,10 +53,12 @@ func NewGaussian(numElements int, mean, variance *matrix.Dense,
 		mean:     mean,
 		variance: variance,
 		diagonal: true,
+		model: model{
+			numElements: numElements,
+			name:        name,
+			trainable:   trainable,
+		},
 	}
-	g.numElements = numElements
-	g.name = name
-	g.trainable = trainable
 
 	if mean == nil {
 		g.mean = matrix.MustDense(matrix.ZeroDense(numElements, 1))

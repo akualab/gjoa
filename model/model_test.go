@@ -21,6 +21,24 @@ func cmpf64(f1, f2 float64) bool {
 }
 
 // Tests
+
+func TestGMMName(t *testing.T) {
+
+	gmm, e := NewGaussianMixture(4, 123, true, true, "mygmm")
+	if e != nil {
+		t.Fatal(e)
+	}
+
+	// for i, c := range gmm.Components() {
+	// 	t.Logf("Name for comp #%4d: %s", i, c.Name())
+	// }
+
+	name := gmm.Components()[111].Name()
+	if name != "mygmm-111" {
+		t.Errorf("Wrong component name in gmm. Expected: [mygmm-111], Got: [%s]", name)
+	}
+}
+
 func TestGaussian(t *testing.T) {
 
 	g, e := NewGaussian(10, nil, nil, true, true, "testing")
@@ -80,14 +98,14 @@ func getRandomVector(mean, std []float64) (*matrix.Dense, error) {
 
 func TestTrainGaussian(t *testing.T) {
 
-	dim := 4
-	mean := []float64{1, 2, 3, 4}
-	std := []float64{0.5, 0.5, 0.5, 0.5}
+	dim := 8
+	mean := []float64{0.1, 0.2, 0.3, 0.4, 1, 1, 1, 1}
+	std := []float64{0.5, 0.5, 0.5, 0.5, 0.1, 0.2, 0.3, 0.4}
 	g, e := NewGaussian(dim, nil, nil, true, true, "test training")
 	if e != nil {
 		t.Fatal(e)
 	}
-	for i := 0; i < 1000000; i++ {
+	for i := 0; i < 2000000; i++ {
 		rv, err := getRandomVector(mean, std)
 		if err != nil {
 			t.Fatal(err)
