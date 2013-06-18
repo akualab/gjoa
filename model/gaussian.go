@@ -13,23 +13,23 @@ const (
 
 type Gaussian struct {
 	model
-	diagonal bool
-	sumx     *matrix.Dense
-	sumxsq   *matrix.Dense
-	mean     *matrix.Dense
-	variance *matrix.Dense
-	tmpArray *matrix.Dense
-	const1   float64 // -(N/2)log(2PI) Depends only on numElements.
-	const2   float64 // const1 - sum(log sigma_i) Also depends on variance.
+	diagonal    bool
+	sumx        *matrix.Dense
+	sumxsq      *matrix.Dense
+	mean        *matrix.Dense
+	variance    *matrix.Dense
+	varianceInv *matrix.Dense
+	tmpArray    *matrix.Dense
+	const1      float64 // -(N/2)log(2PI) Depends only on numElements.
+	const2      float64 // const1 - sum(log sigma_i) Also depends on variance.
 }
 
 // Define functions for elementwise transformations.
 var log = func(r, c int, v float64) float64 { return math.Log(v) }
+var exp = func(r, c int, v float64) float64 { return math.Exp(v) }
 var sq = func(r, c int, v float64) float64 { return v * v }
 var sqrt = func(r, c int, v float64) float64 { return math.Sqrt(v) }
 var inv = func(r, c int, v float64) float64 { return 1.0 / v }
-
-//var sv = func(r, c int, v float64) float64 { return SMALL_VARIANCE }
 var floorv = func(r, c int, v float64) float64 {
 	if v < SMALL_VARIANCE {
 		return SMALL_VARIANCE
@@ -39,6 +39,9 @@ var floorv = func(r, c int, v float64) float64 {
 
 func setValueFunc(f float64) matrix.ApplyFunc {
 	return func(r, c int, v float64) float64 { return f }
+}
+func addScalarFunc(f float64) matrix.ApplyFunc {
+	return func(r, c int, v float64) float64 { return v + f }
 }
 
 func NewGaussian(numElements int, mean, variance *matrix.Dense,
@@ -70,6 +73,9 @@ func NewGaussian(numElements int, mean, variance *matrix.Dense,
 	if trainable {
 		g.sumx = matrix.MustDense(matrix.ZeroDense(numElements, 1))
 		g.sumxsq = matrix.MustDense(matrix.ZeroDense(numElements, 1))
+
+		g.varianceInv = matrix.MustDense(matrix.ZeroDense(numElements, 1))
+		g.variance.ApplyDense(inv, g.varianceInv)
 	}
 
 	g.tmpArray = matrix.MustDense(matrix.ZeroDense(numElements, 1))
@@ -83,10 +89,16 @@ func NewGaussian(numElements int, mean, variance *matrix.Dense,
 func (g *Gaussian) LogProb(obs *matrix.Dense) float64 {
 
 	g.tmpArray = g.mean.SubDense(obs, g.tmpArray)
-	g.tmpArray.ApplyDense(sq, g.tmpArray)
+	//fmt.Printf("mean-obs: \n%+v\n", g.tmpArray)
 
-	tmp2 := g.variance.ApplyDense(inv, g.variance)
-	return g.const2 - tmp2.InnerDense(g.tmpArray)/2.0
+	g.tmpArray.ApplyDense(sq, g.tmpArray)
+	//fmt.Printf("(mean-obs)^2: \n%+v\n", g.tmpArray)
+
+	//fmt.Printf("varianceInv: \n%+v\n", g.varianceInv)
+	//fmt.Printf("const2: %f\n", g.const2)
+	//fmt.Printf("inner: %f\n", g.tmpArray.InnerDense(g.varianceInv)/2.0)
+
+	return g.const2 - g.tmpArray.InnerDense(g.varianceInv)/2.0
 }
 
 func (g *Gaussian) Prob(obs *matrix.Dense) float64 {
@@ -147,11 +159,13 @@ func (g *Gaussian) Estimate() error {
 		g.sumxsq.ScalarDense(1.0/g.numSamples, tmp)
 		tmp.Sub(g.tmpArray, g.variance)
 		g.variance.ApplyDense(floorv, g.variance)
+		g.variance.ApplyDense(inv, g.varianceInv)
 
 	} else {
 
 		/* Not enough training sample. */
 		g.variance.ApplyDense(setValueFunc(SMALL_VARIANCE), g.variance)
+		g.variance.ApplyDense(inv, g.varianceInv)
 		g.mean.ApplyDense(setValueFunc(0), g.mean)
 	}
 
@@ -179,8 +193,18 @@ func (g *Gaussian) Mean() *matrix.Dense {
 	return g.mean
 }
 
+func (g *Gaussian) SetMean(mean *matrix.Dense) {
+	g.mean = mean
+}
+
 func (g *Gaussian) Variance() *matrix.Dense {
 	return g.variance
+}
+
+func (g *Gaussian) SetVariance(variance *matrix.Dense) {
+	g.variance = variance
+	g.varianceInv = matrix.MustDense(matrix.ZeroDense(g.numElements, 1))
+	g.variance.ApplyDense(inv, g.varianceInv)
 }
 
 func (g *Gaussian) StandardDeviation() *matrix.Dense {
