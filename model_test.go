@@ -1,4 +1,4 @@
-package model
+package gjøa
 
 import (
 	"code.google.com/p/biogo.matrix"
@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-const epsilon = 0.001
+const epsilon = 0.004
 
 func cmpf64(f1, f2 float64) bool {
 	err := f2 - f1

@@ -1,0 +1,25 @@
+{
+	"Abbrev": "K81",
+	"Rep": 22,
+	"Altitude": 1401,
+	"Date": "2013-05-01T12:14:22Z"
+}
+{
+	"Abbrev": "Cra",
+	"Rep": 23,
+	"Locality": "Southern_Hawkes_Bay",
+	"Latitude": "40_11",
+	"Altitude": 1232,
+	"Utility": "low",
+	"Date": "2013-05-01T13:04:05Z",
+	"Tags": "green, smell, view"
+}
+{
+	"Abbrev": "Wai",
+	"Rep": 19,
+	"Latitude": "39_50",
+	"Altitude": 1181,
+	"Utility": "good",
+	"Date": "2013-05-02T10:12:13.837Z",
+	"Tags": "green, smell"
+}

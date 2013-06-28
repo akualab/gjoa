@@ -1,26 +1,10 @@
-package model
+package gjøa
 
 import (
 	"code.google.com/p/biogo.matrix"
 	"fmt"
 	"math"
 	"math/rand"
-)
-
-const (
-
-	// Estimate mean and variance of Gaussian distribution in the first
-	// iteration. Create the target number of Gaussian components
-	// (numComponents) in the mixture at the end of the first iteration
-	// using the estimated mean and variance.
-	GMM_STEP = iota
-
-	// Double the number of Gaussian components at the end of each
-	// iteration.
-	GMM_DOUBLE
-
-	// Do not allocate structures for training.
-	GMM_NONE
 )
 
 type GMMConfig struct {
@@ -142,23 +126,14 @@ func (gmm *GMM) Update(obs *matrix.Dense) error {
 	}
 
 	maxProb := gmm.logProbInternal(obs, gmm.tmpProbs2)
-	//fmt.Printf("tmpProbs2: \n%+v\n", gmm.tmpProbs2)
-
 	gmm.totalLikelihood += maxProb
 	gmm.tmpProbs2.ApplyDense(addScalarFunc(-maxProb), gmm.tmpProbs2)
-
-	//fmt.Printf("%8.f: maxProb: %f\n", gmm.numSamples, maxProb)
-	//fmt.Printf("tmpProbs2: \n%+v\n", gmm.tmpProbs2)
 
 	// Compute posterior probabilities.
 	gmm.tmpProbs2.ApplyDense(exp, gmm.tmpProbs2)
 
-	//fmt.Printf("posterior: \n%+v\n", gmm.tmpProbs2)
-
 	// Update posterior sum, needed to compute mixture weights.
 	gmm.posteriorSum.Add(gmm.tmpProbs2, gmm.posteriorSum)
-
-	//fmt.Printf("posterior sum: \n%+v\n", gmm.posteriorSum)
 
 	// Update Gaussian components.
 	for i, c := range gmm.components {
@@ -185,12 +160,6 @@ func (gmm *GMM) Estimate() error {
 	for _, c := range gmm.components {
 		c.Estimate()
 	}
-
-	// After the first iteration, we can estimate the target number of
-	// mixture components.
-	// if (iteration == 0 && trainMethod == TrainMethod.STEP) {
-	//     increaseNumComponents(numComponents);
-	// }
 	gmm.iteration += 1
 
 	return nil
@@ -212,37 +181,6 @@ func (gmm *GMM) Clear() error {
 	return nil
 }
 
-/*
- * This method is used in {@link TrainMethod#STEP} Convert to a mixture with
- * N components. This method guarantees that the data structures are created
- * and that all the variables are set for starting a new training iteration.
- */
-// private void increaseNumComponents(int newNumComponents) {
-
-//     /*
-//      * We use the Gaussian distribution of the parent GMM to create the
-//      * children.
-//      */
-
-//     /* Get mean and variance from parent before we allocate resized data structures. */
-//     D1Matrix64F mean = MatrixOps.doubleArrayToMatrix(this.components[0]
-//             .getMean());
-//     D1Matrix64F variance = MatrixOps.doubleArrayToMatrix(this.components[0]
-//             .getVariance());
-
-//     /* Throw away all previous data structures. */
-//     allocateTrainDataStructures(newNumComponents);
-
-//     /*
-//      * Create new mixture components. Abandon the old ones. We already got
-//      * the mean and variance in the previous step.
-//      */
-//     for (int i = 0; i < newNumComponents; i++) {
-//         components[i].setMean(MatrixOps.createRandom(i, mean, variance));
-//         components[i].setVariance(new DenseMatrix64F(variance));
-//     }
-// }
-
 // Returns a random vector using the mean and variance vector.
 func RandomVector(mean, variance *matrix.Dense, r *rand.Rand) (vec *matrix.Dense, e error) {
 
@@ -261,7 +199,7 @@ func RandomVector(mean, variance *matrix.Dense, r *rand.Rand) (vec *matrix.Dense
 }
 
 // Generates a random Gaussian mixture model using mean and variance vectors as seed.
-// We can use this function to initialize the GMM before training. The mean an variance
+// Use this function to initialize the GMM before training. The mean and variance
 // vector can be estimated from the data set using a Gaussian model.
 func RandomGMM(mean, variance *matrix.Dense, numComponents int,
 	name string, seed int64) (gmm *GMM, e error) {
@@ -290,6 +228,7 @@ func RandomGMM(mean, variance *matrix.Dense, numComponents int,
 	return
 }
 
+// Returns the Gaussian components.
 func (gmm *GMM) Components() []*Gaussian {
 	return gmm.components
 }

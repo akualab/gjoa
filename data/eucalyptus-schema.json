@@ -1,0 +1,42 @@
+{
+	"Name": "eucalyptus",
+
+	"Fields": [
+		{
+			"Name": "Abbrev",
+			"Type": "nominal",
+			"Values": ["Cra","Cly","Nga","Wai","K81"]
+		},
+		{
+			"Name": "Rep",
+			"Type": "numeric"
+		},
+		{
+			"Name": "Locality",
+			"Type": "nominal",
+			"Values": ["Central_Hawkes_Bay","Northern_Hawkes_Bay","Southern_Hawkes_Bay"]
+		},
+		{
+			"Name": "Latitude",
+			"Type": "nominal",
+			"Values": ["39__38","39__00","40__11","39__50","40__57"]
+		},
+		{
+			"Name": "Altitude",
+			"Type": "numeric"
+		},
+		{
+			"Name": "Utility",
+			"Type": "nominal",
+			"Values": ["none","low","average","good","best"]
+		},
+		{
+			"Name": "Date",
+			"Type": "date"
+		},
+		{
+			"Name": "Tags",
+			"Type": "string"
+		}
+	]
+}

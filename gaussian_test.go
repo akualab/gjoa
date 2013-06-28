@@ -1,4 +1,4 @@
-package model
+package gjøa
 
 import (
 	"code.google.com/p/biogo.matrix"

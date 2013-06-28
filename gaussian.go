@@ -1,4 +1,4 @@
-package model
+package gjøa
 
 import (
 	"code.google.com/p/biogo.matrix"
@@ -119,6 +119,18 @@ func (g *Gaussian) Update(obs *matrix.Dense) error {
 	g.numSamples += 1
 
 	return nil
+}
+
+func (g *Gaussian) UpdateSlice(obs []float64) error {
+
+	if g.numElements != len(obs) {
+		return fmt.Errorf("Num elements mismatch [%d] vs [%d].", len(obs), g.numElements)
+	}
+	mat := matrix.MustDense(matrix.ZeroDense(g.numElements, 1))
+	for k, v := range obs {
+		mat.Set(k, 0, v)
+	}
+	return g.Update(mat)
 }
 
 func (g *Gaussian) WUpdate(obs *matrix.Dense, w float64) error {

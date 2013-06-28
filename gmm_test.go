@@ -1,4 +1,4 @@
-package model
+package gjøa
 
 import (
 	//"code.google.com/p/biogo.matrix"
@@ -35,14 +35,14 @@ func TestTrainGMM(t *testing.T) {
 
 	var seed int64 = 33
 	numComp := 2
-	numIter := 8
+	numIter := 10
 	numObs := 1000000
 
-	mean1 := []float64{1, 2}
-	std1 := []float64{0.3, 0.3}
-	mean2 := []float64{4, 4}
-	std2 := []float64{1, 1}
-	dim := len(mean1)
+	mean0 := []float64{1, 2}
+	std0 := []float64{0.3, 0.3}
+	mean1 := []float64{4, 4}
+	std1 := []float64{1, 1}
+	dim := len(mean0)
 
 	gmm, e := NewGaussianMixture(dim, numComp, true, true, "mygmm")
 	if e != nil {
@@ -57,12 +57,12 @@ func TestTrainGMM(t *testing.T) {
 	}
 	r := rand.New(rand.NewSource(seed))
 	for i := 0; i < numObs; i++ {
-		rv, err := getRandomVector(mean1, std1, r)
+		rv, err := getRandomVector(mean0, std0, r)
 		if err != nil {
 			t.Fatal(err)
 		}
 		g.Update(rv)
-		rv, err = getRandomVector(mean2, std2, r)
+		rv, err = getRandomVector(mean1, std1, r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -89,12 +89,12 @@ func TestTrainGMM(t *testing.T) {
 
 		// Update GMM stats.
 		for i := 0; i < numObs; i++ {
-			rv, err := getRandomVector(mean1, std1, r)
+			rv, err := getRandomVector(mean0, std0, r)
 			if err != nil {
 				t.Fatal(err)
 			}
 			gmm.Update(rv)
-			rv, err = getRandomVector(mean2, std2, r)
+			rv, err = getRandomVector(mean1, std1, r)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -117,17 +117,39 @@ func TestTrainGMM(t *testing.T) {
 		// Prepare for next iteration.
 		gmm.Clear()
 	}
-	// t.Logf("Mean: \n%+v", g.Mean())
-	// t.Logf("STD: \n%+v", g.StandardDeviation())
 
-	// for i, _ := range mean {
-	// 	if !cmpf64(mean[i], g.Mean().At(i, 0)) {
-	// 		t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
-	// 			i, mean[i], g.Mean().At(i, 0))
-	// 	}
-	// 	if !cmpf64(std[i], g.StandardDeviation().At(i, 0)) {
-	// 		t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
-	// 			i, std[i], g.StandardDeviation().At(i, 0))
-	// 	}
-	// }
+	for i := 0; i < dim; i++ {
+		g := gmm.components[1]
+		if !cmpf64(mean0[i], g.Mean().At(i, 0)) {
+			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
+				i, mean0[i], g.Mean().At(i, 0))
+		}
+		if !cmpf64(std0[i], g.StandardDeviation().At(i, 0)) {
+			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
+				i, std0[i], g.StandardDeviation().At(i, 0))
+		}
+	}
+
+	for i := 0; i < dim; i++ {
+		g := gmm.components[0]
+		if !cmpf64(mean1[i], g.Mean().At(i, 0)) {
+			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
+				i, mean1[i], g.Mean().At(i, 0))
+		}
+		if !cmpf64(std1[i], g.StandardDeviation().At(i, 0)) {
+			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
+				i, std1[i], g.StandardDeviation().At(i, 0))
+		}
+	}
+
+	if !cmpf64(0.5, gmm.weights.At(0, 0)) {
+		t.Errorf("Wrong weights[0]. Expected: [%f], Got: [%f]",
+			0.5, gmm.weights.At(0, 0))
+	}
+
+	if !cmpf64(0.5, gmm.weights.At(1, 0)) {
+		t.Errorf("Wrong weights[0]. Expected: [%f], Got: [%f]",
+			0.5, gmm.weights.At(1, 0))
+	}
+
 }
