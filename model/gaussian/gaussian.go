@@ -1,4 +1,4 @@
-package gjøa
+package gaussian
 
 import (
 	"code.google.com/p/biogo.matrix"
@@ -12,7 +12,10 @@ const (
 )
 
 type Gaussian struct {
-	model
+	name        string
+	numElements int
+	trainable   bool
+	numSamples  float64
 	diagonal    bool
 	sumx        *matrix.Dense
 	sumxsq      *matrix.Dense
@@ -53,14 +56,12 @@ func NewGaussian(numElements int, mean, variance *matrix.Dense,
 	}
 
 	g = &Gaussian{
-		mean:     mean,
-		variance: variance,
-		diagonal: true,
-		model: model{
-			numElements: numElements,
-			name:        name,
-			trainable:   trainable,
-		},
+		mean:        mean,
+		variance:    variance,
+		diagonal:    true,
+		numElements: numElements,
+		name:        name,
+		trainable:   trainable,
 	}
 
 	if mean == nil {
@@ -89,15 +90,7 @@ func NewGaussian(numElements int, mean, variance *matrix.Dense,
 func (g *Gaussian) LogProb(obs *matrix.Dense) float64 {
 
 	g.tmpArray = g.mean.SubDense(obs, g.tmpArray)
-	//fmt.Printf("mean-obs: \n%+v\n", g.tmpArray)
-
 	g.tmpArray.ApplyDense(sq, g.tmpArray)
-	//fmt.Printf("(mean-obs)^2: \n%+v\n", g.tmpArray)
-
-	//fmt.Printf("varianceInv: \n%+v\n", g.varianceInv)
-	//fmt.Printf("const2: %f\n", g.const2)
-	//fmt.Printf("inner: %f\n", g.tmpArray.InnerDense(g.varianceInv)/2.0)
-
 	return g.const2 - g.tmpArray.InnerDense(g.varianceInv)/2.0
 }
 
@@ -153,7 +146,7 @@ func (g *Gaussian) WUpdate(obs *matrix.Dense, w float64) error {
 func (g *Gaussian) Estimate() error {
 
 	if !g.trainable {
-		return fmt.Errorf("Attempted to estimate model [%s] which is not trainable.", g.Name())
+		return fmt.Errorf("Attempted to estimate model [%s] which is not trainable.", g.name)
 	}
 
 	if g.numSamples > MIN_NUM_SAMPLES {
@@ -191,7 +184,7 @@ func (g *Gaussian) Estimate() error {
 func (g *Gaussian) Clear() error {
 
 	if !g.trainable {
-		return fmt.Errorf("Attempted to clear model [%s] which is not trainable.", g.Name())
+		return fmt.Errorf("Attempted to clear model [%s] which is not trainable.", g.name)
 	}
 
 	g.sumx.ApplyDense(setValueFunc(0), g.sumx)
@@ -225,3 +218,8 @@ func (g *Gaussian) StandardDeviation() *matrix.Dense {
 	std = g.variance.ApplyDense(sqrt, std)
 	return std
 }
+
+func (g *Gaussian) Name() string        { return g.name }
+func (g *Gaussian) NumSamples() float64 { return g.numSamples }
+func (g *Gaussian) NumElements() int    { return g.numElements }
+func (g *Gaussian) Trainable() bool     { return g.trainable }

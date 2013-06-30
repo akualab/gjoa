@@ -1,8 +1,7 @@
-package gjøa
+package gaussian
 
 import (
-	//"code.google.com/p/biogo.matrix"
-	//"fmt"
+	"bitbucket.org/akualab/gjoa/model"
 	"math/rand"
 	"testing"
 )
@@ -57,12 +56,12 @@ func TestTrainGMM(t *testing.T) {
 	}
 	r := rand.New(rand.NewSource(seed))
 	for i := 0; i < numObs; i++ {
-		rv, err := getRandomVector(mean0, std0, r)
+		rv, err := model.GetRandomVector(mean0, std0, r)
 		if err != nil {
 			t.Fatal(err)
 		}
 		g.Update(rv)
-		rv, err = getRandomVector(mean1, std1, r)
+		rv, err = model.GetRandomVector(mean1, std1, r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -89,12 +88,12 @@ func TestTrainGMM(t *testing.T) {
 
 		// Update GMM stats.
 		for i := 0; i < numObs; i++ {
-			rv, err := getRandomVector(mean0, std0, r)
+			rv, err := model.GetRandomVector(mean0, std0, r)
 			if err != nil {
 				t.Fatal(err)
 			}
 			gmm.Update(rv)
-			rv, err = getRandomVector(mean1, std1, r)
+			rv, err = model.GetRandomVector(mean1, std1, r)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -120,11 +119,11 @@ func TestTrainGMM(t *testing.T) {
 
 	for i := 0; i < dim; i++ {
 		g := gmm.components[1]
-		if !cmpf64(mean0[i], g.Mean().At(i, 0)) {
+		if !model.Comparef64(mean0[i], g.Mean().At(i, 0)) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
 				i, mean0[i], g.Mean().At(i, 0))
 		}
-		if !cmpf64(std0[i], g.StandardDeviation().At(i, 0)) {
+		if !model.Comparef64(std0[i], g.StandardDeviation().At(i, 0)) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
 				i, std0[i], g.StandardDeviation().At(i, 0))
 		}
@@ -132,22 +131,22 @@ func TestTrainGMM(t *testing.T) {
 
 	for i := 0; i < dim; i++ {
 		g := gmm.components[0]
-		if !cmpf64(mean1[i], g.Mean().At(i, 0)) {
+		if !model.Comparef64(mean1[i], g.Mean().At(i, 0)) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
 				i, mean1[i], g.Mean().At(i, 0))
 		}
-		if !cmpf64(std1[i], g.StandardDeviation().At(i, 0)) {
+		if !model.Comparef64(std1[i], g.StandardDeviation().At(i, 0)) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
 				i, std1[i], g.StandardDeviation().At(i, 0))
 		}
 	}
 
-	if !cmpf64(0.5, gmm.weights.At(0, 0)) {
+	if !model.Comparef64(0.5, gmm.weights.At(0, 0)) {
 		t.Errorf("Wrong weights[0]. Expected: [%f], Got: [%f]",
 			0.5, gmm.weights.At(0, 0))
 	}
 
-	if !cmpf64(0.5, gmm.weights.At(1, 0)) {
+	if !model.Comparef64(0.5, gmm.weights.At(1, 0)) {
 		t.Errorf("Wrong weights[0]. Expected: [%f], Got: [%f]",
 			0.5, gmm.weights.At(1, 0))
 	}

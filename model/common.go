@@ -1,15 +1,14 @@
-package gjøa
+package model
 
 import (
 	"code.google.com/p/biogo.matrix"
 	"fmt"
 	"math/rand"
-	"testing"
 )
 
 const epsilon = 0.004
 
-func cmpf64(f1, f2 float64) bool {
+func Comparef64(f1, f2 float64) bool {
 	err := f2 - f1
 	if err < 0 {
 		err = -err
@@ -20,7 +19,7 @@ func cmpf64(f1, f2 float64) bool {
 	return false
 }
 
-func getRandomVector(mean, std []float64, r *rand.Rand) (*matrix.Dense, error) {
+func GetRandomVector(mean, std []float64, r *rand.Rand) (*matrix.Dense, error) {
 
 	if len(mean) != len(std) {
 		return nil, fmt.Errorf("Cannot generate random vectors length of mean [%d] and std [%d] don't match.",
@@ -34,7 +33,3 @@ func getRandomVector(mean, std []float64, r *rand.Rand) (*matrix.Dense, error) {
 
 	return vector, nil
 }
-
-// Tests
-
-func TestHighLevel(t *testing.T) {}

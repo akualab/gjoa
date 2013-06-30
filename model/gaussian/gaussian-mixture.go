@@ -1,4 +1,4 @@
-package gjøa
+package gaussian
 
 import (
 	"code.google.com/p/biogo.matrix"
@@ -11,7 +11,10 @@ type GMMConfig struct {
 }
 
 type GMM struct {
-	model
+	name            string
+	numElements     int
+	trainable       bool
+	numSamples      float64
 	diagonal        bool
 	trainingMethod  int
 	numComponents   int
@@ -38,11 +41,9 @@ func NewGaussianMixture(numElements, numComponents int,
 		return &GMM{
 			numComponents: numComponents,
 			diagonal:      true,
-			model: model{
-				numElements: numElements,
-				name:        name,
-				trainable:   trainable,
-			},
+			numElements:   numElements,
+			name:          name,
+			trainable:     trainable,
 		}, nil
 	}
 
@@ -55,11 +56,9 @@ func NewGaussianMixture(numElements, numComponents int,
 		tmpProbs1:     matrix.MustDense(matrix.ZeroDense(numComponents, 1)),
 		tmpProbs2:     matrix.MustDense(matrix.ZeroDense(numComponents, 1)),
 		diagonal:      true,
-		model: model{
-			numElements: numElements,
-			name:        name,
-			trainable:   trainable,
-		},
+		numElements:   numElements,
+		name:          name,
+		trainable:     trainable,
 	}
 
 	for i, _ := range gmm.components {
@@ -122,7 +121,7 @@ func (gmm *GMM) Prob(obs *matrix.Dense) float64 {
 func (gmm *GMM) Update(obs *matrix.Dense) error {
 
 	if !gmm.trainable {
-		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.Name())
+		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.name)
 	}
 
 	maxProb := gmm.logProbInternal(obs, gmm.tmpProbs2)
@@ -149,7 +148,7 @@ func (gmm *GMM) Update(obs *matrix.Dense) error {
 func (gmm *GMM) Estimate() error {
 
 	if !gmm.trainable {
-		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.Name())
+		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.name)
 	}
 
 	// Estimate mixture weights.
@@ -168,7 +167,7 @@ func (gmm *GMM) Estimate() error {
 func (gmm *GMM) Clear() error {
 
 	if !gmm.trainable {
-		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.Name())
+		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.name)
 	}
 
 	for _, c := range gmm.components {
@@ -268,3 +267,8 @@ func getComponentName(name string, n, numComponents int) string {
 		return fmt.Sprintf("%s-%d", name, n)
 	}
 }
+
+func (gmm *GMM) Name() string        { return gmm.name }
+func (gmm *GMM) NumSamples() float64 { return gmm.numSamples }
+func (gmm *GMM) NumElements() int    { return gmm.numElements }
+func (gmm *GMM) Trainable() bool     { return gmm.trainable }

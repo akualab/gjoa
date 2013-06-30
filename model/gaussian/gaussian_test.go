@@ -1,6 +1,7 @@
-package gjøa
+package gaussian
 
 import (
+	"bitbucket.org/akualab/gjoa/model"
 	"code.google.com/p/biogo.matrix"
 	"math/rand"
 	"testing"
@@ -40,7 +41,7 @@ func TestGaussian(t *testing.T) {
 	// -3.3818
 
 	expected := -3.3818
-	if !cmpf64(expected, p) {
+	if !model.Comparef64(expected, p) {
 		t.Errorf("Wrong LogProb. Expected: [%f], Got: [%f]", expected, p)
 	}
 }
@@ -59,7 +60,7 @@ func TestTrainGaussian(t *testing.T) {
 	}
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < 2000000; i++ {
-		rv, err := getRandomVector(mean, std, r)
+		rv, err := model.GetRandomVector(mean, std, r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -71,11 +72,11 @@ func TestTrainGaussian(t *testing.T) {
 	t.Logf("STD: \n%+v", g.StandardDeviation())
 
 	for i, _ := range mean {
-		if !cmpf64(mean[i], g.Mean().At(i, 0)) {
+		if !model.Comparef64(mean[i], g.Mean().At(i, 0)) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
 				i, mean[i], g.Mean().At(i, 0))
 		}
-		if !cmpf64(std[i], g.StandardDeviation().At(i, 0)) {
+		if !model.Comparef64(std[i], g.StandardDeviation().At(i, 0)) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
 				i, std[i], g.StandardDeviation().At(i, 0))
 		}

@@ -3,6 +3,7 @@
 *.a
 *.so
 *.out
+*.test
 
 # Folders
 _obj
@@ -28,4 +29,3 @@ _testmain.go
 
 darwin
 .DS_Store
-go.env
