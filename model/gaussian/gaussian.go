@@ -11,6 +11,7 @@ const (
 	MIN_NUM_SAMPLES = 0.01
 )
 
+// Multivariate Gaussian distribution.
 type Gaussian struct {
 	name        string
 	numElements int
