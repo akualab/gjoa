@@ -42,6 +42,9 @@ type HMM struct {
 	// => saved in log domain.
 	initialStateProbs *matrix.Dense
 
+	// Num elements in obs vector.
+	numElements int
+
 	// Complete HMM model.
 	// Φ = (A, B, π)
 }
@@ -60,6 +63,7 @@ func NewHMM(transProbs, initialStateProbs *matrix.Dense, obsModels []model.Model
 		transProbs:        transProbs,
 		obsModels:         obsModels,
 		initialStateProbs: initialStateProbs,
+		numElements:       obsModels[0].NumElements(),
 	}
 
 	return
@@ -78,12 +82,15 @@ func NewHMM(transProbs, initialStateProbs *matrix.Dense, obsModels []model.Model
 // 3. Termination:    P(O/Φ) = sum_{i=0}^{N-1} α(i,T-1)
 func (hmm *HMM) alpha(observations *matrix.Dense) (α *matrix.Dense, logProb float64, e error) {
 
-	// expected num rows: N = nstates
-	// expected num cols: T
-	N, T := observations.Dims()
+	// Num states.
+	N := hmm.nstates
 
-	if N != hmm.nstates {
-		e = fmt.Errorf("Mismatch between number of rows in observations matrix [%d] and number of states in the HMM [%d].", N, hmm.nstates)
+	// expected num rows: numElements
+	// expected num cols: T
+	ne, T := observations.Dims()
+
+	if ne != hmm.numElements {
+		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].", ne, hmm.numElements)
 		return
 	}
 
@@ -131,4 +138,8 @@ func ColumnAt(d *matrix.Dense, c int) *matrix.Dense {
 	}
 
 	return col
+}
+
+func (hmm *HMM) NumElements() int {
+	return hmm.numElements
 }
