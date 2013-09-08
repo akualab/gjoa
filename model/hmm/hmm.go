@@ -175,6 +175,49 @@ func (hmm *HMM) beta(observations *matrix.Dense) (β *matrix.Dense, e error) {
 	return
 }
 
+// Compute gammas. Indices are: γ(state, time)
+//
+// γ(i,t) =  α(i,t)β(i,t) / sum_{j=0}^{N-1} α(j,t)β(j,t);  0<=j<N
+func (hmm *HMM) gamma(α, β *matrix.Dense) (γ *matrix.Dense, e error) {
+
+	αr, αc := α.Dims()
+	βr, βc := β.Dims()
+
+	if αr != βr || αc != βc {
+		e = fmt.Errorf("Shape mismatch: alpha[%d,%d] beta[%d,%d]", αr, αc, βr, βc)
+		return
+	}
+
+	T := αc
+	N := hmm.nstates
+	if αr != N {
+		e = fmt.Errorf("Num rows [%d] doesn't match num states [%d].", αr, N)
+	}
+
+	// Allocate log-gamma matrix.
+	// TODO: use a reusable data structure to minimize garbage.
+	γ = matrix.MustDense(matrix.ZeroDense(N, T))
+
+	for t := 0; t < T; t++ {
+		sum := sumAlphaBeta(α, β, t, N)
+		for i := 0; i < N; i++ {
+			γ.Set(i, t, α.At(i, t)+β.At(i, t)-sum)
+		}
+	}
+	return
+}
+
+// Normalization factor for gamma.
+func sumAlphaBeta(alpha, beta *matrix.Dense, t, N int) float64 {
+
+	var sum float64
+	for j := 0; j < N; j++ {
+		sum += math.Exp(alpha.At(j, t) + beta.At(j, t))
+	}
+
+	return math.Log(sum)
+}
+
 // ColumnAt returns a *matrix.Dense column that is a copy of the values at column c of the matrix.
 // Column will panic with ErrIndexOutOfRange is c is not a valid column index.
 func ColumnAt(d *matrix.Dense, c int) *matrix.Dense {

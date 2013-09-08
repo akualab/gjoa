@@ -103,10 +103,17 @@ func TestEvaluation(t *testing.T) {
 		t.Fatal(err_beta)
 	}
 
+	gamma, err_gamma := hmm.gamma(alpha, beta)
+	if err_gamma != nil {
+		t.Fatal(err_gamma)
+	}
+
 	t.Logf("LogProb: %f, Prob: %e\n", logProb, math.Exp(logProb))
 
 	t.Logf("alpha:\n%+v\n", alpha)
 
 	t.Logf("beta:\n%+v\n", beta)
+
+	t.Logf("gamma:\n%+v\n", gamma)
 
 }
