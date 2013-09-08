@@ -93,14 +93,20 @@ func TestEvaluation(t *testing.T) {
 		t.Fatal(eobs)
 	}
 
-	alpha, logProb, err := hmm.alpha(obs)
+	alpha, logProb, err_alpha := hmm.alpha(obs)
+	if err_alpha != nil {
+		t.Fatal(err_alpha)
+	}
 
-	if err != nil {
-		t.Fatal(err)
+	beta, err_beta := hmm.beta(obs)
+	if err_beta != nil {
+		t.Fatal(err_beta)
 	}
 
 	t.Logf("LogProb: %f, Prob: %e\n", logProb, math.Exp(logProb))
 
 	t.Logf("alpha:\n%+v\n", alpha)
+
+	t.Logf("beta:\n%+v\n", beta)
 
 }

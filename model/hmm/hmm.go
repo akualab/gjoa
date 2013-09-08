@@ -124,6 +124,57 @@ func (hmm *HMM) alpha(observations *matrix.Dense) (α *matrix.Dense, logProb flo
 	return
 }
 
+// Compute betas. Indices are: β(state, time)
+//
+// β = | β(0,0),   β(0,1)   ... β(0,T-1)   |
+//     | β(1,0),   β(1,1)   ... β(1,T-1)   |
+//     ...
+//     | β(N-1,0), β(N-1,1) ... β(N-1,T-1) |
+//
+//
+// 1. Initialization: β(i,T-1) = 1;  0<=i<N
+// 2. Induction:      β(i,t) =  sum_{j=0}^{N-1} a(i,j) b(j,o(t+1)) β(j,t+1); t=T-2,T-3,...,0; 0<=i<N
+func (hmm *HMM) beta(observations *matrix.Dense) (β *matrix.Dense, e error) {
+
+	// Num states.
+	N := hmm.nstates
+
+	// expected num rows: numElements
+	// expected num cols: T
+	ne, T := observations.Dims()
+
+	if ne != hmm.numElements {
+		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].", ne, hmm.numElements)
+		return
+	}
+
+	// Allocate log-beta matrix.
+	// TODO: use a reusable data structure to minimize garbage.
+	β = matrix.MustDense(matrix.ZeroDense(N, T))
+
+	// 1. Initialization. Add in the log doman.
+	for i := 0; i < N; i++ {
+		β.Set(i, T-1, 1.0)
+	}
+
+	// 2. Induction.
+	for t := T - 2; t >= 0; t-- {
+		for i := 0; i < N; i++ {
+
+			var sum float64
+			for j := 0; j < N; j++ {
+
+				sum += math.Exp(hmm.transProbs.At(i, j) + // a(i,j)
+					hmm.obsModels[j].LogProb(ColumnAt(observations, t+1)) + // b(j,o(t+1))
+					β.At(j, t+1)) // β(j,t+1)
+			}
+			β.Set(i, t, math.Log(sum))
+		}
+	}
+
+	return
+}
+
 // ColumnAt returns a *matrix.Dense column that is a copy of the values at column c of the matrix.
 // Column will panic with ErrIndexOutOfRange is c is not a valid column index.
 func ColumnAt(d *matrix.Dense, c int) *matrix.Dense {
