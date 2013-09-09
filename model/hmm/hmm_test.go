@@ -108,6 +108,11 @@ func TestEvaluation(t *testing.T) {
 		t.Fatal(err_gamma)
 	}
 
+	xi, err_xi := hmm.xi(obs, alpha, beta)
+	if err_xi != nil {
+		t.Fatal(err_xi)
+	}
+
 	t.Logf("LogProb: %f, Prob: %e\n", logProb, math.Exp(logProb))
 
 	t.Logf("alpha:\n%+v\n", alpha)
@@ -116,4 +121,26 @@ func TestEvaluation(t *testing.T) {
 
 	t.Logf("gamma:\n%+v\n", gamma)
 
+	t.Logf("xi:\n%+v\n", xi)
+
+	/*
+	   DISCUSSION:
+	   If you look at the sample data and model params. I manufactured the
+	   data as if it was emitted with the following sequence:
+
+	   t:  0   1   2   3   4   5   6   7   8   9   10  11
+	   q:  s0  s0  s0  s0  s0  s0  s1  s1  s1  s1  s0  s0
+	   o:  0.1 0.3 1.1 1.2 0.7 0.7 5.5 7.8 10  5.2 1.1 1.3 <= data I cerated given the Gaussians [1,1] and [4,4]
+
+	   I got the following gamma:
+
+	   γ0: -0.03 -0.03 -0.05 -0.05 -0.04 -0.11 -9.02 -21 -36 -7.8 -0.15 -0.11
+	   γ1: -3.35 -3.41 -3.01 -2.92 -3.13 -2.24 -0.00 -0  -0  -0   -1.91 -2.21
+
+	   As you can see choosing the gamma with highest prob for each state give us the hidden sequence of states.
+
+	   gamma gives you the most likely state at time t. In this case the result is what we expect.
+
+	   Viterbi gives you the P(q | O,  model), that is, it maximizes of over the whole sequence.
+	*/
 }

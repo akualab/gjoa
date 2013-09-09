@@ -199,23 +199,86 @@ func (hmm *HMM) gamma(α, β *matrix.Dense) (γ *matrix.Dense, e error) {
 	γ = matrix.MustDense(matrix.ZeroDense(N, T))
 
 	for t := 0; t < T; t++ {
-		sum := sumAlphaBeta(α, β, t, N)
+		var sum float64 = 0.0
 		for i := 0; i < N; i++ {
-			γ.Set(i, t, α.At(i, t)+β.At(i, t)-sum)
+			x := α.At(i, t) + β.At(i, t)
+			γ.Set(i, t, x)
+			sum += math.Exp(x)
+		}
+
+		// Normalize.
+		for i := 0; i < N; i++ {
+			x := γ.At(i, t) - math.Log(sum)
+			γ.Set(i, t, x)
 		}
 	}
 	return
 }
 
-// Normalization factor for gamma.
-func sumAlphaBeta(alpha, beta *matrix.Dense, t, N int) float64 {
+/*
+   Compute xi. Indices are: ζ(from, to, time)
 
-	var sum float64
-	for j := 0; j < N; j++ {
-		sum += math.Exp(alpha.At(j, t) + beta.At(j, t))
+                         α(i,t) a(i,j) b(j,o(t+1)) β(j,t+1)
+ ζ(i,j,t) = ------------------------------------------------------------------
+            sum_{i=0}^{N-1} sum_{j=0}^{N-1} α(i,t) a(i,j) b(j,o(t+1)) β(j,t+1)
+
+*/
+func (hmm *HMM) xi(observations, α, β *matrix.Dense) (ζ [][][]float64, e error) {
+
+	a := hmm.transProbs
+	αr, αc := α.Dims()
+	βr, βc := β.Dims()
+	or, oc := observations.Dims()
+
+	if αr != βr || αc != βc {
+		e = fmt.Errorf("Shape mismatch: alpha[%d,%d] beta[%d,%d]", αr, αc, βr, βc)
+		return
 	}
 
-	return math.Log(sum)
+	T := αc
+	N := hmm.nstates
+	if or != hmm.numElements {
+		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].", or, hmm.numElements)
+		return
+	}
+	if oc != T {
+		e = fmt.Errorf("Mismatch in T observations has [%d], expected [%d].", oc, T)
+		return
+	}
+	if αr != N {
+		e = fmt.Errorf("Num rows [%d] doesn't match num states [%d].", αr, N)
+	}
+
+	// Allocate log-xi matrix.
+	// TODO: use a reusable data structure to minimize garbage.
+	ζ = make([][][]float64, N)
+	for i := 0; i < N; i++ {
+		ζ[i] = make([][]float64, N)
+		for j := 0; j < N; j++ {
+			for t := 0; t < N; t++ {
+				ζ[i][j] = make([]float64, T)
+			}
+		}
+	}
+
+	for t := 0; t < T-1; t++ {
+		var sum float64 = 0.0
+		for j := 0; j < N; j++ {
+			b := hmm.obsModels[j].LogProb(ColumnAt(observations, t+1))
+			for i := 0; i < N; i++ {
+				x := α.At(i, t) + a.At(i, j) + b + β.At(j, t+1)
+				ζ[i][j][t] = x
+				sum += math.Exp(x)
+			}
+		}
+		// Normalize.
+		for i := 0; i < N; i++ {
+			for j := 0; j < N; j++ {
+				ζ[i][j][t] -= math.Log(sum)
+			}
+		}
+	}
+	return
 }
 
 // ColumnAt returns a *matrix.Dense column that is a copy of the values at column c of the matrix.
