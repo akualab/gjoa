@@ -1,8 +1,8 @@
 package hmm
 
 import (
-	"bitbucket.org/akualab/gjoa/model"
-	"bitbucket.org/akualab/gjoa/model/gaussian"
+	"github.com/akualab/gjoa/model"
+	"github.com/akualab/gjoa/model/gaussian"
 	"code.google.com/p/biogo.matrix"
 	"math"
 	"testing"
