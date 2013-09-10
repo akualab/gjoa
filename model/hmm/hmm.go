@@ -165,7 +165,7 @@ func (hmm *HMM) beta(observations *matrix.Dense) (β *matrix.Dense, e error) {
 
 	// 1. Initialization. Add in the log doman.
 	for i := 0; i < N; i++ {
-		β.Set(i, T-1, 1.0)
+		β.Set(i, T-1, 0.0)
 	}
 
 	// 2. Induction.
