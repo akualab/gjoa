@@ -9,7 +9,7 @@ Hidden Markov model.
 package hmm
 
 import (
-	"bitbucket.org/akualab/gjoa/model"
+	"github.com/akualab/gjoa/model"
 	"code.google.com/p/biogo.matrix"
 	"fmt"
 	"math"
@@ -27,11 +27,12 @@ type HMM struct {
 	// N
 	nstates int
 
-	// State-transition probability distribution matrix. [nstates x nstates]
-	// a(i,j) = P[q(t+1) = j | q(t) = i]; 0 <= i,j <= N-1
+	// State-transition probability distribution matrixi (log scale).
+	// [nstates x nstates]
+	// a(i,j) = log(P[q(t+1) = j | q(t) = i]); 0 <= i,j <= N-1
 	// when transitions between states are not allowed: a(i,j) = 0
 	// => saved in log domain.
-	transProbs *matrix.Dense
+	logTransProbs *matrix.Dense
 
 	// Observation probability distribution functions. [nstates x 1]
 	// b(j,k) = P[o(t) | q(t) = j]
@@ -40,7 +41,7 @@ type HMM struct {
 	// Initial state distribution. [nstates x 1]
 	// π(i) = P[q(0) = i]; 0<=i<N
 	// => saved in log domain.
-	initialStateProbs *matrix.Dense
+	logInitProbs *matrix.Dense
 
 	// Num elements in obs vector.
 	numElements int
@@ -57,12 +58,20 @@ func NewHMM(transProbs, initialStateProbs *matrix.Dense, obsModels []model.Model
 		e = fmt.Errorf("Matrix transProbs must be square. rows=[%d], cols=[%d]", r, c)
 		return
 	}
-
+	logTransProbs := matrix.MustDense(matrix.ZeroDense(r, r))
+	logInitProbs := matrix.MustDense(matrix.ZeroDense(r, 1))
+	for i := 0; i < r; i++ {
+	    value := math.Log(initialStateProbs.At(i,0))
+		logInitProbs.Set(i, 0, value)
+		for j := 0; j < r; j++ {
+			logTransProbs.Set(i,j, math.Log(transProbs.At(i,j)))
+		}
+	}
 	hmm = &HMM{
 		nstates:           r,
-		transProbs:        transProbs,
+		logTransProbs:     logTransProbs,
 		obsModels:         obsModels,
-		initialStateProbs: initialStateProbs,
+		logInitProbs:      logInitProbs,
 		numElements:       obsModels[0].NumElements(),
 	}
 
@@ -100,7 +109,7 @@ func (hmm *HMM) alpha(observations *matrix.Dense) (α *matrix.Dense, logProb flo
 
 	// 1. Initialization. Add in the log doman.
 	for i := 0; i < N; i++ {
-		α.Set(i, 0, hmm.initialStateProbs.At(i, 0)+hmm.obsModels[i].LogProb(ColumnAt(observations, 0)))
+		α.Set(i, 0, hmm.logInitProbs.At(i, 0) + hmm.obsModels[i].LogProb(ColumnAt(observations, 0)))
 	}
 
 	// 2. Induction.
@@ -109,7 +118,7 @@ func (hmm *HMM) alpha(observations *matrix.Dense) (α *matrix.Dense, logProb flo
 
 			var sum float64
 			for i := 0; i < N; i++ {
-				sum += math.Exp(α.At(i, t) + hmm.transProbs.At(i, j))
+				sum += math.Exp(α.At(i, t) + hmm.logTransProbs.At(i, j))
 			}
 			α.Set(j, t+1, math.Log(sum)+hmm.obsModels[j].LogProb(ColumnAt(observations, t+1)))
 		}
@@ -164,7 +173,7 @@ func (hmm *HMM) beta(observations *matrix.Dense) (β *matrix.Dense, e error) {
 			var sum float64
 			for j := 0; j < N; j++ {
 
-				sum += math.Exp(hmm.transProbs.At(i, j) + // a(i,j)
+				sum += math.Exp(hmm.logTransProbs.At(i, j) + // a(i,j)
 					hmm.obsModels[j].LogProb(ColumnAt(observations, t+1)) + // b(j,o(t+1))
 					β.At(j, t+1)) // β(j,t+1)
 			}
@@ -225,7 +234,7 @@ func (hmm *HMM) gamma(α, β *matrix.Dense) (γ *matrix.Dense, e error) {
 */
 func (hmm *HMM) xi(observations, α, β *matrix.Dense) (ζ [][][]float64, e error) {
 
-	a := hmm.transProbs
+	a := hmm.logTransProbs
 	αr, αc := α.Dims()
 	βr, βc := β.Dims()
 	or, oc := observations.Dims()
@@ -238,7 +247,8 @@ func (hmm *HMM) xi(observations, α, β *matrix.Dense) (ζ [][][]float64, e erro
 	T := αc
 	N := hmm.nstates
 	if or != hmm.numElements {
-		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].", or, hmm.numElements)
+		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].",
+		               or, hmm.numElements)
 		return
 	}
 	if oc != T {
