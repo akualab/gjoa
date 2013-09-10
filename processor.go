@@ -1,7 +1,7 @@
 package gjoa
 
 import (
-	"bitbucket.org/akualab/gjoa/cache"
+	"github.com/akualab/gjoa/cache"
 )
 
 type FrontEnd struct {

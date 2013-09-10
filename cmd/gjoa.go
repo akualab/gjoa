@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"bitbucket.org/akualab/gjoa"
+	"github.com/akualab/gjoa"
 	"github.com/gonuts/commander"
 	"github.com/gonuts/flag"
 )

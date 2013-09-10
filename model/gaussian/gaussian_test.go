@@ -1,7 +1,7 @@
 package gaussian
 
 import (
-	"bitbucket.org/akualab/gjoa/model"
+	"github.com/akualab/gjoa/model"
 	"code.google.com/p/biogo.matrix"
 	"math/rand"
 	"testing"

@@ -117,6 +117,16 @@ func (gmm *GMM) Prob(obs *matrix.Dense) float64 {
 	return math.Exp(gmm.LogProb(obs))
 }
 
+/*
+  The posterior prob for each mixture component. We approximate the sum using max.
+
+                 p(o|c(i)) p(c(i))
+   p(c(i)|o) ~ ---------------------
+                max{p(o|c(i)) p(c(i))}
+
+   The vector gmm.posteriorSum has te
+*/
+
 // Update model statistics.
 func (gmm *GMM) Update(obs *matrix.Dense) error {
 
@@ -141,6 +151,33 @@ func (gmm *GMM) Update(obs *matrix.Dense) error {
 
 	// Count number of observations.
 	gmm.numSamples += 1
+
+	return nil
+}
+
+func (gmm *GMM) WUpdate(obs *matrix.Dense, w float64) error {
+
+	if !gmm.trainable {
+		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.name)
+	}
+
+	maxProb := gmm.logProbInternal(obs, gmm.tmpProbs2)
+	gmm.totalLikelihood += maxProb
+	gmm.tmpProbs2.ApplyDense(addScalarFunc(-maxProb+math.Log(w)), gmm.tmpProbs2)
+
+	// Compute posterior probabilities.
+	gmm.tmpProbs2.ApplyDense(exp, gmm.tmpProbs2)
+
+	// Update posterior sum, needed to compute mixture weights.
+	gmm.posteriorSum.Add(gmm.tmpProbs2, gmm.posteriorSum)
+
+	// Update Gaussian components.
+	for i, c := range gmm.components {
+		c.WUpdate(obs, gmm.tmpProbs2.At(i, 0))
+	}
+
+	// Count number of observations.
+	gmm.numSamples += w
 
 	return nil
 }
