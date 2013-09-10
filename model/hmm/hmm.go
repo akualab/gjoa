@@ -9,9 +9,9 @@ Hidden Markov model.
 package hmm
 
 import (
-	"github.com/akualab/gjoa/model"
 	"code.google.com/p/biogo.matrix"
 	"fmt"
+	"github.com/akualab/gjoa/model"
 	"math"
 	//"github.com/golang/glog"
 )
@@ -50,6 +50,9 @@ type HMM struct {
 	// Φ = (A, B, π)
 }
 
+// Define functions for elementwise transformations.
+var log = func(r, c int, v float64) float64 { return math.Log(v) }
+
 // Create a new HMM.
 func NewHMM(transProbs, initialStateProbs *matrix.Dense, obsModels []model.Modeler) (hmm *HMM, e error) {
 
@@ -58,21 +61,20 @@ func NewHMM(transProbs, initialStateProbs *matrix.Dense, obsModels []model.Model
 		e = fmt.Errorf("Matrix transProbs must be square. rows=[%d], cols=[%d]", r, c)
 		return
 	}
+	// init logTransProbs and logInitProbs
 	logTransProbs := matrix.MustDense(matrix.ZeroDense(r, r))
 	logInitProbs := matrix.MustDense(matrix.ZeroDense(r, 1))
-	for i := 0; i < r; i++ {
-	    value := math.Log(initialStateProbs.At(i,0))
-		logInitProbs.Set(i, 0, value)
-		for j := 0; j < r; j++ {
-			logTransProbs.Set(i,j, math.Log(transProbs.At(i,j)))
-		}
-	}
+
+	// apply log to transProbs and initialStateProbs
+	logTransProbs = transProbs.ApplyDense(log, logTransProbs)
+	logInitProbs = initialStateProbs.ApplyDense(log, logInitProbs)
+
 	hmm = &HMM{
-		nstates:           r,
-		logTransProbs:     logTransProbs,
-		obsModels:         obsModels,
-		logInitProbs:      logInitProbs,
-		numElements:       obsModels[0].NumElements(),
+		nstates:       r,
+		logTransProbs: logTransProbs,
+		obsModels:     obsModels,
+		logInitProbs:  logInitProbs,
+		numElements:   obsModels[0].NumElements(),
 	}
 
 	return
@@ -109,7 +111,7 @@ func (hmm *HMM) alpha(observations *matrix.Dense) (α *matrix.Dense, logProb flo
 
 	// 1. Initialization. Add in the log doman.
 	for i := 0; i < N; i++ {
-		α.Set(i, 0, hmm.logInitProbs.At(i, 0) + hmm.obsModels[i].LogProb(ColumnAt(observations, 0)))
+		α.Set(i, 0, hmm.logInitProbs.At(i, 0)+hmm.obsModels[i].LogProb(ColumnAt(observations, 0)))
 	}
 
 	// 2. Induction.
@@ -248,7 +250,7 @@ func (hmm *HMM) xi(observations, α, β *matrix.Dense) (ζ [][][]float64, e erro
 	N := hmm.nstates
 	if or != hmm.numElements {
 		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].",
-		               or, hmm.numElements)
+			or, hmm.numElements)
 		return
 	}
 	if oc != T {

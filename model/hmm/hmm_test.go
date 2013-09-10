@@ -1,9 +1,9 @@
 package hmm
 
 import (
+	"code.google.com/p/biogo.matrix"
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/gjoa/model/gaussian"
-	"code.google.com/p/biogo.matrix"
 	//"math"
 	"testing"
 )
@@ -14,7 +14,7 @@ import (
 func TestColumnAt(t *testing.T) {
 
 	mat, e := matrix.NewDense([][]float64{
-			{10, 11, 12, 13}, {20, 21, 22, 23}, {30, 31, 32, 33}})
+		{10, 11, 12, 13}, {20, 21, 22, 23}, {30, 31, 32, 33}})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -61,7 +61,7 @@ func MakeHMM() (hmm *HMM, e error) {
 
 var (
 	obs, _ = matrix.NewDense([][]float64{
-			{0.1, 0.3, 1.1, 1.2, 0.7, 0.7, 5.5, 7.8, 10.0, 5.2, 1.1, 1.3}})
+		{0.1, 0.3, 1.1, 1.2, 0.7, 0.7, 5.5, 7.8, 10.0, 5.2, 1.1, 1.3}})
 	hmm, _ = MakeHMM()
 )
 
@@ -73,15 +73,15 @@ func TestEvaluationAlpha(t *testing.T) {
 	}
 	t.Logf("logProb:\n%+v\n", logProb)
 	expected := -26.53918
-	actual := alpha.At(0,11)
-    if !model.Comparef64(expected, actual) {
-		t.Errorf("Wrong Alpha Expected: [%f], Got: [%f]", expected, actual )
+	actual := alpha.At(0, 11)
+	if !model.Comparef64(expected, actual) {
+		t.Errorf("Wrong Alpha Expected: [%f], Got: [%f]", expected, actual)
 	}
 	expected = -29.07123076
-	actual = alpha.At(1,11)
+	actual = alpha.At(1, 11)
 	if !model.Comparef64(expected, actual) {
-        t.Errorf("Wrong Alpha Expected: [%f], Got: [%f]", expected, actual )
-    }
+		t.Errorf("Wrong Alpha Expected: [%f], Got: [%f]", expected, actual)
+	}
 }
 
 func TestEvaluationBeta(t *testing.T) {
@@ -90,18 +90,17 @@ func TestEvaluationBeta(t *testing.T) {
 	if err_beta != nil {
 		t.Fatal(err_beta)
 	}
-    /*
-	gamma, err_gamma := hmm.gamma(alpha, beta)
-	if err_gamma != nil {
-		t.Fatal(err_gamma)
-	}
-    
-	xi, err_xi := hmm.xi(obs, alpha, beta)
-	if err_xi != nil {
-		t.Fatal(err_xi)
-	}
-	*/
+	/*
+		gamma, err_gamma := hmm.gamma(alpha, beta)
+		if err_gamma != nil {
+			t.Fatal(err_gamma)
+		}
 
+		xi, err_xi := hmm.xi(obs, alpha, beta)
+		if err_xi != nil {
+			t.Fatal(err_xi)
+		}
+	*/
 
 	t.Logf("beta:\n%+v\n", beta)
 
@@ -116,7 +115,7 @@ func TestEvaluationBeta(t *testing.T) {
 
 	   t:  0   1   2   3   4   5   6   7   8   9   10  11
 	   q:  s0  s0  s0  s0  s0  s0  s1  s1  s1  s1  s0  s0
-	   o:  0.1 0.3 1.1 1.2 0.7 0.7 5.5 7.8 10  5.2 1.1 1.3 <= 
+	   o:  0.1 0.3 1.1 1.2 0.7 0.7 5.5 7.8 10  5.2 1.1 1.3 <=
 	   data I created given the Gaussians [1,1] and [4,4]
 
 	   I got the following gamma:
