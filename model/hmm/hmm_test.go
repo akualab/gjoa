@@ -159,6 +159,32 @@ var (
 		-2.99265648819389,
 		-1.76872378444132,
 		0}
+	gamma0 = []float64{
+		-0.0101945977044363,
+		-0.00581887777458709,
+		-0.00841546703429051,
+		-0.0103354516465726,
+		-0.0165096967936958,
+		-0.10994074444856,
+		-9.00384625008746,
+		-23.4126051256471,
+		-38.0924336324682,
+		-7.86795137385019,
+		-0.181388235747997,
+		-0.076494325902054}
+	gamma1 = []float64{
+		-4.59099030426571,
+		-5.14955588614921,
+		-4.78188873534866,
+		-4.5773386610478,
+		-4.11205087756371,
+		-2.2622805444697,
+		-0.000122943608043396,
+		-6.79257761172257e-11,
+		0,
+		-0.000382891103450269,
+		-1.79643918566812,
+		-2.60854207937483}
 )
 
 func CompareSliceFloat(t *testing.T, expected []float64, actual *matrix.Dense, row int, message string) {
@@ -170,18 +196,23 @@ func CompareSliceFloat(t *testing.T, expected []float64, actual *matrix.Dense, r
 	}
 }
 
+func CompareFloats(t *testing.T, expected float64, actual float64, message string) {
+	if !model.Comparef64(expected, actual) {
+		t.Errorf("[%s]. Expected: [%f], Got: [%f]",
+			message, expected, actual)
+	}
+}
+
 func TestEvaluationAlpha(t *testing.T) {
 
 	hmm := MakeHMM(t)
-	obs, eobs := matrix.NewDense(obs0)
-	if eobs != nil {
-		t.Fatal(eobs)
-	}
+	obs := MakeNewDenseMatrix(t, obs0)
 	alpha, logProb, err_alpha := hmm.alpha(obs)
 	if err_alpha != nil {
 		t.Fatal(err_alpha)
 	}
-	t.Logf("logProb:\n%+v\n", logProb)
+	expectedLogProb := -26.4626886822436
+	CompareFloats(t, expectedLogProb, logProb, "Error in logProb")
 	message := "Error in alpha"
 	CompareSliceFloat(t, alpha0, alpha, 0, message)
 	CompareSliceFloat(t, alpha1, alpha, 1, message)
@@ -216,7 +247,9 @@ func TestEvaluationGamma(t *testing.T) {
 	if err_gamma != nil {
 		t.Fatal(err_gamma)
 	}
-	t.Logf("gamma:\n%+v\n", gamma)
+	message := "Error in gamma"
+	CompareSliceFloat(t, gamma0, gamma, 0, message)
+	CompareSliceFloat(t, gamma1, gamma, 1, message)
 }
 
 /*
