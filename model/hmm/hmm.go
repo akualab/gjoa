@@ -96,7 +96,8 @@ func NewHMM(transProbs, initialStateProbs *matrix.Dense, obsModels []model.Model
 // 1. Initialization: α(i,0) =  π(i) b(i,o(0)); 0<=i<N
 // 2. Induction:      α(j,t+1) =  sum_{i=0}^{N-1}[α(i,t)a(i,j)] b(j,o(t+1)); 0<=t<T-1; 0<=j<N
 // 3. Termination:    P(O/Φ) = sum_{i=0}^{N-1} α(i,T-1)
-// For scaling details see Rabiner/Juang
+// For scaling details see Rabiner/Juang and
+// http://courses.media.mit.edu/2010fall/mas622j/ProblemSets/ps4/tutorial.pdf
 func (hmm *HMM) alpha(observations *matrix.Dense) (α *matrix.Dense, logProb float64, e error) {
 
 	// Num states.
