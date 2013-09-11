@@ -44,8 +44,6 @@ func TestColumnAt(t *testing.T) {
 
 	col := ColumnAt(mat, 1)
 
-	t.Logf("col: \n%+v", col)
-
 	for i, expected := range []float64{11.0, 21.0, 31.0} {
 		v := col.At(i, 0)
 		if !model.Comparef64(expected, v) {
@@ -107,7 +105,7 @@ func MakeHMM(t *testing.T) *HMM {
 var (
 	obs0 = [][]float64{
 		{0.1, 0.3, 1.1, 1.2, 0.7, 0.7, 5.5, 7.8, 10.0, 5.2, 1.1, 1.3}}
-	alpha0 = []float64{
+	alpha01 = []float64{
 		-1.54708208451888,
 		-2.80709238811418,
 		-3.83134003758912,
@@ -119,8 +117,7 @@ var (
 		-57.4758051059185,
 		-32.2645657649804,
 		-25.5978716740632,
-		-26.5391830081456}
-	alpha1 = []float64{
+		-26.5391830081456,
 		-5.12277362619872,
 		-6.99404330419337,
 		-7.67194890763762,
@@ -133,7 +130,7 @@ var (
 		-23.4704150851531,
 		-26.4904040834703,
 		-29.0712307616184}
-	beta0 = []float64{
+	beta01 = []float64{
 		-24.9258011954291,
 		-23.661415171904,
 		-22.6397641116887,
@@ -145,8 +142,7 @@ var (
 		-7.07931720879328,
 		-2.06607429111337,
 		-1.04620524392834,
-		0}
-	beta1 = []float64{
+		0,
 		-25.9309053603105,
 		-24.6182012641994,
 		-23.5726285099546,
@@ -159,7 +155,7 @@ var (
 		-2.99265648819389,
 		-1.76872378444132,
 		0}
-	gamma0 = []float64{
+	gamma01 = []float64{
 		-0.0101945977044363,
 		-0.00581887777458709,
 		-0.00841546703429051,
@@ -171,8 +167,7 @@ var (
 		-38.0924336324682,
 		-7.86795137385019,
 		-0.181388235747997,
-		-0.076494325902054}
-	gamma1 = []float64{
+		-0.076494325902054,
 		-4.59099030426571,
 		-5.14955588614921,
 		-4.78188873534866,
@@ -185,13 +180,26 @@ var (
 		-0.000382891103450269,
 		-1.79643918566812,
 		-2.60854207937483}
+	xsi = []float64{
+		-0.0151076230417916, -0.0134668664218517, -0.0174701121578483, -0.0245758675622469,
+		-0.11568757084122, -9.00936561095593, -29.3743846426695, -58.4605163217504,
+		-42.9234897636508, -7.87738137552765, -0.204482040682161, 0,
+		-5.32851547323339, -4.88295302258388, -4.71741675311881, -4.26911837592192,
+		-2.37652915707246, -0.110077221151965, -9.0038462515104, -23.4126051256471,
+		-38.1004437186275, -12.5365216739368, -3.96110379857833, 0,
+		-4.68941145338974, -5.29903007116915, -4.95669127087446, -4.84061648256679,
+		-5.27192028981584, -14.2060978713101, -23.4151837725584, -38.0924336338947,
+		-7.86795137385019, -0.181842984368506, -2.1956267387574, 0,
+		-6.95829686585791, -7.12399378960776, -6.612115474112, -6.04063655320304,
+		-4.48823943832366, -2.26228704378271, -0.000122943675802531, -6.79259981618307e-11,
+		-0.000382891103450158, -1.79646084505424, -2.90772605893015, 0}
 )
 
-func CompareSliceFloat(t *testing.T, expected []float64, actual *matrix.Dense, row int, message string) {
+func CompareSliceFloat(t *testing.T, expected []float64, actual []float64, message string) {
 	for i, _ := range expected {
-		if !model.Comparef64(expected[i], actual.At(row, i)) {
+		if !model.Comparef64(expected[i], actual[i]) {
 			t.Errorf("[%s]. Expected: [%f], Got: [%f]",
-				message, expected[i], actual.At(i, 0))
+				message, expected[i], actual[i])
 		}
 	}
 }
@@ -214,8 +222,7 @@ func TestEvaluationAlpha(t *testing.T) {
 	expectedLogProb := -26.4626886822436
 	CompareFloats(t, expectedLogProb, logProb, "Error in logProb")
 	message := "Error in alpha"
-	CompareSliceFloat(t, alpha0, alpha, 0, message)
-	CompareSliceFloat(t, alpha1, alpha, 1, message)
+	CompareSliceFloat(t, alpha01, alpha.ElementsVector(), message)
 }
 
 func TestEvaluationBeta(t *testing.T) {
@@ -227,8 +234,7 @@ func TestEvaluationBeta(t *testing.T) {
 		t.Fatal(err_beta)
 	}
 	message := "Error in beta"
-	CompareSliceFloat(t, beta0, beta, 0, message)
-	CompareSliceFloat(t, beta1, beta, 1, message)
+	CompareSliceFloat(t, beta01, beta.ElementsVector(), message)
 }
 
 func TestEvaluationGamma(t *testing.T) {
@@ -248,16 +254,37 @@ func TestEvaluationGamma(t *testing.T) {
 		t.Fatal(err_gamma)
 	}
 	message := "Error in gamma"
-	CompareSliceFloat(t, gamma0, gamma, 0, message)
-	CompareSliceFloat(t, gamma1, gamma, 1, message)
+	CompareSliceFloat(t, gamma01, gamma.ElementsVector(), message)
 }
 
-/*
+func Convert3DSlideTo1D(s3 [][][]float64) []float64 {
+	s1 := make([]float64, 0, 100)
+	for _, v1 := range s3 {
+		for _, v2 := range v1 {
+			for _, v3 := range v2 {
+				s1 = append(s1, v3)
+			}
+		}
+	}
+	return s1
+}
+
 func TestEvaluationXi(t *testing.T) {
+	hmm := MakeHMM(t)
 	obs := MakeNewDenseMatrix(t, obs0)
+	alpha, _, err_alpha := hmm.alpha(obs)
+	if err_alpha != nil {
+		t.Fatal(err_alpha)
+	}
+	beta, err_beta := hmm.beta(obs)
+	if err_beta != nil {
+		t.Fatal(err_beta)
+	}
 	xi, err_xi := hmm.xi(obs, alpha, beta)
 	if err_xi != nil {
 		t.Fatal(err_xi)
 	}
-	t.Logf("xi:\n%+v\n", xi)
-}*/
+	xsi1 := Convert3DSlideTo1D(xi)
+	message := "Error in xi"
+	CompareSliceFloat(t, xsi, xsi1, message)
+}
