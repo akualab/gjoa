@@ -12,11 +12,13 @@ import (
 	"code.google.com/p/biogo.matrix"
 	"fmt"
 	"github.com/akualab/gjoa/model"
+	"github.com/golang/glog"
 	"math"
-	//"github.com/golang/glog"
 )
 
-const ()
+const (
+	SMALL_NUMBER = 0.000001
+)
 
 type HMM struct {
 
@@ -61,6 +63,9 @@ func NewHMM(transProbs, initialStateProbs *matrix.Dense, obsModels []model.Model
 		e = fmt.Errorf("Matrix transProbs must be square. rows=[%d], cols=[%d]", r, c)
 		return
 	}
+
+	glog.Infof("New HMM. Num states = [%d].", r)
+
 	// init logTransProbs and logInitProbs
 	logTransProbs := matrix.MustDense(matrix.ZeroDense(r, r))
 	logInitProbs := matrix.MustDense(matrix.ZeroDense(r, 1))
@@ -91,6 +96,7 @@ func NewHMM(transProbs, initialStateProbs *matrix.Dense, obsModels []model.Model
 // 1. Initialization: α(i,0) =  π(i) b(i,o(0)); 0<=i<N
 // 2. Induction:      α(j,t+1) =  sum_{i=0}^{N-1}[α(i,t)a(i,j)] b(j,o(t+1)); 0<=t<T-1; 0<=j<N
 // 3. Termination:    P(O/Φ) = sum_{i=0}^{N-1} α(i,T-1)
+// For scaling details see Rabiner/Juang
 func (hmm *HMM) alpha(observations *matrix.Dense) (α *matrix.Dense, logProb float64, e error) {
 
 	// Num states.
@@ -115,23 +121,34 @@ func (hmm *HMM) alpha(observations *matrix.Dense) (α *matrix.Dense, logProb flo
 	}
 
 	// 2. Induction.
+	var sumAlphas, sum float64
 	for t := 0; t < T-1; t++ {
+		sumAlphas = 0
 		for j := 0; j < N; j++ {
 
-			var sum float64
+			sum = 0
 			for i := 0; i < N; i++ {
 				sum += math.Exp(α.At(i, t) + hmm.logTransProbs.At(i, j))
 			}
-			α.Set(j, t+1, math.Log(sum)+hmm.obsModels[j].LogProb(ColumnAt(observations, t+1)))
+			v := math.Log(sum) + hmm.obsModels[j].LogProb(ColumnAt(observations, t+1))
+			α.Set(j, t+1, v)
+
+			sumAlphas += math.Exp(v)
+			if glog.V(4) {
+				glog.Infof("t: %4d | j: %2d | logAlpha: %5e | sumAlphas: %5e", t, j, v, sumAlphas)
+			}
 		}
+		// Applied scale for t independent of j.
+		if sumAlphas < SMALL_NUMBER {
+			continue
+		}
+		for j := 0; j < N; j++ {
+			v := α.At(j, t+1) / sumAlphas
+			α.Set(j, t+1, v)
+		}
+		logProb -= math.Log(sumAlphas)
 	}
 
-	// 3. Termination.
-	var sum float64
-	for i := 0; i < N; i++ {
-		sum += math.Exp(α.At(i, T-1))
-	}
-	logProb = math.Log(sum)
 	return
 }
 
@@ -290,6 +307,39 @@ func (hmm *HMM) xi(observations, α, β *matrix.Dense) (ζ [][][]float64, e erro
 			}
 		}
 	}
+	return
+}
+
+// Update model statistics.
+// sequence is a matrix
+func (hmm *HMM) Update(observations *matrix.Dense) (e error) {
+
+	var α, β, γ *matrix.Dense
+	var ζ [][][]float64
+	var logProb float64
+
+	// Compute  α, β, γ, ζ
+	// TODO: compute α, β, concurrently using go routines.
+	α, logProb, e = hmm.alpha(observations)
+	if e != nil {
+		return
+	}
+	β, e = hmm.beta(observations)
+	if e != nil {
+		return
+	}
+	// TODO: compute γ, ζ concurrently using go routines.
+	// Can we compute ζ more efficiently using γ?
+	γ, e = hmm.gamma(α, β)
+	if e != nil {
+		return
+	}
+	ζ, e = hmm.xi(observations, α, β)
+	if e != nil {
+		return
+	}
+
+	fmt.Println(α, β, γ, ζ, logProb)
 	return
 }
 

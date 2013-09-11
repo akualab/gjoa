@@ -1,12 +1,18 @@
 package hmm
 
 import (
+	"code.google.com/p/biogo.matrix"
+	"flag"
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/gjoa/model/gaussian"
-	"code.google.com/p/biogo.matrix"
 	"math"
 	"testing"
 )
+
+func init() {
+	flag.Set("logtostderr", "true")
+	flag.Set("v", "4")
+}
 
 // Tests
 
@@ -31,7 +37,7 @@ func TestColumnAt(t *testing.T) {
 }
 
 func TestEvaluation(t *testing.T) {
-
+	flag.Parse()
 	// Gaussian 1.
 	mean1, em1 := matrix.NewDense([][]float64{{1}})
 	if em1 != nil {
