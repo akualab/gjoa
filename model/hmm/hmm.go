@@ -139,14 +139,12 @@ func (hmm *HMM) alpha(observations *matrix.Dense) (α *matrix.Dense, logProb flo
 			}
 		}
 		// Applied scale for t independent of j.
-		if sumAlphas < SMALL_NUMBER {
-			continue
-		}
+		logSumAlphas := math.Log(sumAlphas)
 		for j := 0; j < N; j++ {
-			v := α.At(j, t+1) / sumAlphas
+			v := α.At(j, t+1) - logSumAlphas
 			α.Set(j, t+1, v)
 		}
-		logProb -= math.Log(sumAlphas)
+		logProb += logSumAlphas
 	}
 
 	return
@@ -186,7 +184,9 @@ func (hmm *HMM) beta(observations *matrix.Dense) (β *matrix.Dense, e error) {
 	}
 
 	// 2. Induction.
+	var sumBetas float64
 	for t := T - 2; t >= 0; t-- {
+		sumBetas = 0
 		for i := 0; i < N; i++ {
 
 			var sum float64
@@ -197,6 +197,13 @@ func (hmm *HMM) beta(observations *matrix.Dense) (β *matrix.Dense, e error) {
 					β.At(j, t+1)) // β(j,t+1)
 			}
 			β.Set(i, t, math.Log(sum))
+			sumBetas += sum
+		}
+		// Applied scale for t independent of i.
+		logSumBetas := math.Log(sumBetas)
+		for i := 0; i < N; i++ {
+			v := β.At(i, t) - logSumBetas
+			β.Set(i, t, v)
 		}
 	}
 
