@@ -63,9 +63,6 @@ func NewHMM(transProbs, initialStateProbs *matrix.Dense, obsModels []model.Model
 		e = fmt.Errorf("Matrix transProbs must be square. rows=[%d], cols=[%d]", r, c)
 		return
 	}
-
-	glog.Infof("New HMM. Num states = [%d].", r)
-
 	// init logTransProbs and logInitProbs
 	logTransProbs := matrix.MustDense(matrix.ZeroDense(r, r))
 	logInitProbs := matrix.MustDense(matrix.ZeroDense(r, 1))
@@ -73,6 +70,8 @@ func NewHMM(transProbs, initialStateProbs *matrix.Dense, obsModels []model.Model
 	// apply log to transProbs and initialStateProbs
 	logTransProbs = transProbs.ApplyDense(log, logTransProbs)
 	logInitProbs = initialStateProbs.ApplyDense(log, logInitProbs)
+
+	glog.Infof("New HMM. Num states = [%d].", r)
 
 	hmm = &HMM{
 		nstates:       r,
@@ -181,7 +180,7 @@ func (hmm *HMM) beta(observations *matrix.Dense) (β *matrix.Dense, e error) {
 
 	// 1. Initialization. Add in the log doman.
 	for i := 0; i < N; i++ {
-		β.Set(i, T-1, 1.0)
+		β.Set(i, T-1, 0.0)
 	}
 
 	// 2. Induction.
