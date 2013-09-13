@@ -89,7 +89,6 @@ func NewGaussian(numElements int, mean, variance []float64,
 	g.tmpArray = make([]float64, numElements)
 	floatx.Apply(log, g.variance, g.tmpArray)
 	g.const1 = -float64(numElements) * math.Log(2.0*math.Pi) / 2.0
-	//	g.const2 = g.const1 - g.tmpArray.Sum()/2.0
 	g.const2 = g.const1 - floats.Sum(g.tmpArray)/2.0
 
 	return
@@ -97,11 +96,8 @@ func NewGaussian(numElements int, mean, variance []float64,
 
 func (g *Gaussian) LogProb(obs []float64) float64 {
 
-	//g.tmpArray = g.mean.SubDense(obs, g.tmpArray)
 	floats.SubTo(g.tmpArray, g.mean, obs)
-	//g.tmpArray.ApplyDense(sq, g.tmpArray)
 	floatx.Apply(sq, g.tmpArray, nil)
-	//return g.const2 - g.tmpArray.InnerDense(g.varianceInv)/2.0
 	return g.const2 - floats.Dot(g.tmpArray, g.varianceInv)/2.0
 }
 
@@ -117,15 +113,10 @@ func (g *Gaussian) Update(obs []float64, w float64) error {
 	}
 
 	/* Update sufficient statistics. */
-	//obs.ScalarDense(w, g.tmpArray)
 	floatx.Apply(scaleFunc(w), obs, g.tmpArray)
-	//g.tmpArray.AddDense(g.sumx, g.sumx)
 	floats.Add(g.sumx, g.tmpArray)
-	//obs.ApplyDense(sq, g.tmpArray)
 	floatx.Apply(sq, obs, g.tmpArray)
-	//g.tmpArray.ScalarDense(w, g.tmpArray)
 	floats.Scale(w, g.tmpArray)
-	//g.tmpArray.AddDense(g.sumxsq, g.sumxsq)
 	floats.Add(g.sumxsq, g.tmpArray)
 	g.numSamples += w
 
@@ -141,7 +132,6 @@ func (g *Gaussian) Estimate() error {
 	if g.numSamples > MIN_NUM_SAMPLES {
 
 		/* Estimate the mean. */
-		//g.sumx.ScalarDense(1.0/g.numSamples, g.mean)
 		floatx.Apply(scaleFunc(1.0/g.numSamples), g.sumx, g.mean)
 		/*
 		 * Estimate the variance. sigma_sq = 1/n (sumxsq - 1/n sumx^2) or
@@ -149,32 +139,21 @@ func (g *Gaussian) Estimate() error {
 		 */
 		tmp := g.variance // borrow as an intermediate array.
 
-		//g.mean.ApplyDense(sq, g.tmpArray)
 		floatx.Apply(sq, g.mean, g.tmpArray)
-		//g.sumxsq.ScalarDense(1.0/g.numSamples, tmp)
 		floatx.Apply(scaleFunc(1.0/g.numSamples), g.sumxsq, tmp)
-		//tmp.Sub(g.tmpArray, g.variance)
 		floats.SubTo(g.variance, tmp, g.tmpArray)
-		//g.variance.ApplyDense(floorv, g.variance)
 		floatx.Apply(floorv, g.variance, nil)
-		//g.variance.ApplyDense(inv, g.varianceInv)
 		floatx.Apply(inv, g.variance, g.varianceInv)
-
 	} else {
 
 		/* Not enough training sample. */
-		//g.variance.ApplyDense(setValueFunc(SMALL_VARIANCE), g.variance)
 		floatx.Apply(setValueFunc(SMALL_VARIANCE), g.variance, nil)
-		//g.variance.ApplyDense(inv, g.varianceInv)
 		floatx.Apply(inv, g.variance, g.varianceInv)
-		//g.mean.ApplyDense(setValueFunc(0), g.mean)
 		floatx.Apply(setValueFunc(0), g.mean, nil)
 	}
 
 	/* Update log Gaussian constant. */
-	//g.variance.ApplyDense(log, g.tmpArray)
 	floatx.Apply(log, g.variance, g.tmpArray)
-	//g.const2 = g.const1 - g.tmpArray.Sum()/2.0
 	g.const2 = g.const1 - floats.Sum(g.tmpArray)/2.0
 
 	return nil
@@ -207,9 +186,7 @@ func (g *Gaussian) Variance() []float64 {
 
 func (g *Gaussian) SetVariance(variance []float64) {
 	copy(g.variance, variance)
-	g.variance = variance
-	copy(g.varianceInv, g.variance)
-	floatx.Apply(inv, g.varianceInv, nil)
+	floatx.Apply(inv, g.variance, g.varianceInv)
 }
 
 func (g *Gaussian) StandardDeviation() (sd []float64) {

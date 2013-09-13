@@ -1,9 +1,6 @@
 package floatx
 
-import (
-//"errors"
-//"math"
-)
+import ()
 
 type Error string
 
@@ -94,6 +91,19 @@ func Apply(fn ApplyFunc, in, out []float64) []float64 {
 	return out
 }
 
+func SubSlice2D(s [][]float64, c int) []float64 {
+
+	n1, n2 := Check2D(s)
+	if c < 0 || c >= n2 {
+		panic(ErrIndexOutOfRange)
+	}
+	out := make([]float64, n1)
+	for i := 0; i < n1; i++ {
+		out[i] = s[i][c]
+	}
+	return out
+}
+
 // Apply function to 2D slice. If out slice is empty, the function is applied in place.
 func Apply2D(fn ApplyFunc2D, in, out [][]float64) [][]float64 {
 
@@ -128,15 +138,15 @@ func Apply3D(fn ApplyFunc3D, in, out [][][]float64) [][][]float64 {
 	return out
 }
 
-func SubSlice2D(s [][]float64, c int) []float64 {
+func Flatten2D(s [][]float64) []float64 {
 
 	n1, n2 := Check2D(s)
-	if c < 0 || c >= n2 {
-		panic(ErrIndexOutOfRange)
-	}
-	out := make([]float64, n1)
-	for i := 0; i < n1; i++ {
-		out[i] = s[i][c]
+	out := make([]float64, n1*n2)
+
+	p := 0
+	for _, c := range s {
+		copy(out[p:], c)
+		p += len(c)
 	}
 	return out
 }

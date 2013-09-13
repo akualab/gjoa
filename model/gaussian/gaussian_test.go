@@ -14,16 +14,6 @@ func TestGaussian(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	//t.Logf("Gaussian: %+v", g)
-
-	// mean, e2 := matrix.NewDense([][]float64{{0.5}, {1}, {2}})
-	// if e2 != nil {
-	// 	t.Fatal(e2)
-	// }
-	// variance, ev := matrix.NewDense([][]float64{{1}, {1}, {1}})
-	// if ev != nil {
-	// 	t.Fatal(ev)
-	// }
 
 	mean := []float64{0.5, 1, 2}
 	variance := []float64{1, 1, 1}
@@ -32,17 +22,11 @@ func TestGaussian(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	//obs, e3 := matrix.NewDense([][]float64{{1}, {1}, {1}})
-	//if e3 != nil {
-	//	t.Fatal(e3)
-	//}
 	obs := []float64{1, 1, 1}
 
 	p := g.LogProb(obs)
-	//t.Logf("Gaussian: %+v", g)
 	t.Logf("LogProb: %f", p)
 	t.Logf("Prob: %f", g.Prob(obs))
-	// -3.3818
 
 	expected := -3.3818
 	if !model.Comparef64(expected, p) {
@@ -71,7 +55,6 @@ func TestTrainGaussian(t *testing.T) {
 		g.Update(rv, 1.0)
 	}
 	g.Estimate()
-	//t.Logf("Gaussian: %+v", g)
 	t.Logf("Mean: \n%+v", g.Mean())
 	t.Logf("STD: \n%+v", g.StandardDeviation())
 

@@ -1,13 +1,11 @@
 package model
 
-import (
-	"code.google.com/p/biogo.matrix"
-)
+import ()
 
 // A read-only model.
 type Modeler interface {
-	Prob(obs *matrix.Dense) float64
-	LogProb(obs *matrix.Dense) float64
+	Prob(obs []float64) float64
+	LogProb(obs []float64) float64
 	Name() string
 	//String() string
 	NumElements() int

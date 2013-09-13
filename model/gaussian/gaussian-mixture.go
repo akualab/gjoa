@@ -81,17 +81,13 @@ func NewGaussianMixture(numElements, numComponents int,
 // Gaussian comp + logWeight in matrix pointed by func arg probs.
 func (gmm *GMM) logProbInternal(obs, probs []float64) float64 {
 
-	//fmt.Printf("obs: \n%+v\n", obs)
-
 	var max float64 = -math.MaxFloat64
 
 	/* Compute log probabilities for this observation. */
 	for i, c := range gmm.components {
-		//v := c.LogProb(obs) + gmm.logWeights.At(i, 0)
 		v1 := c.LogProb(obs)
 		v2 := gmm.logWeights[i]
 		v := v1 + v2
-		//fmt.Printf("comp %2d: logProbInternal: logProb: %f, logW: %f\n", i, v1, v2)
 
 		if probs != nil {
 			probs[i] = v
@@ -135,14 +131,12 @@ func (gmm *GMM) Update(obs []float64, w float64) error {
 
 	maxProb := gmm.logProbInternal(obs, gmm.tmpProbs2)
 	gmm.totalLikelihood += maxProb
-	//gmm.tmpProbs2.ApplyDense(addScalarFunc(-maxProb+math.Log(w)), gmm.tmpProbs2)
 	floatx.Apply(addScalarFunc(-maxProb+math.Log(w)), gmm.tmpProbs2, nil)
 
 	// Compute posterior probabilities.
 	floatx.Apply(exp, gmm.tmpProbs2, nil)
 
 	// Update posterior sum, needed to compute mixture weights.
-	//gmm.posteriorSum.Add(gmm.tmpProbs2, gmm.posteriorSum)
 	floats.Add(gmm.posteriorSum, gmm.tmpProbs2)
 
 	// Update Gaussian components.
@@ -163,9 +157,7 @@ func (gmm *GMM) Estimate() error {
 	}
 
 	// Estimate mixture weights.
-	//gmm.posteriorSum.Scalar(1.0/gmm.numSamples, gmm.weights)
 	floatx.Apply(scaleFunc(1.0/gmm.numSamples), gmm.posteriorSum, gmm.weights)
-	//gmm.weights.ApplyDense(log, gmm.logWeights)
 	floatx.Apply(log, gmm.weights, gmm.logWeights)
 
 	// Estimate component density.
@@ -186,7 +178,6 @@ func (gmm *GMM) Clear() error {
 	for _, c := range gmm.components {
 		c.Clear()
 	}
-	//gmm.posteriorSum.ApplyDense(setValueFunc(0), gmm.posteriorSum)
 	floatx.Apply(setValueFunc(0), gmm.posteriorSum, nil)
 	gmm.numSamples = 0
 	gmm.totalLikelihood = 0
@@ -202,7 +193,6 @@ func RandomVector(mean, variance []float64, r *rand.Rand) (vec []float64, e erro
 		panic(floatx.ErrLength)
 	}
 
-	//vec = matrix.MustDense(matrix.ZeroDense(nrows, 1))
 	vec = make([]float64, nrows)
 	for i := 0; i < nrows; i++ {
 		std := math.Sqrt(variance[i])
