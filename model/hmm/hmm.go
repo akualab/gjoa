@@ -9,8 +9,8 @@ Hidden Markov model.
 package hmm
 
 import (
-	"code.google.com/p/biogo.matrix"
 	"fmt"
+	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
 	"github.com/golang/glog"
 	"math"
@@ -21,6 +21,9 @@ const (
 )
 
 type HMM struct {
+
+	// Model name.
+	name string
 
 	// q(t) is the state at time t
 	// states are labeled {0,2,...,N-1}
@@ -34,44 +37,57 @@ type HMM struct {
 	// a(i,j) = log(P[q(t+1) = j | q(t) = i]); 0 <= i,j <= N-1
 	// when transitions between states are not allowed: a(i,j) = 0
 	// => saved in log domain.
-	logTransProbs *matrix.Dense
+	logTransProbs [][]float64
 
 	// Observation probability distribution functions. [nstates x 1]
-	// b(j,k) = P[o(t) | q(t) = j]
+	// b(j,t) = P[o(t) | q(t) = j]
 	obsModels []model.Modeler
 
 	// Initial state distribution. [nstates x 1]
 	// π(i) = P[q(0) = i]; 0<=i<N
 	// => saved in log domain.
-	logInitProbs *matrix.Dense
+	logInitProbs []float64
 
 	// Num elements in obs vector.
 	numElements int
 
 	// Complete HMM model.
 	// Φ = (A, B, π)
+
+	// Train HMM params.
+	trainable  bool
+	sumXi      [][]float64
+	sumGamma   []float64
+	sumLogProb float64
 }
 
 // Define functions for elementwise transformations.
-var log = func(r, c int, v float64) float64 { return math.Log(v) }
+var log = func(r int, v float64) float64 { return math.Log(v) }
+var log2D = func(r int, c int, v float64) float64 { return math.Log(v) }
 
 // Create a new HMM.
-func NewHMM(transProbs, initialStateProbs *matrix.Dense, obsModels []model.Modeler) (hmm *HMM, e error) {
+func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []model.Modeler, trainable bool, name string) (hmm *HMM, e error) {
 
-	r, c := transProbs.Dims()
-	if r != c {
-		e = fmt.Errorf("Matrix transProbs must be square. rows=[%d], cols=[%d]", r, c)
-		return
+	r, _ := floatx.Check2D(transProbs)
+	r1 := len(initialStateProbs)
+
+	if r != r1 {
+		e = fmt.Errorf("Num states mismatch. transProbs has [%d] and initialStateProbs have [%d].", r, r1)
 	}
+
 	// init logTransProbs and logInitProbs
-	logTransProbs := matrix.MustDense(matrix.ZeroDense(r, r))
-	logInitProbs := matrix.MustDense(matrix.ZeroDense(r, 1))
+	logTransProbs := floatx.MakeFloat2D(r, r)
+	logInitProbs := make([]float64, r)
 
 	// apply log to transProbs and initialStateProbs
-	logTransProbs = transProbs.ApplyDense(log, logTransProbs)
-	logInitProbs = initialStateProbs.ApplyDense(log, logInitProbs)
+	logTransProbs = floatx.Apply2D(log2D, transProbs, logTransProbs)
+	logInitProbs = floatx.Apply(log, initialStateProbs, logInitProbs)
 
-	glog.Infof("New HMM. Num states = [%d].", r)
+	glog.Infof("New HMM. Num states = %d.", r)
+	glog.Infof("Init. State Probs:    %v.", initialStateProbs)
+	glog.Infof("Log Init Probs:       %v.", logInitProbs)
+	glog.Infof("Trans. Probs:         %v.", transProbs)
+	glog.Infof("Log Trans. Probs:     %v.", logTransProbs)
 
 	hmm = &HMM{
 		nstates:       r,
@@ -79,8 +95,16 @@ func NewHMM(transProbs, initialStateProbs *matrix.Dense, obsModels []model.Model
 		obsModels:     obsModels,
 		logInitProbs:  logInitProbs,
 		numElements:   obsModels[0].NumElements(),
+		name:          name,
 	}
 
+	if !trainable {
+		return
+	}
+
+	hmm.sumXi = floatx.MakeFloat2D(r, r)
+	hmm.sumGamma = make([]float64, r)
+	hmm.trainable = true
 	return
 }
 
@@ -97,27 +121,31 @@ func NewHMM(transProbs, initialStateProbs *matrix.Dense, obsModels []model.Model
 // 3. Termination:    P(O/Φ) = sum_{i=0}^{N-1} α(i,T-1)
 // For scaling details see Rabiner/Juang and
 // http://courses.media.mit.edu/2010fall/mas622j/ProblemSets/ps4/tutorial.pdf
-func (hmm *HMM) alpha(observations *matrix.Dense) (α *matrix.Dense, logProb float64, e error) {
+func (hmm *HMM) alpha(observations [][]float64) (α [][]float64, logProb float64, e error) {
 
 	// Num states.
 	N := hmm.nstates
 
 	// expected num rows: numElements
 	// expected num cols: T
-	ne, T := observations.Dims()
+	ne, T := floatx.Check2D(observations)
 
 	if ne != hmm.numElements {
 		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].", ne, hmm.numElements)
 		return
 	}
 
+	if glog.V(3) {
+		glog.Infof("N: %d, T: %d", N, T)
+	}
+
 	// Allocate log-alpha matrix.
 	// TODO: use a reusable data structure to minimize garbage.
-	α = matrix.MustDense(matrix.ZeroDense(N, T))
+	α = floatx.MakeFloat2D(N, T)
 
-	// 1. Initialization. Add in the log doman.
+	// 1. Initialization. Add in the log domain.
 	for i := 0; i < N; i++ {
-		α.Set(i, 0, hmm.logInitProbs.At(i, 0)+hmm.obsModels[i].LogProb(ColumnAt(observations, 0)))
+		α[i][0] = hmm.logInitProbs[i] + hmm.obsModels[i].LogProb(floatx.SubSlice2D(observations, 0))
 	}
 
 	// 2. Induction.
@@ -128,10 +156,10 @@ func (hmm *HMM) alpha(observations *matrix.Dense) (α *matrix.Dense, logProb flo
 
 			sum = 0
 			for i := 0; i < N; i++ {
-				sum += math.Exp(α.At(i, t) + hmm.logTransProbs.At(i, j))
+				sum += math.Exp(α[i][t] + hmm.logTransProbs[i][j])
 			}
-			v := math.Log(sum) + hmm.obsModels[j].LogProb(ColumnAt(observations, t+1))
-			α.Set(j, t+1, v)
+			v := math.Log(sum) + hmm.obsModels[j].LogProb(floatx.SubSlice2D(observations, t+1))
+			α[j][t+1] = v
 
 			sumAlphas += math.Exp(v)
 			if glog.V(4) {
@@ -141,8 +169,8 @@ func (hmm *HMM) alpha(observations *matrix.Dense) (α *matrix.Dense, logProb flo
 		// Applied scale for t independent of j.
 		logSumAlphas := math.Log(sumAlphas)
 		for j := 0; j < N; j++ {
-			v := α.At(j, t+1) - logSumAlphas
-			α.Set(j, t+1, v)
+			v := α[j][t+1] - logSumAlphas
+			α[j][t+1] = v
 		}
 		logProb += logSumAlphas
 	}
@@ -160,14 +188,14 @@ func (hmm *HMM) alpha(observations *matrix.Dense) (α *matrix.Dense, logProb flo
 //
 // 1. Initialization: β(i,T-1) = 1;  0<=i<N
 // 2. Induction:      β(i,t) =  sum_{j=0}^{N-1} a(i,j) b(j,o(t+1)) β(j,t+1); t=T-2,T-3,...,0; 0<=i<N
-func (hmm *HMM) beta(observations *matrix.Dense) (β *matrix.Dense, e error) {
+func (hmm *HMM) beta(observations [][]float64) (β [][]float64, e error) {
 
 	// Num states.
 	N := hmm.nstates
 
 	// expected num rows: numElements
 	// expected num cols: T
-	ne, T := observations.Dims()
+	ne, T := floatx.Check2D(observations)
 
 	if ne != hmm.numElements {
 		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].", ne, hmm.numElements)
@@ -176,11 +204,11 @@ func (hmm *HMM) beta(observations *matrix.Dense) (β *matrix.Dense, e error) {
 
 	// Allocate log-beta matrix.
 	// TODO: use a reusable data structure to minimize garbage.
-	β = matrix.MustDense(matrix.ZeroDense(N, T))
+	β = floatx.MakeFloat2D(N, T)
 
 	// 1. Initialization. Add in the log doman.
 	for i := 0; i < N; i++ {
-		β.Set(i, T-1, 0.0)
+		β[i][T-1] = 0.0
 	}
 
 	// 2. Induction.
@@ -192,18 +220,18 @@ func (hmm *HMM) beta(observations *matrix.Dense) (β *matrix.Dense, e error) {
 			var sum float64
 			for j := 0; j < N; j++ {
 
-				sum += math.Exp(hmm.logTransProbs.At(i, j) + // a(i,j)
-					hmm.obsModels[j].LogProb(ColumnAt(observations, t+1)) + // b(j,o(t+1))
-					β.At(j, t+1)) // β(j,t+1)
+				sum += math.Exp(hmm.logTransProbs[i][j] + // a(i,j)
+					hmm.obsModels[j].LogProb(floatx.SubSlice2D(observations, t+1)) + // b(j,o(t+1))
+					β[j][t+1]) // β(j,t+1)
 			}
-			β.Set(i, t, math.Log(sum))
+			β[i][t] = math.Log(sum)
 			sumBetas += sum
 		}
 		// Applied scale for t independent of i.
 		logSumBetas := math.Log(sumBetas)
 		for i := 0; i < N; i++ {
-			v := β.At(i, t) - logSumBetas
-			β.Set(i, t, v)
+			v := β[i][t] - logSumBetas
+			β[i][t] = v
 		}
 	}
 
@@ -213,10 +241,10 @@ func (hmm *HMM) beta(observations *matrix.Dense) (β *matrix.Dense, e error) {
 // Compute gammas. Indices are: γ(state, time)
 //
 // γ(i,t) =  α(i,t)β(i,t) / sum_{j=0}^{N-1} α(j,t)β(j,t);  0<=j<N
-func (hmm *HMM) gamma(α, β *matrix.Dense) (γ *matrix.Dense, e error) {
+func (hmm *HMM) gamma(α, β [][]float64) (γ [][]float64, e error) {
 
-	αr, αc := α.Dims()
-	βr, βc := β.Dims()
+	αr, αc := floatx.Check2D(α)
+	βr, βc := floatx.Check2D(β)
 
 	if αr != βr || αc != βc {
 		e = fmt.Errorf("Shape mismatch: alpha[%d,%d] beta[%d,%d]", αr, αc, βr, βc)
@@ -231,20 +259,20 @@ func (hmm *HMM) gamma(α, β *matrix.Dense) (γ *matrix.Dense, e error) {
 
 	// Allocate log-gamma matrix.
 	// TODO: use a reusable data structure to minimize garbage.
-	γ = matrix.MustDense(matrix.ZeroDense(N, T))
+	γ = floatx.MakeFloat2D(N, T)
 
 	for t := 0; t < T; t++ {
 		var sum float64 = 0.0
 		for i := 0; i < N; i++ {
-			x := α.At(i, t) + β.At(i, t)
-			γ.Set(i, t, x)
+			x := α[i][t] + β[i][t]
+			γ[i][t] = x
 			sum += math.Exp(x)
 		}
 
 		// Normalize.
 		for i := 0; i < N; i++ {
-			x := γ.At(i, t) - math.Log(sum)
-			γ.Set(i, t, x)
+			x := γ[i][t] - math.Log(sum)
+			γ[i][t] = x
 		}
 	}
 	return
@@ -258,12 +286,12 @@ func (hmm *HMM) gamma(α, β *matrix.Dense) (γ *matrix.Dense, e error) {
             sum_{i=0}^{N-1} sum_{j=0}^{N-1} α(i,t) a(i,j) b(j,o(t+1)) β(j,t+1)
 
 */
-func (hmm *HMM) xi(observations, α, β *matrix.Dense) (ζ [][][]float64, e error) {
+func (hmm *HMM) xi(observations, α, β [][]float64) (ζ [][][]float64, e error) {
 
 	a := hmm.logTransProbs
-	αr, αc := α.Dims()
-	βr, βc := β.Dims()
-	or, oc := observations.Dims()
+	αr, αc := floatx.Check2D(α)
+	βr, βc := floatx.Check2D(β)
+	or, oc := floatx.Check2D(observations)
 
 	if αr != βr || αc != βc {
 		e = fmt.Errorf("Shape mismatch: alpha[%d,%d] beta[%d,%d]", αr, αc, βr, βc)
@@ -287,22 +315,14 @@ func (hmm *HMM) xi(observations, α, β *matrix.Dense) (ζ [][][]float64, e erro
 
 	// Allocate log-xi matrix.
 	// TODO: use a reusable data structure to minimize garbage.
-	ζ = make([][][]float64, N)
-	for i := 0; i < N; i++ {
-		ζ[i] = make([][]float64, N)
-		for j := 0; j < N; j++ {
-			for t := 0; t < N; t++ {
-				ζ[i][j] = make([]float64, T)
-			}
-		}
-	}
+	ζ = floatx.MakeFloat3D(N, N, T)
 
 	for t := 0; t < T-1; t++ {
 		var sum float64 = 0.0
 		for j := 0; j < N; j++ {
-			b := hmm.obsModels[j].LogProb(ColumnAt(observations, t+1))
+			b := hmm.obsModels[j].LogProb(floatx.SubSlice2D(observations, t+1))
 			for i := 0; i < N; i++ {
-				x := α.At(i, t) + a.At(i, j) + b + β.At(j, t+1)
+				x := α[i][t] + a[i][j] + b + β[j][t+1]
 				ζ[i][j][t] = x
 				sum += math.Exp(x)
 			}
@@ -319,9 +339,13 @@ func (hmm *HMM) xi(observations, α, β *matrix.Dense) (ζ [][][]float64, e erro
 
 // Update model statistics.
 // sequence is a matrix
-func (hmm *HMM) Update(observations *matrix.Dense) (e error) {
+func (hmm *HMM) Update(observations [][]float64) (e error) {
 
-	var α, β, γ *matrix.Dense
+	if !hmm.trainable {
+		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", hmm.name)
+	}
+
+	var α, β, γ [][]float64
 	var ζ [][][]float64
 	var logProb float64
 
@@ -346,28 +370,9 @@ func (hmm *HMM) Update(observations *matrix.Dense) (e error) {
 		return
 	}
 
+	//	sumGamma
 	fmt.Println(α, β, γ, ζ, logProb)
 	return
-}
-
-// ColumnAt returns a *matrix.Dense column that is a copy of the values at column c of the matrix.
-// Column will panic with ErrIndexOutOfRange is c is not a valid column index.
-func ColumnAt(d *matrix.Dense, c int) *matrix.Dense {
-
-	sl := d.Column(c)
-	nrows := len(sl)
-
-	col := matrix.MustDense(matrix.ZeroDense(nrows, 1))
-
-	for i := 0; i < nrows; i++ {
-		col.Set(i, 0, sl[i])
-	}
-
-	return col
-}
-
-func (hmm *HMM) NumElements() int {
-	return hmm.numElements
 }
 
 // The viterbi algorithm computes the probable sequence of states for an HMM.
@@ -385,14 +390,14 @@ func (hmm *HMM) NumElements() int {
 // z*(t) = index(z*(t+1), t+1)  t in [0, T-2]
 // logProb = max_j delta(j, T-1)
 
-func (hmm *HMM) viterbi(observations *matrix.Dense) (bt []int, logViterbiProb float64, e error) {
+func (hmm *HMM) viterbi(observations [][]float64) (bt []int, logViterbiProb float64, e error) {
 
 	// Num states
 	N := hmm.nstates
 
 	// expected num rows: numElements
 	// expected num cols: T
-	ne, T := observations.Dims()
+	ne, T := floatx.Check2D(observations)
 
 	if ne != hmm.numElements {
 		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].", ne, hmm.numElements)
@@ -400,18 +405,17 @@ func (hmm *HMM) viterbi(observations *matrix.Dense) (bt []int, logViterbiProb fl
 	}
 
 	// Allocate delta, index and bt
-	delta := make([][]float64, N)
+	delta := floatx.MakeFloat2D(N, T)
 	index := make([][]int, N)
 	bt = make([]int, T)
 	for i := 0; i < N; i++ {
-		delta[i] = make([]float64, T)
 		index[i] = make([]int, T)
 	}
 
 	// Init delta
 	for i := 0; i < N; i++ {
-		b := hmm.obsModels[i].LogProb(ColumnAt(observations, 0))
-		delta[i][0] = hmm.logInitProbs.At(i, 0) + b
+		b := hmm.obsModels[i].LogProb(floatx.SubSlice2D(observations, 0))
+		delta[i][0] = hmm.logInitProbs[i] + b
 	}
 
 	// Recursion
@@ -419,11 +423,11 @@ func (hmm *HMM) viterbi(observations *matrix.Dense) (bt []int, logViterbiProb fl
 		for i := 0; i < N; i++ {
 			// Computing max in k to define delta(i,t)
 			// init max with k=0
-			b := hmm.obsModels[i].LogProb(ColumnAt(observations, t))
-			max := delta[0][t-1] + hmm.logTransProbs.At(0, i) + b
+			b := hmm.obsModels[i].LogProb(floatx.SubSlice2D(observations, t))
+			max := delta[0][t-1] + hmm.logTransProbs[0][i] + b
 			argmax := 0
 			for k := 1; k < N; k++ {
-				tempProb := delta[k][t-1] + hmm.logTransProbs.At(k, i) + b
+				tempProb := delta[k][t-1] + hmm.logTransProbs[k][i] + b
 				if tempProb > max {
 					max = tempProb
 					argmax = k
@@ -453,3 +457,6 @@ func (hmm *HMM) viterbi(observations *matrix.Dense) (bt []int, logViterbiProb fl
 
 	return
 }
+
+func (hmm *HMM) NumElements() int { return hmm.numElements }
+func (hmm *HMM) Name() string     { return hmm.name }

@@ -1,8 +1,8 @@
 package hmm
 
 import (
-	"code.google.com/p/biogo.matrix"
 	"flag"
+	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/gjoa/model/gaussian"
 	"testing"
@@ -40,57 +40,25 @@ func init() {
    Viterbi gives you the P(q | O,  model), that is, it maximizes of over the whole sequence.
 */
 
-// Test ColumnAt() function.
-func TestColumnAt(t *testing.T) {
-
-	mat, e := matrix.NewDense([][]float64{
-		{10, 11, 12, 13}, {20, 21, 22, 23}, {30, 31, 32, 33}})
-	if e != nil {
-		t.Fatal(e)
-	}
-
-	col := ColumnAt(mat, 1)
-
-	for i, expected := range []float64{11.0, 21.0, 31.0} {
-		v := col.At(i, 0)
-		if !model.Comparef64(expected, v) {
-			t.Errorf("Wrong value. Expected: [%f], Got: [%f]", expected, v)
-		}
-	}
-}
-
-func MakeNewDenseMatrix(t *testing.T, m [][]float64) *matrix.Dense {
-	mm, emm := matrix.NewDense(m)
-	if emm != nil {
-		t.Fatal(emm)
-	}
-	return mm
-}
-
 func MakeHMM(t *testing.T) *HMM {
 
 	// Gaussian 1.
-	mean1 := MakeNewDenseMatrix(t, [][]float64{{1}})
-	var1 := MakeNewDenseMatrix(t, [][]float64{{1}})
+	mean1 := []float64{1}
+	var1 := []float64{1}
 	g1, eg1 := gaussian.NewGaussian(1, mean1, var1, true, true, "g1")
 	if eg1 != nil {
 		t.Fatal(eg1)
 	}
 	// Gaussian 2.
-	mean2 := MakeNewDenseMatrix(t, [][]float64{{4}})
-	var2 := MakeNewDenseMatrix(t, [][]float64{{4}})
-	var2, ev2 := matrix.NewDense([][]float64{{4}})
-	if ev2 != nil {
-		t.Fatal(ev2)
-	}
+	mean2 := []float64{4}
+	var2 := []float64{4}
 	g2, eg2 := gaussian.NewGaussian(1, mean2, var2, true, true, "g2")
 	if eg2 != nil {
 		t.Fatal(eg2)
 	}
 
-	initialStateProbs := MakeNewDenseMatrix(t, [][]float64{{0.8}, {0.2}})
-
-	transProbs := MakeNewDenseMatrix(t, [][]float64{{0.9, 0.1}, {0.3, 0.7}})
+	initialStateProbs := []float64{0.8, 0.2}
+	transProbs := [][]float64{{0.9, 0.1}, {0.3, 0.7}}
 
 	// These are the models.
 	models := []*gaussian.Gaussian{g1, g2}
@@ -102,7 +70,7 @@ func MakeHMM(t *testing.T) *HMM {
 	for i, v := range models {
 		m[i] = v
 	}
-	hmm, e := NewHMM(transProbs, initialStateProbs, m)
+	hmm, e := NewHMM(transProbs, initialStateProbs, m, false, "testhmm")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -138,8 +106,7 @@ func TestLogProb(t *testing.T) {
 
 	flag.Parse()
 	hmm := MakeHMM(t)
-	obs := MakeNewDenseMatrix(t, obs0)
-	_, logProb, err_alpha := hmm.alpha(obs)
+	_, logProb, err_alpha := hmm.alpha(obs0)
 	if err_alpha != nil {
 		t.Fatal(err_alpha)
 	}
@@ -151,12 +118,11 @@ func TestEvaluationGamma(t *testing.T) {
 
 	flag.Parse()
 	hmm := MakeHMM(t)
-	obs := MakeNewDenseMatrix(t, obs0)
-	alpha, _, err_alpha := hmm.alpha(obs)
+	alpha, _, err_alpha := hmm.alpha(obs0)
 	if err_alpha != nil {
 		t.Fatal(err_alpha)
 	}
-	beta, err_beta := hmm.beta(obs)
+	beta, err_beta := hmm.beta(obs0)
 	if err_beta != nil {
 		t.Fatal(err_beta)
 	}
@@ -165,7 +131,7 @@ func TestEvaluationGamma(t *testing.T) {
 		t.Fatal(err_gamma)
 	}
 	message := "Error in gamma"
-	CompareSliceFloat(t, gamma01, gamma.ElementsVector(), message)
+	CompareSliceFloat(t, gamma01, floatx.Flatten2D(gamma), message)
 }
 
 func Convert3DSlideTo1D(s3 [][][]float64) []float64 {
@@ -184,16 +150,15 @@ func TestEvaluationXi(t *testing.T) {
 
 	flag.Parse()
 	hmm := MakeHMM(t)
-	obs := MakeNewDenseMatrix(t, obs0)
-	alpha, _, err_alpha := hmm.alpha(obs)
+	alpha, _, err_alpha := hmm.alpha(obs0)
 	if err_alpha != nil {
 		t.Fatal(err_alpha)
 	}
-	beta, err_beta := hmm.beta(obs)
+	beta, err_beta := hmm.beta(obs0)
 	if err_beta != nil {
 		t.Fatal(err_beta)
 	}
-	xi, err_xi := hmm.xi(obs, alpha, beta)
+	xi, err_xi := hmm.xi(obs0, alpha, beta)
 	if err_xi != nil {
 		t.Fatal(err_xi)
 	}
@@ -205,8 +170,7 @@ func TestEvaluationXi(t *testing.T) {
 func TestViterbi(t *testing.T) {
 	flag.Parse()
 	hmm := MakeHMM(t)
-	obs := MakeNewDenseMatrix(t, obs0)
-	bt, logProbViterbi, err := hmm.viterbi(obs)
+	bt, logProbViterbi, err := hmm.viterbi(obs0)
 	if err != nil {
 		t.Fatal(err)
 	}

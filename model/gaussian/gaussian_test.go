@@ -2,7 +2,6 @@ package gaussian
 
 import (
 	"github.com/akualab/gjoa/model"
-	"code.google.com/p/biogo.matrix"
 	"math/rand"
 	"testing"
 )
@@ -15,30 +14,19 @@ func TestGaussian(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	//t.Logf("Gaussian: %+v", g)
 
-	mean, e2 := matrix.NewDense([][]float64{{0.5}, {1}, {2}})
-	if e2 != nil {
-		t.Fatal(e2)
-	}
-	variance, ev := matrix.NewDense([][]float64{{1}, {1}, {1}})
-	if ev != nil {
-		t.Fatal(ev)
-	}
+	mean := []float64{0.5, 1, 2}
+	variance := []float64{1, 1, 1}
 
 	g, e = NewGaussian(3, mean, variance, true, true, "testing")
 	if e != nil {
 		t.Fatal(e)
 	}
-	obs, e3 := matrix.NewDense([][]float64{{1}, {1}, {1}})
-	if e3 != nil {
-		t.Fatal(e3)
-	}
+	obs := []float64{1, 1, 1}
+
 	p := g.LogProb(obs)
-	//t.Logf("Gaussian: %+v", g)
 	t.Logf("LogProb: %f", p)
 	t.Logf("Prob: %f", g.Prob(obs))
-	// -3.3818
 
 	expected := -3.3818
 	if !model.Comparef64(expected, p) {
@@ -64,21 +52,20 @@ func TestTrainGaussian(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Update(rv)
+		g.Update(rv, 1.0)
 	}
 	g.Estimate()
-	//t.Logf("Gaussian: %+v", g)
 	t.Logf("Mean: \n%+v", g.Mean())
 	t.Logf("STD: \n%+v", g.StandardDeviation())
 
 	for i, _ := range mean {
-		if !model.Comparef64(mean[i], g.Mean().At(i, 0)) {
+		if !model.Comparef64(mean[i], g.Mean()[i]) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
-				i, mean[i], g.Mean().At(i, 0))
+				i, mean[i], g.Mean()[i])
 		}
-		if !model.Comparef64(std[i], g.StandardDeviation().At(i, 0)) {
+		if !model.Comparef64(std[i], g.StandardDeviation()[i]) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
-				i, std[i], g.StandardDeviation().At(i, 0))
+				i, std[i], g.StandardDeviation()[i])
 		}
 	}
 }
