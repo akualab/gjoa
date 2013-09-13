@@ -125,6 +125,15 @@ func CompareFloats(t *testing.T, expected float64, actual float64, message strin
 	}
 }
 
+func CompareSliceInt(t *testing.T, expected []int, actual []int, message string) {
+	for i, _ := range expected {
+		if expected[i] != actual[i] {
+			t.Errorf("[%s]. Expected: [%d], Got: [%d]",
+				message, expected[i], actual[i])
+		}
+	}
+}
+
 func TestLogProb(t *testing.T) {
 
 	flag.Parse()
@@ -193,60 +202,24 @@ func TestEvaluationXi(t *testing.T) {
 	CompareSliceFloat(t, xsi, xsi1, message)
 }
 
+func TestViterbi(t *testing.T) {
+	flag.Parse()
+	hmm := MakeHMM(t)
+	obs := MakeNewDenseMatrix(t, obs0)
+	bt, logProbViterbi, err := hmm.viterbi(obs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedViterbiLog := -26.8129904950932
+	CompareFloats(t, expectedViterbiLog, logProbViterbi, "Error in logProbViterbi")
+	CompareSliceInt(t, viterbiSeq, bt, "Error in viterbi seq")
+}
+
 var (
 	obs0 = [][]float64{
 		{0.1, 0.3, 1.1, 1.2, 0.7, 0.7, 5.5, 7.8, 10.0, 5.2, 1.1, 1.3}}
-	alpha01 = []float64{
-		-1.54708208451888,
-		-2.80709238811418,
-		-3.83134003758912,
-		-4.86850442594034,
-		-5.92973730403429,
-		-6.99328952650412,
-		-18.1370692144982,
-		-36.3195887463382,
-		-57.4758051059185,
-		-32.2645657649804,
-		-25.5978716740632,
-		-26.5391830081456,
-		-5.12277362619872,
-		-6.99404330419337,
-		-7.67194890763762,
-		-8.58593275227677,
-		-9.98735773434079,
-		-11.0914094981902,
-		-11.0792560557189,
-		-14.8528937698143,
-		-21.3216544274498,
-		-23.4704150851531,
-		-26.4904040834703,
-		-29.0712307616184}
-	beta01 = []float64{
-		-24.9258011954291,
-		-23.661415171904,
-		-22.6397641116887,
-		-21.6045197079498,
-		-20.549461075003,
-		-19.579339900188,
-		-17.3294657178329,
-		-13.5557050615525,
-		-7.07931720879328,
-		-2.06607429111337,
-		-1.04620524392834,
-		0,
-		-25.9309053603105,
-		-24.6182012641994,
-		-23.5726285099546,
-		-22.4540945910146,
-		-20.5873818254665,
-		-17.6335597285231,
-		-15.3835555701327,
-		-11.6097949124971,
-		-5.14103425479379,
-		-2.99265648819389,
-		-1.76872378444132,
-		0}
-	gamma01 = []float64{
+	viterbiSeq = []int{0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0}
+	gamma01    = []float64{
 		-0.0101945977044363,
 		-0.00581887777458709,
 		-0.00841546703429051,

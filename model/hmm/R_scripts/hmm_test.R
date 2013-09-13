@@ -44,6 +44,9 @@ w <- as.vector(w)
 Xsi <- t(matrix(w, ncol=12))
 write.csv(Xsi, "xsi.csv", row.names = FALSE)
 
+# viterbi 
+v <- viterbi(hmm.mod, obs)
+v$states -1
 # my own implementation of alpha to test forwardBackward
 m <- c(1, 4)
 var <- c(1, 4)
