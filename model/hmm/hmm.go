@@ -11,8 +11,10 @@ package hmm
 import (
 	"code.google.com/p/biogo.matrix"
 	"fmt"
+	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
 	"github.com/golang/glog"
+	//"github.com/gonum/floats"
 	"math"
 )
 
@@ -21,6 +23,9 @@ const (
 )
 
 type HMM struct {
+
+	// Model name.
+	name string
 
 	// q(t) is the state at time t
 	// states are labeled {0,2,...,N-1}
@@ -34,7 +39,7 @@ type HMM struct {
 	// a(i,j) = log(P[q(t+1) = j | q(t) = i]); 0 <= i,j <= N-1
 	// when transitions between states are not allowed: a(i,j) = 0
 	// => saved in log domain.
-	logTransProbs *matrix.Dense
+	logTransProbs [][]float64
 
 	// Observation probability distribution functions. [nstates x 1]
 	// b(j,k) = P[o(t) | q(t) = j]
@@ -43,33 +48,41 @@ type HMM struct {
 	// Initial state distribution. [nstates x 1]
 	// π(i) = P[q(0) = i]; 0<=i<N
 	// => saved in log domain.
-	logInitProbs *matrix.Dense
+	logInitProbs []float64
 
 	// Num elements in obs vector.
 	numElements int
 
 	// Complete HMM model.
 	// Φ = (A, B, π)
+
+	// Train HMM params.
+	trainable  bool
+	sumXi      [][]float64
+	sumGamma   []float64
+	sumLogProb float64
 }
 
 // Define functions for elementwise transformations.
 var log = func(r, c int, v float64) float64 { return math.Log(v) }
 
 // Create a new HMM.
-func NewHMM(transProbs, initialStateProbs *matrix.Dense, obsModels []model.Modeler) (hmm *HMM, e error) {
+func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []model.Modeler, trainable bool, name string) (hmm *HMM, e error) {
 
-	r, c := transProbs.Dims()
-	if r != c {
-		e = fmt.Errorf("Matrix transProbs must be square. rows=[%d], cols=[%d]", r, c)
-		return
+	r, c := floatx.Check2D(transProbs)
+	r1 := len(initialStateProbs)
+
+	if r != r1 {
+		e = fmt.Errorf("Num states mismatch. transProbs has [%d] and initialStateProbs have [%d].", r, r1)
 	}
+
 	// init logTransProbs and logInitProbs
-	logTransProbs := matrix.MustDense(matrix.ZeroDense(r, r))
-	logInitProbs := matrix.MustDense(matrix.ZeroDense(r, 1))
+	logTransProbs := floatx.MakeFloat2D(r, r)
+	logInitProbs := make([]float64, r)
 
 	// apply log to transProbs and initialStateProbs
-	logTransProbs = transProbs.ApplyDense(log, logTransProbs)
-	logInitProbs = initialStateProbs.ApplyDense(log, logInitProbs)
+	logTransProbs = floatx.Apply2D(log, transProbs, logTransProbs)
+	logInitProbs = floatx.Apply(log, initialStateProbs, logInitProbs)
 
 	glog.Infof("New HMM. Num states = [%d].", r)
 
@@ -79,8 +92,16 @@ func NewHMM(transProbs, initialStateProbs *matrix.Dense, obsModels []model.Model
 		obsModels:     obsModels,
 		logInitProbs:  logInitProbs,
 		numElements:   obsModels[0].NumElements(),
+		name:          name,
 	}
 
+	if !trainable {
+		return
+	}
+
+	hmm.sumXi = floatx.MakeFloat2D(r, r)
+	hmm.sumGamma = make([]float64, r)
+	hmm.trainable = true
 	return
 }
 
@@ -97,14 +118,14 @@ func NewHMM(transProbs, initialStateProbs *matrix.Dense, obsModels []model.Model
 // 3. Termination:    P(O/Φ) = sum_{i=0}^{N-1} α(i,T-1)
 // For scaling details see Rabiner/Juang and
 // http://courses.media.mit.edu/2010fall/mas622j/ProblemSets/ps4/tutorial.pdf
-func (hmm *HMM) alpha(observations *matrix.Dense) (α *matrix.Dense, logProb float64, e error) {
+func (hmm *HMM) alpha(observations [][]float64) (α [][]float64, logProb float64, e error) {
 
 	// Num states.
 	N := hmm.nstates
 
 	// expected num rows: numElements
 	// expected num cols: T
-	ne, T := observations.Dims()
+	ne, T := floatx.Check2D(observations)
 
 	if ne != hmm.numElements {
 		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].", ne, hmm.numElements)
@@ -113,11 +134,11 @@ func (hmm *HMM) alpha(observations *matrix.Dense) (α *matrix.Dense, logProb flo
 
 	// Allocate log-alpha matrix.
 	// TODO: use a reusable data structure to minimize garbage.
-	α = matrix.MustDense(matrix.ZeroDense(N, T))
+	α = floatx.MakeFloat2D(N, T)
 
 	// 1. Initialization. Add in the log doman.
 	for i := 0; i < N; i++ {
-		α.Set(i, 0, hmm.logInitProbs.At(i, 0)+hmm.obsModels[i].LogProb(ColumnAt(observations, 0)))
+		α[i][0] = hmm.logInitProbs[i] + hmm.obsModels[i].LogProb(floatx.SubSlice2D(observations, 0))
 	}
 
 	// 2. Induction.
@@ -287,15 +308,7 @@ func (hmm *HMM) xi(observations, α, β *matrix.Dense) (ζ [][][]float64, e erro
 
 	// Allocate log-xi matrix.
 	// TODO: use a reusable data structure to minimize garbage.
-	ζ = make([][][]float64, N)
-	for i := 0; i < N; i++ {
-		ζ[i] = make([][]float64, N)
-		for j := 0; j < N; j++ {
-			for t := 0; t < N; t++ {
-				ζ[i][j] = make([]float64, T)
-			}
-		}
-	}
+	ζ = floatx.MakeFloat3D(N, N, T)
 
 	for t := 0; t < T-1; t++ {
 		var sum float64 = 0.0
@@ -320,6 +333,10 @@ func (hmm *HMM) xi(observations, α, β *matrix.Dense) (ζ [][][]float64, e erro
 // Update model statistics.
 // sequence is a matrix
 func (hmm *HMM) Update(observations *matrix.Dense) (e error) {
+
+	if !hmm.trainable {
+		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", hmm.name)
+	}
 
 	var α, β, γ *matrix.Dense
 	var ζ [][][]float64
@@ -346,6 +363,7 @@ func (hmm *HMM) Update(observations *matrix.Dense) (e error) {
 		return
 	}
 
+	//	sumGamma
 	fmt.Println(α, β, γ, ζ, logProb)
 	return
 }
@@ -366,6 +384,5 @@ func ColumnAt(d *matrix.Dense, c int) *matrix.Dense {
 	return col
 }
 
-func (hmm *HMM) NumElements() int {
-	return hmm.numElements
-}
+func (hmm *HMM) NumElements() int { return hmm.numElements }
+func (hmm *HMM) Name() string     { return hmm.name }

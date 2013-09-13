@@ -1,8 +1,9 @@
 package gaussian
 
 import (
-	"code.google.com/p/biogo.matrix"
 	"fmt"
+	"github.com/akualab/gjoa/floatx"
+	"github.com/gonum/floats"
 	"math"
 	"math/rand"
 )
@@ -18,11 +19,11 @@ type GMM struct {
 	diagonal        bool
 	trainingMethod  int
 	numComponents   int
-	posteriorSum    *matrix.Dense
-	weights         *matrix.Dense
-	logWeights      *matrix.Dense
-	tmpProbs1       *matrix.Dense
-	tmpProbs2       *matrix.Dense
+	posteriorSum    []float64
+	weights         []float64
+	logWeights      []float64
+	tmpProbs1       []float64
+	tmpProbs2       []float64
 	totalLikelihood float64
 	components      []*Gaussian
 	iteration       int
@@ -50,11 +51,11 @@ func NewGaussianMixture(numElements, numComponents int,
 	gmm = &GMM{
 		numComponents: numComponents,
 		components:    make([]*Gaussian, numComponents, numComponents),
-		posteriorSum:  matrix.MustDense(matrix.ZeroDense(numComponents, 1)),
-		weights:       matrix.MustDense(matrix.ZeroDense(numComponents, 1)),
-		logWeights:    matrix.MustDense(matrix.ZeroDense(numComponents, 1)),
-		tmpProbs1:     matrix.MustDense(matrix.ZeroDense(numComponents, 1)),
-		tmpProbs2:     matrix.MustDense(matrix.ZeroDense(numComponents, 1)),
+		posteriorSum:  make([]float64, numComponents),
+		weights:       make([]float64, numComponents),
+		logWeights:    make([]float64, numComponents),
+		tmpProbs1:     make([]float64, numComponents),
+		tmpProbs2:     make([]float64, numComponents),
 		diagonal:      true,
 		numElements:   numElements,
 		name:          name,
@@ -71,15 +72,14 @@ func NewGaussianMixture(numElements, numComponents int,
 
 	// Initialize weights.
 	w := 1.0 / float64(numComponents)
-	gmm.weights.ApplyDense(setValueFunc(w), gmm.weights)
-	gmm.logWeights.ApplyDense(setValueFunc(math.Log(w)), gmm.logWeights)
-
+	floatx.Apply(setValueFunc(w), gmm.weights, nil)
+	floatx.Apply(setValueFunc(math.Log(w)), gmm.logWeights, nil)
 	return
 }
 
 // Computes log prob for mixture.// SIDE EFFECT => returns logProb of
 // Gaussian comp + logWeight in matrix pointed by func arg probs.
-func (gmm *GMM) logProbInternal(obs, probs *matrix.Dense) float64 {
+func (gmm *GMM) logProbInternal(obs, probs []float64) float64 {
 
 	//fmt.Printf("obs: \n%+v\n", obs)
 
@@ -89,12 +89,12 @@ func (gmm *GMM) logProbInternal(obs, probs *matrix.Dense) float64 {
 	for i, c := range gmm.components {
 		//v := c.LogProb(obs) + gmm.logWeights.At(i, 0)
 		v1 := c.LogProb(obs)
-		v2 := gmm.logWeights.At(i, 0)
+		v2 := gmm.logWeights[i]
 		v := v1 + v2
 		//fmt.Printf("comp %2d: logProbInternal: logProb: %f, logW: %f\n", i, v1, v2)
 
 		if probs != nil {
-			probs.Set(i, 0, v)
+			probs[i] = v
 		}
 		if v > max {
 			max = v
@@ -107,13 +107,13 @@ func (gmm *GMM) logProbInternal(obs, probs *matrix.Dense) float64 {
 }
 
 // Returns the log probability.
-func (gmm *GMM) LogProb(obs *matrix.Dense) float64 {
+func (gmm *GMM) LogProb(obs []float64) float64 {
 
 	return gmm.logProbInternal(obs, nil)
 }
 
 // Returns the probability.
-func (gmm *GMM) Prob(obs *matrix.Dense) float64 {
+func (gmm *GMM) Prob(obs []float64) float64 {
 	return math.Exp(gmm.LogProb(obs))
 }
 
@@ -127,8 +127,7 @@ func (gmm *GMM) Prob(obs *matrix.Dense) float64 {
    The vector gmm.posteriorSum has te
 */
 
-// Update model statistics.
-func (gmm *GMM) Update(obs *matrix.Dense) error {
+func (gmm *GMM) Update(obs []float64, w float64) error {
 
 	if !gmm.trainable {
 		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.name)
@@ -136,44 +135,19 @@ func (gmm *GMM) Update(obs *matrix.Dense) error {
 
 	maxProb := gmm.logProbInternal(obs, gmm.tmpProbs2)
 	gmm.totalLikelihood += maxProb
-	gmm.tmpProbs2.ApplyDense(addScalarFunc(-maxProb), gmm.tmpProbs2)
+	//gmm.tmpProbs2.ApplyDense(addScalarFunc(-maxProb+math.Log(w)), gmm.tmpProbs2)
+	floatx.Apply(addScalarFunc(-maxProb+math.Log(w)), gmm.tmpProbs2, nil)
 
 	// Compute posterior probabilities.
-	gmm.tmpProbs2.ApplyDense(exp, gmm.tmpProbs2)
+	floatx.Apply(exp, gmm.tmpProbs2, nil)
 
 	// Update posterior sum, needed to compute mixture weights.
-	gmm.posteriorSum.Add(gmm.tmpProbs2, gmm.posteriorSum)
+	//gmm.posteriorSum.Add(gmm.tmpProbs2, gmm.posteriorSum)
+	floats.Add(gmm.posteriorSum, gmm.tmpProbs2)
 
 	// Update Gaussian components.
 	for i, c := range gmm.components {
-		c.WUpdate(obs, gmm.tmpProbs2.At(i, 0))
-	}
-
-	// Count number of observations.
-	gmm.numSamples += 1
-
-	return nil
-}
-
-func (gmm *GMM) WUpdate(obs *matrix.Dense, w float64) error {
-
-	if !gmm.trainable {
-		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.name)
-	}
-
-	maxProb := gmm.logProbInternal(obs, gmm.tmpProbs2)
-	gmm.totalLikelihood += maxProb
-	gmm.tmpProbs2.ApplyDense(addScalarFunc(-maxProb+math.Log(w)), gmm.tmpProbs2)
-
-	// Compute posterior probabilities.
-	gmm.tmpProbs2.ApplyDense(exp, gmm.tmpProbs2)
-
-	// Update posterior sum, needed to compute mixture weights.
-	gmm.posteriorSum.Add(gmm.tmpProbs2, gmm.posteriorSum)
-
-	// Update Gaussian components.
-	for i, c := range gmm.components {
-		c.WUpdate(obs, gmm.tmpProbs2.At(i, 0))
+		c.Update(obs, gmm.tmpProbs2[i])
 	}
 
 	// Count number of observations.
@@ -189,8 +163,10 @@ func (gmm *GMM) Estimate() error {
 	}
 
 	// Estimate mixture weights.
-	gmm.posteriorSum.Scalar(1.0/gmm.numSamples, gmm.weights)
-	gmm.weights.ApplyDense(log, gmm.logWeights)
+	//gmm.posteriorSum.Scalar(1.0/gmm.numSamples, gmm.weights)
+	floatx.Apply(scaleFunc(1.0/gmm.numSamples), gmm.posteriorSum, gmm.weights)
+	//gmm.weights.ApplyDense(log, gmm.logWeights)
+	floatx.Apply(log, gmm.weights, gmm.logWeights)
 
 	// Estimate component density.
 	for _, c := range gmm.components {
@@ -210,7 +186,8 @@ func (gmm *GMM) Clear() error {
 	for _, c := range gmm.components {
 		c.Clear()
 	}
-	gmm.posteriorSum.ApplyDense(setValueFunc(0), gmm.posteriorSum)
+	//gmm.posteriorSum.ApplyDense(setValueFunc(0), gmm.posteriorSum)
+	floatx.Apply(setValueFunc(0), gmm.posteriorSum, nil)
 	gmm.numSamples = 0
 	gmm.totalLikelihood = 0
 
@@ -218,18 +195,19 @@ func (gmm *GMM) Clear() error {
 }
 
 // Returns a random vector using the mean and variance vector.
-func RandomVector(mean, variance *matrix.Dense, r *rand.Rand) (vec *matrix.Dense, e error) {
+func RandomVector(mean, variance []float64, r *rand.Rand) (vec []float64, e error) {
 
-	var nrows int
-	if nrows, e = CheckVectorShape(mean, variance); e != nil {
-		return
+	nrows := len(mean)
+	if !floats.EqualLengths(mean, variance) {
+		panic(floatx.ErrLength)
 	}
 
-	vec = matrix.MustDense(matrix.ZeroDense(nrows, 1))
+	//vec = matrix.MustDense(matrix.ZeroDense(nrows, 1))
+	vec = make([]float64, nrows)
 	for i := 0; i < nrows; i++ {
-		std := math.Sqrt(variance.At(i, 0))
-		v := r.NormFloat64()*std + mean.At(i, 0)
-		vec.Set(i, 0, v)
+		std := math.Sqrt(variance[i])
+		v := r.NormFloat64()*std + mean[i]
+		vec[i] = v
 	}
 	return
 }
@@ -237,12 +215,12 @@ func RandomVector(mean, variance *matrix.Dense, r *rand.Rand) (vec *matrix.Dense
 // Generates a random Gaussian mixture model using mean and variance vectors as seed.
 // Use this function to initialize the GMM before training. The mean and variance
 // vector can be estimated from the data set using a Gaussian model.
-func RandomGMM(mean, variance *matrix.Dense, numComponents int,
+func RandomGMM(mean, variance []float64, numComponents int,
 	name string, seed int64) (gmm *GMM, e error) {
 
-	var nrows int
-	if nrows, e = CheckVectorShape(mean, variance); e != nil {
-		return
+	nrows := len(mean)
+	if !floats.EqualLengths(mean, variance) {
+		panic(floatx.ErrLength)
 	}
 
 	gmm, e = NewGaussianMixture(nrows, numComponents, true, true, name)
@@ -252,14 +230,12 @@ func RandomGMM(mean, variance *matrix.Dense, numComponents int,
 
 	r := rand.New(rand.NewSource(seed))
 	for _, c := range gmm.components {
-		var rv *matrix.Dense
+		var rv []float64
 		if rv, e = RandomVector(mean, variance, r); e != nil {
 			return
 		}
 		c.SetMean(rv)
-		varianceCopy := matrix.MustDense(matrix.ZeroDense(nrows, 1))
-		variance.Clone(varianceCopy)
-		c.SetVariance(varianceCopy)
+		c.SetVariance(variance)
 	}
 	return
 }
@@ -267,21 +243,6 @@ func RandomGMM(mean, variance *matrix.Dense, numComponents int,
 // Returns the Gaussian components.
 func (gmm *GMM) Components() []*Gaussian {
 	return gmm.components
-}
-
-// Checks that num cols is one and that num rows match.
-func CheckVectorShape(v1, v2 *matrix.Dense) (int, error) {
-	r1, c1 := v1.Dims()
-	r2, c2 := v2.Dims()
-	if c1 != 1 || c2 != 1 {
-		return 0, fmt.Errorf("Num cols must be one. v1: [%d,%d], v2: [%d,%d]",
-			r1, c1, r2, c2)
-	}
-	if r1 != r2 || c1 != c2 {
-		return 0, fmt.Errorf("Shape of v1 and v2 matrices must match. v1: [%d,%d], v2: [%d,%d]",
-			r1, c1, r2, c2)
-	}
-	return r1, nil
 }
 
 func getComponentName(name string, n, numComponents int) string {

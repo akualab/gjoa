@@ -60,12 +60,12 @@ func TestTrainGMM(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Update(rv)
+		g.Update(rv, 1.0)
 		rv, err = model.GetRandomVector(mean1, std1, r)
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.Update(rv)
+		g.Update(rv, 1.0)
 	}
 	g.Estimate()
 	t.Logf("Gaussian Model for training set:")
@@ -92,12 +92,12 @@ func TestTrainGMM(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			gmm.Update(rv)
+			gmm.Update(rv, 1.0)
 			rv, err = model.GetRandomVector(mean1, std1, r)
 			if err != nil {
 				t.Fatal(err)
 			}
-			gmm.Update(rv)
+			gmm.Update(rv, 1.0)
 		}
 
 		// Estimates GMM params.
@@ -119,36 +119,36 @@ func TestTrainGMM(t *testing.T) {
 
 	for i := 0; i < dim; i++ {
 		g := gmm.components[1]
-		if !model.Comparef64(mean0[i], g.Mean().At(i, 0)) {
+		if !model.Comparef64(mean0[i], g.Mean()[i]) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
-				i, mean0[i], g.Mean().At(i, 0))
+				i, mean0[i], g.Mean()[i])
 		}
-		if !model.Comparef64(std0[i], g.StandardDeviation().At(i, 0)) {
+		if !model.Comparef64(std0[i], g.StandardDeviation()[i]) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
-				i, std0[i], g.StandardDeviation().At(i, 0))
+				i, std0[i], g.StandardDeviation()[i])
 		}
 	}
 
 	for i := 0; i < dim; i++ {
 		g := gmm.components[0]
-		if !model.Comparef64(mean1[i], g.Mean().At(i, 0)) {
+		if !model.Comparef64(mean1[i], g.Mean()[i]) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
-				i, mean1[i], g.Mean().At(i, 0))
+				i, mean1[i], g.Mean()[i])
 		}
-		if !model.Comparef64(std1[i], g.StandardDeviation().At(i, 0)) {
+		if !model.Comparef64(std1[i], g.StandardDeviation()[i]) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
-				i, std1[i], g.StandardDeviation().At(i, 0))
+				i, std1[i], g.StandardDeviation()[i])
 		}
 	}
 
-	if !model.Comparef64(0.5, gmm.weights.At(0, 0)) {
+	if !model.Comparef64(0.5, gmm.weights[0]) {
 		t.Errorf("Wrong weights[0]. Expected: [%f], Got: [%f]",
-			0.5, gmm.weights.At(0, 0))
+			0.5, gmm.weights[0])
 	}
 
-	if !model.Comparef64(0.5, gmm.weights.At(1, 0)) {
+	if !model.Comparef64(0.5, gmm.weights[1]) {
 		t.Errorf("Wrong weights[0]. Expected: [%f], Got: [%f]",
-			0.5, gmm.weights.At(1, 0))
+			0.5, gmm.weights[1])
 	}
 
 }

@@ -1,8 +1,8 @@
 package model
 
 import (
-	"code.google.com/p/biogo.matrix"
 	"fmt"
+	"github.com/gonum/floats"
 	"math/rand"
 )
 
@@ -19,16 +19,16 @@ func Comparef64(f1, f2 float64) bool {
 	return false
 }
 
-func GetRandomVector(mean, std []float64, r *rand.Rand) (*matrix.Dense, error) {
+func GetRandomVector(mean, std []float64, r *rand.Rand) ([]float64, error) {
 
-	if len(mean) != len(std) {
+	if !floats.EqualLengths(mean, std) {
 		return nil, fmt.Errorf("Cannot generate random vectors length of mean [%d] and std [%d] don't match.",
 			len(mean), len(std))
 	}
-	vector := matrix.MustDense(matrix.ZeroDense(len(mean), 1))
+	vector := make([]float64, len(mean))
 	for i, _ := range mean {
 		v := r.NormFloat64()*std[i] + mean[i]
-		vector.Set(i, 0, v)
+		vector[i] = v
 	}
 
 	return vector, nil
