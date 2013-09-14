@@ -1,6 +1,8 @@
 package floatx
 
-import ()
+import (
+	"math"
+)
 
 type Error string
 
@@ -11,6 +13,22 @@ const (
 	ErrZeroLength      = Error("floatx: zero length in slice definition")
 	ErrLength          = Error("floatx: length mismatch")
 )
+
+var Log = func(r int, v float64) float64 { return math.Log(v) }
+var Exp = func(r int, v float64) float64 { return math.Exp(v) }
+var Sq = func(r int, v float64) float64 { return v * v }
+var Sqrt = func(r int, v float64) float64 { return math.Sqrt(v) }
+var Inv = func(r int, v float64) float64 { return 1.0 / v }
+
+func AddScalarFunc(f float64) ApplyFunc {
+	return func(r int, v float64) float64 { return v + f }
+}
+func ScaleFunc(f float64) ApplyFunc {
+	return func(r int, v float64) float64 { return v * f }
+}
+func SetValueFunc(f float64) ApplyFunc {
+	return func(r int, v float64) float64 { return f }
+}
 
 func MakeFloat3D(n1, n2, n3 int) [][][]float64 {
 
@@ -149,4 +167,26 @@ func Flatten2D(s [][]float64) []float64 {
 		p += len(c)
 	}
 	return out
+}
+
+// Set all values to zero.
+func Clear(s []float64) {
+
+	Apply(SetValueFunc(0), s, nil)
+}
+
+// Set all values to zero.
+func Clear2D(s [][]float64) {
+
+	for _, slice := range s {
+		Clear(slice)
+	}
+}
+
+// Set all values to zero.
+func Clear3D(s [][][]float64) {
+
+	for _, slice := range s {
+		Clear2D(slice)
+	}
 }

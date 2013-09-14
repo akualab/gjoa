@@ -16,7 +16,18 @@ type Modeler interface {
 type Trainer interface {
 	Modeler
 
-	Update(a []float64) error
+	Update(a []float64, w float64) error
+	Estimate() error
+	Clear()
+	SetName(name string)
+	NumSamples() float64
+}
+
+// A trainable sequence model.
+type SequenceTrainer interface {
+	Modeler
+
+	Update(seq [][]float64, w float64) error
 	Estimate() error
 	Clear()
 	SetName(name string)

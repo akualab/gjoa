@@ -13,12 +13,19 @@ import (
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
 	"github.com/golang/glog"
+	"github.com/gonum/floats"
 	"math"
 )
 
 const (
 	SMALL_NUMBER = 0.000001
 )
+
+var exp = func(r int, v float64) float64 { return math.Exp(v) }
+
+func setValueFunc(f float64) floatx.ApplyFunc {
+	return func(r int, v float64) float64 { return f }
+}
 
 type HMM struct {
 
@@ -41,7 +48,7 @@ type HMM struct {
 
 	// Observation probability distribution functions. [nstates x 1]
 	// b(j,k) = P[o(t) | q(t) = j]
-	obsModels []model.Modeler
+	obsModels []model.Trainer
 
 	// Initial state distribution. [nstates x 1]
 	// π(i) = P[q(0) = i]; 0<=i<N
@@ -55,10 +62,11 @@ type HMM struct {
 	// Φ = (A, B, π)
 
 	// Train HMM params.
-	trainable  bool
-	sumXi      [][]float64
-	sumGamma   []float64
-	sumLogProb float64
+	trainable    bool
+	sumXi        [][]float64
+	sumGamma     []float64
+	sumLogProb   float64
+	sumInitProbs []float64
 }
 
 // Define functions for elementwise transformations.
@@ -66,7 +74,7 @@ var log = func(r int, v float64) float64 { return math.Log(v) }
 var log2D = func(r int, c int, v float64) float64 { return math.Log(v) }
 
 // Create a new HMM.
-func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []model.Modeler, trainable bool, name string) (hmm *HMM, e error) {
+func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []model.Trainer, trainable bool, name string) (hmm *HMM, e error) {
 
 	r, _ := floatx.Check2D(transProbs)
 	r1 := len(initialStateProbs)
@@ -339,7 +347,7 @@ func (hmm *HMM) xi(observations, α, β [][]float64) (ζ [][][]float64, e error)
 
 // Update model statistics.
 // sequence is a matrix
-func (hmm *HMM) Update(observations [][]float64) (e error) {
+func (hmm *HMM) Update(observations [][]float64, w float64) (e error) {
 
 	if !hmm.trainable {
 		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", hmm.name)
@@ -348,6 +356,9 @@ func (hmm *HMM) Update(observations [][]float64) (e error) {
 	var α, β, γ [][]float64
 	var ζ [][][]float64
 	var logProb float64
+
+	_, T := floatx.Check2D(observations) // num elements x num obs
+	//N := hmm.nstates
 
 	// Compute  α, β, γ, ζ
 	// TODO: compute α, β, concurrently using go routines.
@@ -370,10 +381,81 @@ func (hmm *HMM) Update(observations [][]float64) (e error) {
 		return
 	}
 
-	//	sumGamma
-	fmt.Println(α, β, γ, ζ, logProb)
+	// Reestimation of state transition probabilities for one sequence.
+	//
+	//                   sum_{t=0}^{T-2} ζ(i,j, t)      [1] <== sumXi
+	// a_hat(i,j) = ----------------------------------
+	//                   sum_{t=0}^{T-2} γ(i,t)         [2] <== sumGamma [without t = T-1]
+	//
+	//
+	// For multiple observation sequences, we need to accumulate counts in the
+	// numerator and denominator. Each sequence is normalized using 1/P(k) where
+	// P(k) is the P(O/Φ) for the kth observation sequence (this is logProb).
+
+	// Reestimation of initial state probabilities for one sequence.
+	// pi+hat(i) = γ(i,0)  [3]  <== sumInitProbs
+
+	// Reestimation of output probability.
+	// For state i in sequence k  weigh each observation using  (1/P(k)) sum_{t=0}^{T-2} γ(i,t)
+
+	pk := math.Exp(logProb)
+	tmp := make([]float64, T)
+	for i, g := range γ {
+		floatx.Apply(exp, g[:T-1], tmp[:T-1])
+		sumg := floats.Sum(tmp[:T-1]) / pk // [1]
+		hmm.sumGamma[i] += sumg
+
+		outputStatePDF := hmm.obsModels[i]
+		for t := 0; t < T; t++ {
+			obs := floatx.SubSlice2D(observations, t) // TODO: inefficient! REFACTOR: transpose observations matrix everywhere so we don't have to copy slice multiple times. Issue #6
+			outputStatePDF.Update(obs, sumg)
+		}
+
+		hmm.sumInitProbs[i] += tmp[0] // [3]
+
+		for j, x := range ζ[i] {
+			floatx.Apply(exp, x[:T-1], tmp[:T-1])
+			hmm.sumXi[i][j] += floats.Sum(tmp[:T-1]) / pk // [2]
+		}
+	}
+
+	//	Sum LogProbs
+	hmm.sumLogProb += logProb
+
+	//fmt.Println(α, β, γ, ζ, logProb)
 	return
 }
 
-func (hmm *HMM) NumElements() int { return hmm.numElements }
-func (hmm *HMM) Name() string     { return hmm.name }
+func (hmm *HMM) Estimate() error {
+
+	// Initial state probabilities.
+	s := floats.Sum(hmm.sumInitProbs)
+	floatx.Apply(floatx.ScaleFunc(1.0/s), hmm.sumInitProbs, hmm.logInitProbs)
+	floatx.Apply(floatx.Log, hmm.logInitProbs, nil)
+
+	// Transition probabilities.
+	for i, sxi := range hmm.sumXi {
+		sg := hmm.sumGamma[i]
+		floatx.Apply(floatx.ScaleFunc(1.0/sg), sxi, hmm.logTransProbs[i])
+		floatx.Apply(floatx.Log, hmm.logTransProbs[i], nil)
+	}
+	for _, m := range hmm.obsModels {
+		m.Estimate()
+	}
+	return nil
+}
+
+func (hmm *HMM) Clear() {
+
+	for _, m := range hmm.obsModels {
+		m.Clear()
+	}
+	floatx.Clear2D(hmm.sumXi)
+	floatx.Clear(hmm.sumGamma)
+	floatx.Clear(hmm.sumInitProbs)
+	hmm.sumLogProb = 0
+}
+func (hmm *HMM) SetName(name string) {}
+func (hmm *HMM) NumSamples() float64 { return 0.0 }
+func (hmm *HMM) NumElements() int    { return hmm.numElements }
+func (hmm *HMM) Name() string        { return hmm.name }
