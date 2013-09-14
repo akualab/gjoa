@@ -18,7 +18,7 @@ type Trainer interface {
 
 	Update(a []float64, w float64) error
 	Estimate() error
-	Clear()
+	Clear() error
 	SetName(name string)
 	NumSamples() float64
 }
@@ -29,7 +29,7 @@ type SequenceTrainer interface {
 
 	Update(seq [][]float64, w float64) error
 	Estimate() error
-	Clear()
+	Clear() error
 	SetName(name string)
 	NumSamples() float64
 }

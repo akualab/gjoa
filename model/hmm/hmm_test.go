@@ -64,9 +64,9 @@ func MakeHMM(t *testing.T) *HMM {
 	models := []*gaussian.Gaussian{g1, g2}
 
 	// To pass the to an HMM we need to convert []*gaussian.Gaussian[]
-	// to []model.Modeler
+	// to []model.Trainer
 	// see http://golang.org/doc/faq#convert_slice_of_interface
-	m := make([]model.Modeler, len(models))
+	m := make([]model.Trainer, len(models))
 	for i, v := range models {
 		m[i] = v
 	}

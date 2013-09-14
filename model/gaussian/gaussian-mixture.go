@@ -260,3 +260,4 @@ func (gmm *GMM) Name() string        { return gmm.name }
 func (gmm *GMM) NumSamples() float64 { return gmm.numSamples }
 func (gmm *GMM) NumElements() int    { return gmm.numElements }
 func (gmm *GMM) Trainable() bool     { return gmm.trainable }
+func (gmm *GMM) SetName(name string) { gmm.name = name }

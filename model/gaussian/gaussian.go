@@ -200,3 +200,4 @@ func (g *Gaussian) Name() string        { return g.name }
 func (g *Gaussian) NumSamples() float64 { return g.numSamples }
 func (g *Gaussian) NumElements() int    { return g.numElements }
 func (g *Gaussian) Trainable() bool     { return g.trainable }
+func (g *Gaussian) SetName(name string) { g.name = name }
