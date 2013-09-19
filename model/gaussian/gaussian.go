@@ -3,8 +3,10 @@ package gaussian
 import (
 	"fmt"
 	"github.com/akualab/gjoa/floatx"
+	"github.com/akualab/gjoa/model"
 	"github.com/gonum/floats"
 	"math"
+	"math/rand"
 )
 
 const (
@@ -194,6 +196,10 @@ func (g *Gaussian) StandardDeviation() (sd []float64) {
 	sd = make([]float64, g.numElements)
 	floatx.Apply(sqrt, g.variance, sd)
 	return
+}
+
+func (g *Gaussian) Random(r *rand.Rand) ([]float64, error) {
+	return model.RandNormalVector(g.Mean(), g.StandardDeviation(), r)
 }
 
 func (g *Gaussian) Name() string        { return g.name }

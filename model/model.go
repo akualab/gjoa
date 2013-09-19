@@ -1,6 +1,14 @@
 package model
 
-import ()
+import (
+	"math/rand"
+)
+
+
+// A random generator
+type Generator interface {
+    Random(r *rand.Rand) ([]float64, error)
+}
 
 // A read-only model.
 type Modeler interface {
@@ -10,6 +18,7 @@ type Modeler interface {
 	//String() string
 	NumElements() int
 	Trainable() bool
+	Generator
 }
 
 // A trainable model.

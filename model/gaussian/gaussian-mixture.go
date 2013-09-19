@@ -3,6 +3,7 @@ package gaussian
 import (
 	"fmt"
 	"github.com/akualab/gjoa/floatx"
+	"github.com/akualab/gjoa/model"
 	"github.com/gonum/floats"
 	"math"
 	"math/rand"
@@ -183,6 +184,17 @@ func (gmm *GMM) Clear() error {
 	gmm.totalLikelihood = 0
 
 	return nil
+}
+
+// Returns a random GMM vector
+func (gmm *GMM) Random(r *rand.Rand) ([]float64, error) {
+	// Choose a component using weights
+	comp, err := model.RandIntFromDist(gmm.weights, r)
+	if err != nil {
+		return nil, err
+	}
+	// Get a random vector from that component
+	return gmm.components[comp].Random(r)
 }
 
 // Returns a random vector using the mean and variance vector.

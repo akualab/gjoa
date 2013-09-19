@@ -56,12 +56,12 @@ func TestTrainGMM(t *testing.T) {
 	}
 	r := rand.New(rand.NewSource(seed))
 	for i := 0; i < numObs; i++ {
-		rv, err := model.GetRandomVector(mean0, std0, r)
+		rv, err := model.RandNormalVector(mean0, std0, r)
 		if err != nil {
 			t.Fatal(err)
 		}
 		g.Update(rv, 1.0)
-		rv, err = model.GetRandomVector(mean1, std1, r)
+		rv, err = model.RandNormalVector(mean1, std1, r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -88,12 +88,12 @@ func TestTrainGMM(t *testing.T) {
 
 		// Update GMM stats.
 		for i := 0; i < numObs; i++ {
-			rv, err := model.GetRandomVector(mean0, std0, r)
+			rv, err := model.RandNormalVector(mean0, std0, r)
 			if err != nil {
 				t.Fatal(err)
 			}
 			gmm.Update(rv, 1.0)
-			rv, err = model.GetRandomVector(mean1, std1, r)
+			rv, err = model.RandNormalVector(mean1, std1, r)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -151,4 +151,96 @@ func TestTrainGMM(t *testing.T) {
 			0.5, gmm.weights[1])
 	}
 
+}
+
+func MakeGMM(t *testing.T) *GMM {
+
+	mean0 := []float64{1, 2}
+	var0 := []float64{0.09, 0.09}
+	mean1 := []float64{4, 4}
+	var1 := []float64{1, 1}
+	weights := []float64{0.6, 0.4}
+	dim := len(mean0)
+
+	g0, eg0 := NewGaussian(2, mean0, var0, true, true, "g0")
+	if eg0 != nil {
+		t.Fatal(eg0)
+	}
+	g1, eg1 := NewGaussian(2, mean1, var1, true, true, "g1")
+	if eg1 != nil {
+		t.Fatal(eg1)
+	}
+	components := []*Gaussian{g0, g1}
+	gmm, e := NewGaussianMixture(dim, 2, true, true, "mygmm")
+	if e != nil {
+		t.Fatal(e)
+	}
+	// this should probably be done in NewGaussianMixture
+	gmm.components = components
+	gmm.weights = weights
+	return gmm
+}
+
+func CompareGaussians(t *testing.T, g1 *Gaussian, g2 *Gaussian) {
+	model.CompareSliceFloat(t, g1.Mean(), g2.Mean(), "Wrong Mean")
+	model.CompareSliceFloat(t, g1.Variance(), g2.Variance(), "Wrong Variance")
+}
+
+// Another version of previous test.
+func TestTrainGMM2(t *testing.T) {
+	var seed int64 = 33
+	dim := 2
+	numComp := 2
+	numIter := 10
+	numObs := 1000000
+	gmm0 := MakeGMM(t)
+	gmm, e := NewGaussianMixture(dim, numComp, true, true, "mygmm")
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Logf("Initial Weights: \n%+v", gmm.weights)
+	mean01 := []float64{2.5, 3}
+	var01 := []float64{0.5, 0.5}
+	gmm, e = RandomGMM(mean01, var01, numComp, "mygmm", 99)
+	if e != nil {
+		t.Fatal(e)
+	}
+	for iter := 0; iter < numIter; iter++ {
+		t.Logf("Starting GMM trainign iteration %d.", iter)
+
+		// Reset the same random number generator to make sure we use the
+		// same observations in each iterations.
+		r := rand.New(rand.NewSource(seed))
+		for i := 0; i < numObs; i++ {
+			// random from gmm0
+			rv, err := gmm0.Random(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			gmm.Update(rv, 1.0)
+		}
+		gmm.Estimate()
+
+		t.Logf("Iter: %d", iter)
+		t.Logf("GMM: %+v", gmm)
+		t.Logf("Weights: \n%+v", gmm.weights)
+		t.Logf("Likelihood: %f", gmm.totalLikelihood)
+		t.Logf("Num Samples: %f", gmm.numSamples)
+		for _, c := range gmm.components {
+			t.Logf("%s: Mean: \n%+v", c.Name(), c.Mean())
+			t.Logf("%s: STD: \n%+v", c.Name(), c.StandardDeviation())
+		}
+
+		// Prepare for next iteration.
+		gmm.Clear()
+	}
+	// Checking results
+	// The components can be in different orders
+	if model.Comparef64(1.0, gmm.components[0].Mean()[0]) {
+		CompareGaussians(t, gmm0.components[0], gmm.components[0])
+		CompareGaussians(t, gmm0.components[1], gmm.components[1])
+	} else {
+		CompareGaussians(t, gmm0.components[1], gmm.components[0])
+		CompareGaussians(t, gmm0.components[0], gmm.components[1])
+	}
 }

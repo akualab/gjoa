@@ -77,22 +77,6 @@ func MakeHMM(t *testing.T) *HMM {
 	return hmm
 }
 
-func CompareSliceFloat(t *testing.T, expected []float64, actual []float64, message string) {
-	for i, _ := range expected {
-		if !model.Comparef64(expected[i], actual[i]) {
-			t.Errorf("[%s]. Expected: [%f], Got: [%f]",
-				message, expected[i], actual[i])
-		}
-	}
-}
-
-func CompareFloats(t *testing.T, expected float64, actual float64, message string) {
-	if !model.Comparef64(expected, actual) {
-		t.Errorf("[%s]. Expected: [%f], Got: [%f]",
-			message, expected, actual)
-	}
-}
-
 func TestLogProb(t *testing.T) {
 
 	flag.Parse()
@@ -102,7 +86,7 @@ func TestLogProb(t *testing.T) {
 		t.Fatal(err_alpha)
 	}
 	expectedLogProb := -26.4626886822436
-	CompareFloats(t, expectedLogProb, logProb, "Error in logProb")
+	model.CompareFloats(t, expectedLogProb, logProb, "Error in logProb")
 }
 
 func TestEvaluationGamma(t *testing.T) {
@@ -122,7 +106,7 @@ func TestEvaluationGamma(t *testing.T) {
 		t.Fatal(err_gamma)
 	}
 	message := "Error in gamma"
-	CompareSliceFloat(t, gamma01, floatx.Flatten2D(gamma), message)
+	model.CompareSliceFloat(t, gamma01, floatx.Flatten2D(gamma), message)
 }
 
 func Convert3DSlideTo1D(s3 [][][]float64) []float64 {
@@ -155,7 +139,7 @@ func TestEvaluationXi(t *testing.T) {
 	}
 	xsi1 := Convert3DSlideTo1D(xi)
 	message := "Error in xi"
-	CompareSliceFloat(t, xsi, xsi1, message)
+	model.CompareSliceFloat(t, xsi, xsi1, message)
 }
 
 var (

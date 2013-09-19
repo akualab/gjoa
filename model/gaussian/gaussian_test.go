@@ -48,7 +48,7 @@ func TestTrainGaussian(t *testing.T) {
 	}
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < 2000000; i++ {
-		rv, err := model.GetRandomVector(mean, std, r)
+		rv, err := model.RandNormalVector(mean, std, r)
 		if err != nil {
 			t.Fatal(err)
 		}
