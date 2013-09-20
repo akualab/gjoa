@@ -37,6 +37,15 @@ func CompareFloats(t *testing.T, expected float64, actual float64, message strin
 	}
 }
 
+func CompareSliceInt(t *testing.T, expected []int, actual []int, message string) {
+	for i, _ := range expected {
+		if expected[i] != actual[i] {
+			t.Errorf("[%s]. Expected: [%d], Got: [%d]",
+				message, expected[i], actual[i])
+		}
+	}
+}
+
 func RandNormalVector(mean, std []float64, r *rand.Rand) ([]float64, error) {
 
 	if !floats.EqualLengths(mean, std) {
