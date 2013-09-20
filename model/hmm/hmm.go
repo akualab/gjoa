@@ -136,7 +136,7 @@ func (hmm *HMM) alpha(observations [][]float64) (α [][]float64, logProb float64
 
 	// expected num rows: numElements
 	// expected num cols: T
-	ne, T := floatx.Check2D(observations)
+	T, ne := floatx.Check2D(observations)
 
 	if ne != hmm.numElements {
 		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].", ne, hmm.numElements)
@@ -153,7 +153,7 @@ func (hmm *HMM) alpha(observations [][]float64) (α [][]float64, logProb float64
 
 	// 1. Initialization. Add in the log domain.
 	for i := 0; i < N; i++ {
-		α[i][0] = hmm.logInitProbs[i] + hmm.obsModels[i].LogProb(floatx.SubSlice2D(observations, 0))
+		α[i][0] = hmm.logInitProbs[i] + hmm.obsModels[i].LogProb(observations[0])
 	}
 
 	// 2. Induction.
@@ -166,7 +166,7 @@ func (hmm *HMM) alpha(observations [][]float64) (α [][]float64, logProb float64
 			for i := 0; i < N; i++ {
 				sum += math.Exp(α[i][t] + hmm.logTransProbs[i][j])
 			}
-			v := math.Log(sum) + hmm.obsModels[j].LogProb(floatx.SubSlice2D(observations, t+1))
+			v := math.Log(sum) + hmm.obsModels[j].LogProb(observations[t+1])
 			α[j][t+1] = v
 
 			sumAlphas += math.Exp(v)
@@ -203,7 +203,7 @@ func (hmm *HMM) beta(observations [][]float64) (β [][]float64, e error) {
 
 	// expected num rows: numElements
 	// expected num cols: T
-	ne, T := floatx.Check2D(observations)
+	T, ne := floatx.Check2D(observations)
 
 	if ne != hmm.numElements {
 		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].", ne, hmm.numElements)
@@ -229,7 +229,7 @@ func (hmm *HMM) beta(observations [][]float64) (β [][]float64, e error) {
 			for j := 0; j < N; j++ {
 
 				sum += math.Exp(hmm.logTransProbs[i][j] + // a(i,j)
-					hmm.obsModels[j].LogProb(floatx.SubSlice2D(observations, t+1)) + // b(j,o(t+1))
+					hmm.obsModels[j].LogProb(observations[t+1]) + // b(j,o(t+1))
 					β[j][t+1]) // β(j,t+1)
 			}
 			β[i][t] = math.Log(sum)
@@ -299,7 +299,7 @@ func (hmm *HMM) xi(observations, α, β [][]float64) (ζ [][][]float64, e error)
 	a := hmm.logTransProbs
 	αr, αc := floatx.Check2D(α)
 	βr, βc := floatx.Check2D(β)
-	or, oc := floatx.Check2D(observations)
+	oc, or := floatx.Check2D(observations)
 
 	if αr != βr || αc != βc {
 		e = fmt.Errorf("Shape mismatch: alpha[%d,%d] beta[%d,%d]", αr, αc, βr, βc)
@@ -328,7 +328,7 @@ func (hmm *HMM) xi(observations, α, β [][]float64) (ζ [][][]float64, e error)
 	for t := 0; t < T-1; t++ {
 		var sum float64 = 0.0
 		for j := 0; j < N; j++ {
-			b := hmm.obsModels[j].LogProb(floatx.SubSlice2D(observations, t+1))
+			b := hmm.obsModels[j].LogProb(observations[t+1])
 			for i := 0; i < N; i++ {
 				x := α[i][t] + a[i][j] + b + β[j][t+1]
 				ζ[i][j][t] = x
@@ -357,7 +357,7 @@ func (hmm *HMM) Update(observations [][]float64, w float64) (e error) {
 	var ζ [][][]float64
 	var logProb float64
 
-	_, T := floatx.Check2D(observations) // num elements x num obs
+	T,_ := floatx.Check2D(observations) // num elements x num obs
 	//N := hmm.nstates
 
 	// Compute  α, β, γ, ζ
@@ -407,7 +407,7 @@ func (hmm *HMM) Update(observations [][]float64, w float64) (e error) {
 
 		outputStatePDF := hmm.obsModels[i]
 		for t := 0; t < T; t++ {
-			obs := floatx.SubSlice2D(observations, t) // TODO: inefficient! REFACTOR: transpose observations matrix everywhere so we don't have to copy slice multiple times. Issue #6
+			obs := observations[t]
 			outputStatePDF.Update(obs, sumg)
 		}
 
