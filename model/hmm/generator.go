@@ -3,41 +3,53 @@ package hmm
 import (
 	"fmt"
 	"github.com/akualab/gjoa/model"
+	"github.com/golang/glog"
 	"math/rand"
 )
 
-// Given the parameters for a HMM and the length of the sequence,
-// generates a random sequence from the HMM
-func GetRandomVectorFromHMM(
-	transProbs [][]float64, initialStateProbs []float64,
-	mean []float64, sd []float64, n int) ([]int, []float64, error) {
-	r := rand.New(rand.NewSource(1))
-	// init
-	state0, err0 := model.RandIntFromDist(initialStateProbs, r)
-	if err0 != nil {
-		return nil, nil, fmt.Errorf("Error calling RandIntFromDist")
+type HMMGenerator struct {
+	hmm *HMM
+	r   *rand.Rand
+}
+
+func MakeHMMGenerator(hmm *HMM, seed int64) (gen *HMMGenerator) {
+	r := rand.New(rand.NewSource(seed))
+	gen = &HMMGenerator{
+		hmm: hmm,
+		r:   r,
 	}
-	obs0, err00 := model.RandNormalVector(mean, sd, r)
-	if err00 != nil {
-		return nil, nil, fmt.Errorf("Error calling RandNormalVector")
-	}
-	obs := make([]float64, n)
+	return gen
+}
+
+// Given n, the length of the seq, generates random sequence
+// for a given hmm.
+func (gen *HMMGenerator) next(n int) ([][]float64, []int, error) {
+
+	obs := make([][]float64, n)
 	states := make([]int, n)
-	obs[0] = obs0[state0]
-	states[0] = state0
-	for i := 1; i < n; i++ {
-		dist := transProbs[state0]
-		state, erri := model.RandIntFromDist(dist, r)
-		if erri != nil {
-			return nil, nil, fmt.Errorf("Error calling RandIntFromDist")
+	//r := gen.r
+	r := rand.New(rand.NewSource(33))
+	logDist := gen.hmm.logInitProbs
+	if glog.V(3) {
+		glog.Infof("logDist: %v", logDist)
+	}
+	state0, err0 := model.RandIntFromLogDist(logDist, r)
+	if err0 != nil {
+		return nil, nil, fmt.Errorf("Error calling RandIntFromLogDist")
+	}
+	for i := 0; i < n; i++ {
+		states[i] = state0
+		g := gen.hmm.obsModels[state0]
+		obs[i], err0 = g.Random(r)
+		if err0 != nil {
+			return nil, nil, fmt.Errorf("Error generating Random model")
 		}
-		states[i] = state
-		obsi, errii := model.RandNormalVector(mean, sd, r)
-		if errii != nil {
-			return nil, nil, fmt.Errorf("Error calling RandNormalVector")
+		dist := gen.hmm.logTransProbs[state0]
+		state, err := model.RandIntFromLogDist(dist, r)
+		if err != nil {
+			return nil, nil, fmt.Errorf("Error calling RandIntFromLogDist")
 		}
-		obs[i] = obsi[state]
 		state0 = state
 	}
-	return states, obs, nil
+	return obs, states, nil
 }
