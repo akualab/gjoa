@@ -407,7 +407,9 @@ func (hmm *HMM) Update(observations [][]float64, w float64) (e error) {
 
 		outputStatePDF := hmm.obsModels[i]
 		for t := 0; t < T; t++ {
-			obs := floatx.SubSlice2D(observations, t) // TODO: inefficient! REFACTOR: transpose observations matrix everywhere so we don't have to copy slice multiple times. Issue #6
+			obs := floatx.SubSlice2D(observations, t)
+			// TODO: inefficient! REFACTOR: transpose observations matrix
+			//everywhere so we don't have to copy slice multiple times. Issue #6
 			outputStatePDF.Update(obs, sumg)
 		}
 

@@ -27,8 +27,7 @@ func (gen *HMMGenerator) next(n int) ([][]float64, []int, error) {
 
 	obs := make([][]float64, n)
 	states := make([]int, n)
-	//r := gen.r
-	r := rand.New(rand.NewSource(33))
+	r := gen.r
 	logDist := gen.hmm.logInitProbs
 	if glog.V(3) {
 		glog.Infof("logDist: %v", logDist)
