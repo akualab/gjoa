@@ -181,11 +181,6 @@ func MakeGMM(t *testing.T) *GMM {
 	return gmm
 }
 
-func CompareGaussians(t *testing.T, g1 *Gaussian, g2 *Gaussian) {
-	model.CompareSliceFloat(t, g1.Mean(), g2.Mean(), "Wrong Mean")
-	model.CompareSliceFloat(t, g1.Variance(), g2.Variance(), "Wrong Variance")
-}
-
 // Another version of previous test.
 func TestTrainGMM2(t *testing.T) {
 	var seed int64 = 33
@@ -243,4 +238,9 @@ func TestTrainGMM2(t *testing.T) {
 		CompareGaussians(t, gmm0.components[1], gmm.components[0])
 		CompareGaussians(t, gmm0.components[0], gmm.components[1])
 	}
+}
+
+func CompareGaussians(t *testing.T, g1 *Gaussian, g2 *Gaussian) {
+    model.CompareSliceFloat(t, g1.Mean(), g2.Mean(), "Wrong Mean")
+	model.CompareSliceFloat(t, g1.Variance(), g2.Variance(), "Wrong Variance")
 }

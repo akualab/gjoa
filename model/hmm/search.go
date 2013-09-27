@@ -32,7 +32,7 @@ func (hmm *HMM) viterbi(observations [][]float64) (bt []int, logViterbiProb floa
 
 	// expected num rows: numElements
 	// expected num cols: T
-	ne, T := floatx.Check2D(observations)
+	T, ne := floatx.Check2D(observations)
 
 	if ne != hmm.numElements {
 		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].", ne, hmm.numElements)
@@ -49,7 +49,7 @@ func (hmm *HMM) viterbi(observations [][]float64) (bt []int, logViterbiProb floa
 
 	// Init delta
 	for i := 0; i < N; i++ {
-		b := hmm.obsModels[i].LogProb(floatx.SubSlice2D(observations, 0))
+		b := hmm.obsModels[i].LogProb(observations[0])
 		delta[i][0] = hmm.logInitProbs[i] + b
 	}
 
@@ -58,7 +58,7 @@ func (hmm *HMM) viterbi(observations [][]float64) (bt []int, logViterbiProb floa
 		for i := 0; i < N; i++ {
 			// Computing max in k to define delta(i,t)
 			// init max with k=0
-			b := hmm.obsModels[i].LogProb(floatx.SubSlice2D(observations, t))
+			b := hmm.obsModels[i].LogProb(observations[t])
 			max := delta[0][t-1] + hmm.logTransProbs[0][i] + b
 			argmax := 0
 			for k := 1; k < N; k++ {

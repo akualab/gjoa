@@ -96,7 +96,8 @@ func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []mod
 	glog.Infof("Log Init Probs:       %v.", logInitProbs)
 	glog.Infof("Trans. Probs:         %v.", transProbs)
 	glog.Infof("Log Trans. Probs:     %v.", logTransProbs)
-
+	glog.Infof("model 0:     %v.", obsModels[0])
+	glog.Infof("model 1:     %v.", obsModels[1])
 	hmm = &HMM{
 		nstates:       r,
 		logTransProbs: logTransProbs,
@@ -112,6 +113,7 @@ func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []mod
 
 	hmm.sumXi = floatx.MakeFloat2D(r, r)
 	hmm.sumGamma = make([]float64, r)
+	hmm.sumInitProbs = make([]float64, r)
 	hmm.trainable = true
 	return
 }
@@ -136,7 +138,7 @@ func (hmm *HMM) alpha(observations [][]float64) (α [][]float64, logProb float64
 
 	// expected num rows: numElements
 	// expected num cols: T
-	ne, T := floatx.Check2D(observations)
+	T, ne := floatx.Check2D(observations)
 
 	if ne != hmm.numElements {
 		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].", ne, hmm.numElements)
@@ -144,7 +146,7 @@ func (hmm *HMM) alpha(observations [][]float64) (α [][]float64, logProb float64
 	}
 
 	if glog.V(3) {
-		glog.Infof("N: %d, T: %d", N, T)
+		//glog.Infof("N: %d, T: %d", N, T)
 	}
 
 	// Allocate log-alpha matrix.
@@ -153,7 +155,7 @@ func (hmm *HMM) alpha(observations [][]float64) (α [][]float64, logProb float64
 
 	// 1. Initialization. Add in the log domain.
 	for i := 0; i < N; i++ {
-		α[i][0] = hmm.logInitProbs[i] + hmm.obsModels[i].LogProb(floatx.SubSlice2D(observations, 0))
+		α[i][0] = hmm.logInitProbs[i] + hmm.obsModels[i].LogProb(observations[0])
 	}
 
 	// 2. Induction.
@@ -166,13 +168,13 @@ func (hmm *HMM) alpha(observations [][]float64) (α [][]float64, logProb float64
 			for i := 0; i < N; i++ {
 				sum += math.Exp(α[i][t] + hmm.logTransProbs[i][j])
 			}
-			v := math.Log(sum) + hmm.obsModels[j].LogProb(floatx.SubSlice2D(observations, t+1))
+			v := math.Log(sum) + hmm.obsModels[j].LogProb(observations[t+1])
 			α[j][t+1] = v
 
 			sumAlphas += math.Exp(v)
-			if glog.V(4) {
-				glog.Infof("t: %4d | j: %2d | logAlpha: %5e | sumAlphas: %5e", t, j, v, sumAlphas)
-			}
+			//if glog.V(4) {
+			//glog.Infof("t: %4d | j: %2d | logAlpha: %5e | sumAlphas: %5e", t, j, v, sumAlphas)
+			//}
 		}
 		// Applied scale for t independent of j.
 		logSumAlphas := math.Log(sumAlphas)
@@ -203,7 +205,7 @@ func (hmm *HMM) beta(observations [][]float64) (β [][]float64, e error) {
 
 	// expected num rows: numElements
 	// expected num cols: T
-	ne, T := floatx.Check2D(observations)
+	T, ne := floatx.Check2D(observations)
 
 	if ne != hmm.numElements {
 		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].", ne, hmm.numElements)
@@ -229,7 +231,7 @@ func (hmm *HMM) beta(observations [][]float64) (β [][]float64, e error) {
 			for j := 0; j < N; j++ {
 
 				sum += math.Exp(hmm.logTransProbs[i][j] + // a(i,j)
-					hmm.obsModels[j].LogProb(floatx.SubSlice2D(observations, t+1)) + // b(j,o(t+1))
+					hmm.obsModels[j].LogProb(observations[t+1]) + // b(j,o(t+1))
 					β[j][t+1]) // β(j,t+1)
 			}
 			β[i][t] = math.Log(sum)
@@ -247,8 +249,7 @@ func (hmm *HMM) beta(observations [][]float64) (β [][]float64, e error) {
 }
 
 // Compute gammas. Indices are: γ(state, time)
-//
-// γ(i,t) =  α(i,t)β(i,t) / sum_{j=0}^{N-1} α(j,t)β(j,t);  0<=j<N
+// γ(i,t) =  α(i,t)β(i,t) / sum_{j=0}^{N-1} α(j,t)β(i,t);  0<=j<N
 func (hmm *HMM) gamma(α, β [][]float64) (γ [][]float64, e error) {
 
 	αr, αc := floatx.Check2D(α)
@@ -299,7 +300,7 @@ func (hmm *HMM) xi(observations, α, β [][]float64) (ζ [][][]float64, e error)
 	a := hmm.logTransProbs
 	αr, αc := floatx.Check2D(α)
 	βr, βc := floatx.Check2D(β)
-	or, oc := floatx.Check2D(observations)
+	oc, or := floatx.Check2D(observations)
 
 	if αr != βr || αc != βc {
 		e = fmt.Errorf("Shape mismatch: alpha[%d,%d] beta[%d,%d]", αr, αc, βr, βc)
@@ -328,7 +329,7 @@ func (hmm *HMM) xi(observations, α, β [][]float64) (ζ [][][]float64, e error)
 	for t := 0; t < T-1; t++ {
 		var sum float64 = 0.0
 		for j := 0; j < N; j++ {
-			b := hmm.obsModels[j].LogProb(floatx.SubSlice2D(observations, t+1))
+			b := hmm.obsModels[j].LogProb(observations[t+1])
 			for i := 0; i < N; i++ {
 				x := α[i][t] + a[i][j] + b + β[j][t+1]
 				ζ[i][j][t] = x
@@ -357,7 +358,7 @@ func (hmm *HMM) Update(observations [][]float64, w float64) (e error) {
 	var ζ [][][]float64
 	var logProb float64
 
-	_, T := floatx.Check2D(observations) // num elements x num obs
+	T, _ := floatx.Check2D(observations) // num elements x num obs
 	//N := hmm.nstates
 
 	// Compute  α, β, γ, ζ
@@ -388,36 +389,31 @@ func (hmm *HMM) Update(observations [][]float64, w float64) (e error) {
 	//                   sum_{t=0}^{T-2} γ(i,t)         [2] <== sumGamma [without t = T-1]
 	//
 	//
-	// For multiple observation sequences, we need to accumulate counts in the
-	// numerator and denominator. Each sequence is normalized using 1/P(k) where
-	// P(k) is the P(O/Φ) for the kth observation sequence (this is logProb).
 
 	// Reestimation of initial state probabilities for one sequence.
 	// pi+hat(i) = γ(i,0)  [3]  <== sumInitProbs
 
 	// Reestimation of output probability.
-	// For state i in sequence k  weigh each observation using  (1/P(k)) sum_{t=0}^{T-2} γ(i,t)
+	// For state i in sequence k  weigh each observation using
+	// sum_{t=0}^{T-2} γ(i,t)
 
-	pk := math.Exp(logProb)
 	tmp := make([]float64, T)
 	for i, g := range γ {
 		floatx.Apply(exp, g[:T-1], tmp[:T-1])
-		sumg := floats.Sum(tmp[:T-1]) / pk // [1]
+		sumg := floats.Sum(tmp[:T-1])
 		hmm.sumGamma[i] += sumg
 
 		outputStatePDF := hmm.obsModels[i]
 		for t := 0; t < T; t++ {
-			obs := floatx.SubSlice2D(observations, t)
-			// TODO: inefficient! REFACTOR: transpose observations matrix
-			//everywhere so we don't have to copy slice multiple times. Issue #6
-			outputStatePDF.Update(obs, sumg)
+			obs := observations[t]
+			outputStatePDF.Update(obs, tmp[t]) // exp(g(t))
 		}
 
 		hmm.sumInitProbs[i] += tmp[0] // [3]
 
 		for j, x := range ζ[i] {
 			floatx.Apply(exp, x[:T-1], tmp[:T-1])
-			hmm.sumXi[i][j] += floats.Sum(tmp[:T-1]) / pk // [2]
+			hmm.sumXi[i][j] += floats.Sum(tmp[:T-1])
 		}
 	}
 
@@ -432,6 +428,7 @@ func (hmm *HMM) Estimate() error {
 
 	// Initial state probabilities.
 	s := floats.Sum(hmm.sumInitProbs)
+	glog.Infof("Sum Init. Probs:    %v.", hmm.sumInitProbs)
 	floatx.Apply(floatx.ScaleFunc(1.0/s), hmm.sumInitProbs, hmm.logInitProbs)
 	floatx.Apply(floatx.Log, hmm.logInitProbs, nil)
 

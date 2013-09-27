@@ -3,7 +3,6 @@ package hmm
 import (
 	"fmt"
 	"github.com/akualab/gjoa/model"
-	"github.com/golang/glog"
 	"math/rand"
 )
 
@@ -29,9 +28,6 @@ func (gen *HMMGenerator) next(n int) ([][]float64, []int, error) {
 	states := make([]int, n)
 	r := gen.r
 	logDist := gen.hmm.logInitProbs
-	if glog.V(3) {
-		glog.Infof("logDist: %v", logDist)
-	}
 	state0, err0 := model.RandIntFromLogDist(logDist, r)
 	if err0 != nil {
 		return nil, nil, fmt.Errorf("Error calling RandIntFromLogDist")
