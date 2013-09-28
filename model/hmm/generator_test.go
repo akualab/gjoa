@@ -6,6 +6,7 @@ import (
 	"github.com/akualab/gjoa/model/gaussian"
 	"math/rand"
 	"testing"
+	"time"
 )
 
 func MakeHMM2(t *testing.T) *HMM {
@@ -90,6 +91,8 @@ func TestTrainHMM(t *testing.T) {
 	m11 := hmm0.obsModels[1].(*gaussian.Gaussian)
 	m0 := hmm.obsModels[0].(*gaussian.Gaussian)
 	m1 := hmm.obsModels[1].(*gaussian.Gaussian)
+
+	t0 := time.Now() // Start timer.
 	for i := 0; i < iter; i++ {
 		t.Logf("iter [%d]", i)
 		// fix the seed to get the same sequence
@@ -118,6 +121,7 @@ func TestTrainHMM(t *testing.T) {
 		floatx.Apply(exp, hmm.logInitProbs, tmp)
 		t.Logf("logInitProbs %v", tmp)
 	}
+	dur := time.Now().Sub(t0)
 	//var m0 *gaussian.Gaussian
 	CompareGaussians(t, m00, m0)
 	CompareGaussians(t, m11, m1)
@@ -127,6 +131,11 @@ func TestTrainHMM(t *testing.T) {
 		"error in logTransProbs[1]")
 	model.CompareSliceFloat(t, hmm0.logInitProbs, hmm.logInitProbs,
 		"error in logInitProbs")
+
+	// Print time stats.
+	t.Logf("Total time: %v", dur)
+	t.Logf("Time per iteration: %v", dur/time.Duration(iter))
+	t.Logf("Time per frame: %v", dur/time.Duration(iter*n*m))
 }
 
 func CompareGaussians(t *testing.T, g1 *gaussian.Gaussian, g2 *gaussian.Gaussian) {

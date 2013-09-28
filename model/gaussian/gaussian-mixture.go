@@ -23,8 +23,7 @@ type GMM struct {
 	posteriorSum    []float64
 	weights         []float64
 	logWeights      []float64
-	tmpProbs1       []float64
-	tmpProbs2       []float64
+	tmpProbs        []float64
 	totalLikelihood float64
 	components      []*Gaussian
 	iteration       int
@@ -55,8 +54,7 @@ func NewGaussianMixture(numElements, numComponents int,
 		posteriorSum:  make([]float64, numComponents),
 		weights:       make([]float64, numComponents),
 		logWeights:    make([]float64, numComponents),
-		tmpProbs1:     make([]float64, numComponents),
-		tmpProbs2:     make([]float64, numComponents),
+		tmpProbs:      make([]float64, numComponents),
 		diagonal:      true,
 		numElements:   numElements,
 		name:          name,
@@ -130,19 +128,19 @@ func (gmm *GMM) Update(obs []float64, w float64) error {
 		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.name)
 	}
 
-	maxProb := gmm.logProbInternal(obs, gmm.tmpProbs2)
+	maxProb := gmm.logProbInternal(obs, gmm.tmpProbs)
 	gmm.totalLikelihood += maxProb
-	floatx.Apply(addScalarFunc(-maxProb+math.Log(w)), gmm.tmpProbs2, nil)
+	floatx.Apply(addScalarFunc(-maxProb+math.Log(w)), gmm.tmpProbs, nil)
 
 	// Compute posterior probabilities.
-	floatx.Apply(exp, gmm.tmpProbs2, nil)
+	floatx.Apply(exp, gmm.tmpProbs, nil)
 
 	// Update posterior sum, needed to compute mixture weights.
-	floats.Add(gmm.posteriorSum, gmm.tmpProbs2)
+	floats.Add(gmm.posteriorSum, gmm.tmpProbs)
 
 	// Update Gaussian components.
 	for i, c := range gmm.components {
-		c.Update(obs, gmm.tmpProbs2[i])
+		c.Update(obs, gmm.tmpProbs[i])
 	}
 
 	// Count number of observations.

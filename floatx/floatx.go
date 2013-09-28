@@ -190,3 +190,32 @@ func Clear3D(s [][][]float64) {
 		Clear2D(slice)
 	}
 }
+
+// A simple []float64 slice pool object.
+// Use it to avoid allocating unecessary resources in
+// concurrent code.
+type Pool struct {
+	n   int
+	buf chan []float64
+}
+
+func NewPool(n int) *Pool {
+
+	return &Pool{n, make(chan []float64, 1)}
+}
+
+func (pool *Pool) Get() []float64 {
+	select {
+	case b := <-pool.buf:
+		return b
+	default:
+	}
+	return make([]float64, pool.n)
+}
+
+func (pool *Pool) Put(p []float64) {
+	select {
+	case pool.buf <- p:
+	default:
+	}
+}

@@ -15,6 +15,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/gonum/floats"
 	"math"
+	//"time"
 )
 
 const (
@@ -96,8 +97,6 @@ func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []mod
 	glog.Infof("Log Init Probs:       %v.", logInitProbs)
 	glog.Infof("Trans. Probs:         %v.", transProbs)
 	glog.Infof("Log Trans. Probs:     %v.", logTransProbs)
-	glog.Infof("model 0:     %v.", obsModels[0])
-	glog.Infof("model 1:     %v.", obsModels[1])
 	hmm = &HMM{
 		nstates:       r,
 		logTransProbs: logTransProbs,
@@ -362,26 +361,27 @@ func (hmm *HMM) Update(observations [][]float64, w float64) (e error) {
 	//N := hmm.nstates
 
 	// Compute  α, β, γ, ζ
-	// TODO: compute α, β, concurrently using go routines.
-	α, logProb, e = hmm.alpha(observations)
+	α, β, logProb, e = hmm.concurrentAlphaBeta(observations)
 	if e != nil {
 		return
 	}
-	β, e = hmm.beta(observations)
-	if e != nil {
-		return
-	}
-	// TODO: compute γ, ζ concurrently using go routines.
-	// Can we compute ζ more efficiently using γ?
-	γ, e = hmm.gamma(α, β)
-	if e != nil {
-		return
-	}
-	ζ, e = hmm.xi(observations, α, β)
+	γ, ζ, e = hmm.concurrentGammaXi(observations, α, β)
 	if e != nil {
 		return
 	}
 
+	/*
+		// TODO: compute γ, ζ concurrently using go routines.
+		// Can we compute ζ more efficiently using γ?
+		γ, e = hmm.gamma(α, β)
+		if e != nil {
+			return
+		}
+		ζ, e = hmm.xi(observations, α, β)
+		if e != nil {
+			return
+		}
+	*/
 	// Reestimation of state transition probabilities for one sequence.
 	//
 	//                   sum_{t=0}^{T-2} ζ(i,j, t)      [1] <== sumXi
@@ -461,3 +461,83 @@ func (hmm *HMM) SetName(name string) {}
 func (hmm *HMM) NumSamples() float64 { return 0.0 }
 func (hmm *HMM) NumElements() int    { return hmm.numElements }
 func (hmm *HMM) Name() string        { return hmm.name }
+
+// Compute α and β concurrently.
+func (hmm *HMM) concurrentAlphaBeta(observations [][]float64) (α, β [][]float64, logProb float64, e error) {
+
+	α_done := make(chan bool)
+	β_done := make(chan bool)
+	//t0 := time.Now()
+
+	// Launch in separate go routines.
+	go func() {
+		α, logProb, e = hmm.alpha(observations)
+		if e != nil {
+			return
+		}
+		α_done <- true
+	}()
+	go func() {
+		β, e = hmm.beta(observations)
+		if e != nil {
+			return
+		}
+		β_done <- true
+	}()
+
+	// Wait for both α and β to finish.
+	for i := 0; i < 2; i++ {
+		select {
+		case <-α_done:
+			//glog.V(5).Infof("Alpha took: %v", time.Now().Sub(t0))
+		case <-β_done:
+			//glog.V(5).Infof("Beta took: %v", time.Now().Sub(t0))
+		}
+	}
+	//glog.V(5).Infof("Alpha+Beta took: %v", time.Now().Sub(t0))
+
+	return
+}
+
+// Compute α and β concurrently.
+func (hmm *HMM) concurrentGammaXi(observations, α, β [][]float64) (γ [][]float64, ζ [][][]float64, e error) {
+
+	γ_done := make(chan bool)
+	ζ_done := make(chan bool)
+
+	// Launch in separate go routines.
+	go func() {
+		γ, e = hmm.gamma(α, β)
+		if e != nil {
+			return
+		}
+		γ_done <- true
+	}()
+	go func() {
+		ζ, e = hmm.xi(observations, α, β)
+		if e != nil {
+			return
+		}
+		ζ_done <- true
+	}()
+
+	// Wait for both γ and ζ to finish.
+	for i := 0; i < 2; i++ {
+		select {
+		case <-γ_done:
+		case <-ζ_done:
+		}
+	}
+
+	return
+}
+
+func compareSliceFloat(s1, s2 []float64) bool {
+	for i, _ := range s1 {
+		if !model.Comparef64(s1[i], s2[i]) {
+			fmt.Errorf("s1[%d]: %f, s2[%d]: %f", s1, s2)
+			return false
+		}
+	}
+	return true
+}

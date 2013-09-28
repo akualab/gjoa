@@ -29,6 +29,7 @@ type Gaussian struct {
 	tmpArray    []float64
 	const1      float64 // -(N/2)log(2PI) Depends only on numElements.
 	const2      float64 // const1 - sum(log sigma_i) Also depends on variance.
+	fpool       *floatx.Pool
 }
 
 // Define functions for elementwise transformations.
@@ -69,6 +70,7 @@ func NewGaussian(numElements int, mean, variance []float64,
 		numElements: numElements,
 		name:        name,
 		trainable:   trainable,
+		fpool:       floatx.NewPool(numElements),
 	}
 
 	if mean == nil {
@@ -96,11 +98,22 @@ func NewGaussian(numElements int, mean, variance []float64,
 	return
 }
 
+func (g *Gaussian) LogProb2(obs, tmp []float64) float64 {
+
+	floats.SubTo(tmp, g.mean, obs)
+	floatx.Apply(sq, tmp, nil)
+	return g.const2 - floats.Dot(tmp, g.varianceInv)/2.0
+}
+
 func (g *Gaussian) LogProb(obs []float64) float64 {
 
-	floats.SubTo(g.tmpArray, g.mean, obs)
-	floatx.Apply(sq, g.tmpArray, nil)
-	return g.const2 - floats.Dot(g.tmpArray, g.varianceInv)/2.0
+	//tmp := make([]float64, g.numElements) // allocate tmp slice to make it thread safe.
+	tmp := g.fpool.Get()
+	floats.SubTo(tmp, g.mean, obs)
+	floatx.Apply(sq, tmp, nil)
+	logp := g.const2 - floats.Dot(tmp, g.varianceInv)/2.0
+	g.fpool.Put(tmp)
+	return logp
 }
 
 func (g *Gaussian) Prob(obs []float64) float64 {
