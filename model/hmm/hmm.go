@@ -15,7 +15,6 @@ import (
 	"github.com/golang/glog"
 	"github.com/gonum/floats"
 	"math"
-	//"time"
 )
 
 const (
@@ -171,9 +170,6 @@ func (hmm *HMM) alpha(observations [][]float64) (α [][]float64, logProb float64
 			α[j][t+1] = v
 
 			sumAlphas += math.Exp(v)
-			//if glog.V(4) {
-			//glog.Infof("t: %4d | j: %2d | logAlpha: %5e | sumAlphas: %5e", t, j, v, sumAlphas)
-			//}
 		}
 		// Applied scale for t independent of j.
 		logSumAlphas := math.Log(sumAlphas)
@@ -361,11 +357,11 @@ func (hmm *HMM) Update(observations [][]float64, w float64) (e error) {
 	//N := hmm.nstates
 
 	// Compute  α, β, γ, ζ
-	α, β, logProb, e = hmm.concurrentAlphaBeta(observations)
+	α, β, logProb, e = hmm.alphaBeta(observations)
 	if e != nil {
 		return
 	}
-	γ, ζ, e = hmm.concurrentGammaXi(observations, α, β)
+	γ, ζ, e = hmm.gammaXi(observations, α, β)
 	if e != nil {
 		return
 	}
@@ -462,6 +458,21 @@ func (hmm *HMM) NumSamples() float64 { return 0.0 }
 func (hmm *HMM) NumElements() int    { return hmm.numElements }
 func (hmm *HMM) Name() string        { return hmm.name }
 
+// Compute α and β.
+func (hmm *HMM) alphaBeta(observations [][]float64) (α, β [][]float64, logProb float64, e error) {
+
+	α, logProb, e = hmm.alpha(observations)
+	if e != nil {
+		return
+	}
+	β, e = hmm.beta(observations)
+	if e != nil {
+		return
+	}
+
+	return
+}
+
 // Compute α and β concurrently.
 func (hmm *HMM) concurrentAlphaBeta(observations [][]float64) (α, β [][]float64, logProb float64, e error) {
 
@@ -499,7 +510,22 @@ func (hmm *HMM) concurrentAlphaBeta(observations [][]float64) (α, β [][]float6
 	return
 }
 
-// Compute α and β concurrently.
+// Compute γ and ζ.
+func (hmm *HMM) gammaXi(observations, α, β [][]float64) (γ [][]float64, ζ [][][]float64, e error) {
+
+	γ, e = hmm.gamma(α, β)
+	if e != nil {
+		return
+	}
+	ζ, e = hmm.xi(observations, α, β)
+	if e != nil {
+		return
+	}
+
+	return
+}
+
+// Compute γ and ζ concurrently.
 func (hmm *HMM) concurrentGammaXi(observations, α, β [][]float64) (γ [][]float64, ζ [][][]float64, e error) {
 
 	γ_done := make(chan bool)

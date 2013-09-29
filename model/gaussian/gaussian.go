@@ -98,22 +98,15 @@ func NewGaussian(numElements int, mean, variance []float64,
 	return
 }
 
-func (g *Gaussian) LogProb2(obs, tmp []float64) float64 {
+func (g *Gaussian) LogProb(obs []float64) (v float64) {
 
-	floats.SubTo(tmp, g.mean, obs)
-	floatx.Apply(sq, tmp, nil)
-	return g.const2 - floats.Dot(tmp, g.varianceInv)/2.0
-}
+	for i, x := range obs {
+		s := g.mean[i] - x
+		v += s * s * g.varianceInv[i] / 2.0
+	}
+	v = g.const2 - v
 
-func (g *Gaussian) LogProb(obs []float64) float64 {
-
-	//tmp := make([]float64, g.numElements) // allocate tmp slice to make it thread safe.
-	tmp := g.fpool.Get()
-	floats.SubTo(tmp, g.mean, obs)
-	floatx.Apply(sq, tmp, nil)
-	logp := g.const2 - floats.Dot(tmp, g.varianceInv)/2.0
-	g.fpool.Put(tmp)
-	return logp
+	return
 }
 
 func (g *Gaussian) Prob(obs []float64) float64 {
