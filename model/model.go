@@ -4,10 +4,9 @@ import (
 	"math/rand"
 )
 
-
 // A random generator
 type Generator interface {
-    Random(r *rand.Rand) ([]float64, error)
+	Random(r *rand.Rand) ([]float64, error)
 }
 
 // A read-only model.
