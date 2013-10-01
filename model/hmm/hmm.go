@@ -560,7 +560,7 @@ func (hmm *HMM) concurrentGammaXi(observations, α, β [][]float64) (γ [][]floa
 
 func compareSliceFloat(s1, s2 []float64) bool {
 	for i, _ := range s1 {
-		if !model.Comparef64(s1[i], s2[i]) {
+		if !model.Comparef64(s1[i], s2[i], 0.0001) {
 			fmt.Errorf("s1[%d]: %f, s2[%d]: %f", s1, s2)
 			return false
 		}

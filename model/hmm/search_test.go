@@ -14,7 +14,7 @@ func TestViterbi(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectedViterbiLog := -26.8129904950932
-	model.CompareFloats(t, expectedViterbiLog, logProbViterbi, "Error in logProbViterbi")
+	model.CompareFloats(t, expectedViterbiLog, logProbViterbi, "Error in logProbViterbi", epsilon)
 	model.CompareSliceInt(t, viterbiSeq, bt, "Error in viterbi seq")
 }
 

@@ -119,11 +119,11 @@ func TestTrainGMM(t *testing.T) {
 
 	for i := 0; i < dim; i++ {
 		g := gmm.components[1]
-		if !model.Comparef64(mean0[i], g.Mean()[i]) {
+		if !model.Comparef64(mean0[i], g.Mean()[i], epsilon) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
 				i, mean0[i], g.Mean()[i])
 		}
-		if !model.Comparef64(std0[i], g.StandardDeviation()[i]) {
+		if !model.Comparef64(std0[i], g.StandardDeviation()[i], epsilon) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
 				i, std0[i], g.StandardDeviation()[i])
 		}
@@ -131,22 +131,22 @@ func TestTrainGMM(t *testing.T) {
 
 	for i := 0; i < dim; i++ {
 		g := gmm.components[0]
-		if !model.Comparef64(mean1[i], g.Mean()[i]) {
+		if !model.Comparef64(mean1[i], g.Mean()[i], epsilon) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
 				i, mean1[i], g.Mean()[i])
 		}
-		if !model.Comparef64(std1[i], g.StandardDeviation()[i]) {
+		if !model.Comparef64(std1[i], g.StandardDeviation()[i], epsilon) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
 				i, std1[i], g.StandardDeviation()[i])
 		}
 	}
 
-	if !model.Comparef64(0.5, gmm.weights[0]) {
+	if !model.Comparef64(0.5, gmm.weights[0], epsilon) {
 		t.Errorf("Wrong weights[0]. Expected: [%f], Got: [%f]",
 			0.5, gmm.weights[0])
 	}
 
-	if !model.Comparef64(0.5, gmm.weights[1]) {
+	if !model.Comparef64(0.5, gmm.weights[1], epsilon) {
 		t.Errorf("Wrong weights[0]. Expected: [%f], Got: [%f]",
 			0.5, gmm.weights[1])
 	}
@@ -231,16 +231,16 @@ func TestTrainGMM2(t *testing.T) {
 	}
 	// Checking results
 	// The components can be in different orders
-	if model.Comparef64(1.0, gmm.components[0].Mean()[0]) {
-		CompareGaussians(t, gmm0.components[0], gmm.components[0])
-		CompareGaussians(t, gmm0.components[1], gmm.components[1])
+	if model.Comparef64(1.0, gmm.components[0].Mean()[0], epsilon) {
+		CompareGaussians(t, gmm0.components[0], gmm.components[0], epsilon)
+		CompareGaussians(t, gmm0.components[1], gmm.components[1], epsilon)
 	} else {
-		CompareGaussians(t, gmm0.components[1], gmm.components[0])
-		CompareGaussians(t, gmm0.components[0], gmm.components[1])
+		CompareGaussians(t, gmm0.components[1], gmm.components[0], epsilon)
+		CompareGaussians(t, gmm0.components[0], gmm.components[1], epsilon)
 	}
 }
 
-func CompareGaussians(t *testing.T, g1 *Gaussian, g2 *Gaussian) {
-    model.CompareSliceFloat(t, g1.Mean(), g2.Mean(), "Wrong Mean")
-	model.CompareSliceFloat(t, g1.Variance(), g2.Variance(), "Wrong Variance")
+func CompareGaussians(t *testing.T, g1 *Gaussian, g2 *Gaussian, epsilon float64) {
+	model.CompareSliceFloat(t, g1.Mean(), g2.Mean(), "Wrong Mean", epsilon)
+	model.CompareSliceFloat(t, g1.Variance(), g2.Variance(), "Wrong Variance", epsilon)
 }

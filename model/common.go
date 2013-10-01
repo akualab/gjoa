@@ -8,9 +8,7 @@ import (
 	"testing"
 )
 
-const epsilon = 0.004
-
-func Comparef64(f1, f2 float64) bool {
+func Comparef64(f1, f2, epsilon float64) bool {
 	err := f2 - f1
 	if err < 0 {
 		err = -err
@@ -21,17 +19,17 @@ func Comparef64(f1, f2 float64) bool {
 	return false
 }
 
-func CompareSliceFloat(t *testing.T, expected []float64, actual []float64, message string) {
+func CompareSliceFloat(t *testing.T, expected []float64, actual []float64, message string, epsilon float64) {
 	for i, _ := range expected {
-		if !Comparef64(expected[i], actual[i]) {
+		if !Comparef64(expected[i], actual[i], epsilon) {
 			t.Errorf("[%s]. Expected: [%f], Got: [%f]",
 				message, expected[i], actual[i])
 		}
 	}
 }
 
-func CompareFloats(t *testing.T, expected float64, actual float64, message string) {
-	if !Comparef64(expected, actual) {
+func CompareFloats(t *testing.T, expected float64, actual float64, message string, epsilon float64) {
+	if !Comparef64(expected, actual, epsilon) {
 		t.Errorf("[%s]. Expected: [%f], Got: [%f]",
 			message, expected, actual)
 	}
@@ -76,7 +74,7 @@ func RandIntFromDist(dist []float64, r *rand.Rand) (int, error) {
 			return i, nil
 		}
 	}
-	if !Comparef64(cum, 1.0) {
+	if !Comparef64(cum, 1.0, 0.001) {
 		return -1, fmt.Errorf("Distribution doesn't sum to 1")
 	}
 	return N - 1, nil
@@ -96,7 +94,7 @@ func RandIntFromLogDist(dist []float64, r *rand.Rand) (int, error) {
 			return i, nil
 		}
 	}
-	if !Comparef64(cum, 1.0) {
+	if !Comparef64(cum, 1.0, 0.001) {
 		return -1, fmt.Errorf("Distribution doesn't sum to 1")
 	}
 	return N - 1, nil

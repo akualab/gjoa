@@ -76,7 +76,6 @@ func MakeRandHMM(t *testing.T, seed int64) *HMM {
 	return hmm
 }
 
-// Still needs work
 func TestTrainHMM(t *testing.T) {
 
 	hmm0 := MakeHMM2(t)
@@ -87,6 +86,12 @@ func TestTrainHMM(t *testing.T) {
 	n := 100
 	// number of sequences
 	m := 100000
+	// max error for long test
+	eps := 0.004
+	if testing.Short() {
+		m = 1000
+		eps = 0.03
+	}
 	m00 := hmm0.obsModels[0].(*gaussian.Gaussian)
 	m11 := hmm0.obsModels[1].(*gaussian.Gaussian)
 	m0 := hmm.obsModels[0].(*gaussian.Gaussian)
@@ -123,14 +128,14 @@ func TestTrainHMM(t *testing.T) {
 	}
 	dur := time.Now().Sub(t0)
 	//var m0 *gaussian.Gaussian
-	CompareGaussians(t, m00, m0)
-	CompareGaussians(t, m11, m1)
+	CompareGaussians(t, m00, m0, eps)
+	CompareGaussians(t, m11, m1, eps)
 	model.CompareSliceFloat(t, hmm0.logTransProbs[0], hmm.logTransProbs[0],
-		"error in logTransProbs[0]")
+		"error in logTransProbs[0]", eps)
 	model.CompareSliceFloat(t, hmm0.logTransProbs[1], hmm.logTransProbs[1],
-		"error in logTransProbs[1]")
+		"error in logTransProbs[1]", eps)
 	model.CompareSliceFloat(t, hmm0.logInitProbs, hmm.logInitProbs,
-		"error in logInitProbs")
+		"error in logInitProbs", eps)
 
 	// Print time stats.
 	t.Logf("Total time: %v", dur)
@@ -138,7 +143,7 @@ func TestTrainHMM(t *testing.T) {
 	t.Logf("Time per frame: %v", dur/time.Duration(iter*n*m))
 }
 
-func CompareGaussians(t *testing.T, g1 *gaussian.Gaussian, g2 *gaussian.Gaussian) {
-	model.CompareSliceFloat(t, g1.Mean(), g2.Mean(), "Wrong Mean")
-	model.CompareSliceFloat(t, g1.Variance(), g2.Variance(), "Wrong Variance")
+func CompareGaussians(t *testing.T, g1 *gaussian.Gaussian, g2 *gaussian.Gaussian, eps float64) {
+	model.CompareSliceFloat(t, g1.Mean(), g2.Mean(), "Wrong Mean", eps)
+	model.CompareSliceFloat(t, g1.Variance(), g2.Variance(), "Wrong Variance", eps)
 }

@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+const epsilon = 0.004
+
 // Tests
 
 func TestGaussian(t *testing.T) {
@@ -29,7 +31,7 @@ func TestGaussian(t *testing.T) {
 	t.Logf("Prob: %f", g.Prob(obs))
 
 	expected := -3.3818
-	if !model.Comparef64(expected, p) {
+	if !model.Comparef64(expected, p, epsilon) {
 		t.Errorf("Wrong LogProb. Expected: [%f], Got: [%f]", expected, p)
 	}
 }
@@ -59,11 +61,11 @@ func TestTrainGaussian(t *testing.T) {
 	t.Logf("STD: \n%+v", g.StandardDeviation())
 
 	for i, _ := range mean {
-		if !model.Comparef64(mean[i], g.Mean()[i]) {
+		if !model.Comparef64(mean[i], g.Mean()[i], epsilon) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
 				i, mean[i], g.Mean()[i])
 		}
-		if !model.Comparef64(std[i], g.StandardDeviation()[i]) {
+		if !model.Comparef64(std[i], g.StandardDeviation()[i], epsilon) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
 				i, std[i], g.StandardDeviation()[i])
 		}

@@ -8,6 +8,8 @@ import (
 	"testing"
 )
 
+const epsilon = 0.001
+
 func init() {
 	flag.Set("logtostderr", "true")
 	flag.Set("v", "4")
@@ -86,7 +88,7 @@ func TestLogProb(t *testing.T) {
 		t.Fatal(err_alpha)
 	}
 	expectedLogProb := -26.4626886822436
-	model.CompareFloats(t, expectedLogProb, logProb, "Error in logProb")
+	model.CompareFloats(t, expectedLogProb, logProb, "Error in logProb", epsilon)
 }
 
 func TestEvaluationGamma(t *testing.T) {
@@ -106,7 +108,7 @@ func TestEvaluationGamma(t *testing.T) {
 		t.Fatal(err_gamma)
 	}
 	message := "Error in gamma"
-	model.CompareSliceFloat(t, gamma01, floatx.Flatten2D(gamma), message)
+	model.CompareSliceFloat(t, gamma01, floatx.Flatten2D(gamma), message, epsilon)
 }
 
 func Convert3DSlideTo1D(s3 [][][]float64) []float64 {
@@ -139,7 +141,7 @@ func TestEvaluationXi(t *testing.T) {
 	}
 	xsi1 := Convert3DSlideTo1D(xi)
 	message := "Error in xi"
-	model.CompareSliceFloat(t, xsi, xsi1, message)
+	model.CompareSliceFloat(t, xsi, xsi1, message, epsilon)
 }
 
 var (
