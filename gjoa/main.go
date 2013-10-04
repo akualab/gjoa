@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"github.com/golang/glog"
 )
 
@@ -19,7 +20,9 @@ func main() {
 
 	args := flag.Args()
 	if len(args) < 1 {
-		glog.Fatal(commands.Description)
+		fmt.Printf("Please provide at least one argument try \ngjoa -v")
+		//glog.Fatal(commands.Description)
+		return
 	}
 
 	if err := commands.Parse(args); err != nil {

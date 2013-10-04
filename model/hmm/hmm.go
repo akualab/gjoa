@@ -62,11 +62,17 @@ type HMM struct {
 	// Φ = (A, B, π)
 
 	// Train HMM params.
-	trainable    bool
-	sumXi        [][]float64
-	sumGamma     []float64
-	sumLogProb   float64
-	sumInitProbs []float64
+	trainable     bool
+	sumXi         [][]float64
+	sumGamma      []float64
+	sumLogProb    float64
+	sumInitProbs  []float64
+	trainingFlags TrainingFlags
+}
+
+type TrainingFlags struct {
+	update_tp bool
+	update_ip bool
 }
 
 // Define functions for elementwise transformations.
@@ -113,6 +119,7 @@ func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []mod
 	hmm.sumGamma = make([]float64, r)
 	hmm.sumInitProbs = make([]float64, r)
 	hmm.trainable = true
+	hmm.trainingFlags = TrainingFlags{update_tp: true, update_ip: true}
 	return
 }
 
@@ -424,15 +431,19 @@ func (hmm *HMM) Estimate() error {
 
 	// Initial state probabilities.
 	s := floats.Sum(hmm.sumInitProbs)
-	glog.Infof("Sum Init. Probs:    %v.", hmm.sumInitProbs)
-	floatx.Apply(floatx.ScaleFunc(1.0/s), hmm.sumInitProbs, hmm.logInitProbs)
-	floatx.Apply(floatx.Log, hmm.logInitProbs, nil)
+	if hmm.trainingFlags.update_ip {
+		glog.Infof("Sum Init. Probs:    %v.", hmm.sumInitProbs)
+		floatx.Apply(floatx.ScaleFunc(1.0/s), hmm.sumInitProbs, hmm.logInitProbs)
+		floatx.Apply(floatx.Log, hmm.logInitProbs, nil)
+	}
 
 	// Transition probabilities.
-	for i, sxi := range hmm.sumXi {
-		sg := hmm.sumGamma[i]
-		floatx.Apply(floatx.ScaleFunc(1.0/sg), sxi, hmm.logTransProbs[i])
-		floatx.Apply(floatx.Log, hmm.logTransProbs[i], nil)
+	if hmm.trainingFlags.update_tp {
+		for i, sxi := range hmm.sumXi {
+			sg := hmm.sumGamma[i]
+			floatx.Apply(floatx.ScaleFunc(1.0/sg), sxi, hmm.logTransProbs[i])
+			floatx.Apply(floatx.Log, hmm.logTransProbs[i], nil)
+		}
 	}
 	for _, m := range hmm.obsModels {
 		m.Estimate()

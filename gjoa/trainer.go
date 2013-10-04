@@ -143,5 +143,4 @@ func trainer(cmd *Command, args []string) {
 	default:
 		glog.Fatalf("Unknown model: %s.", model)
 	}
-
 }
