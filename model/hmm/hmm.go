@@ -636,9 +636,9 @@ type HMMValues struct {
 	OutputModels []interface{}
 	TransProbs   [][]float64
 	InitProbs    []float64
-	SumXi        [][]float64
-	SumGamma     []float64
-	SumInitProbs []float64
+	SumXi        [][]float64 `json:",omitempty"`
+	SumGamma     []float64   `json:",omitempty"`
+	SumInitProbs []float64   `json:",omitempty"`
 }
 
 func (hmm *HMM) Values() interface{} {

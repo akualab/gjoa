@@ -229,8 +229,8 @@ type GaussianValues struct {
 	Diagonal    bool
 	Mean        []float64
 	StdDev      []float64
-	Sumx        []float64
-	Sumxsq      []float64
+	Sumx        []float64 `json:",omitempty"`
+	Sumxsq      []float64 `json:",omitempty"`
 }
 
 func (g *Gaussian) Values() interface{} {

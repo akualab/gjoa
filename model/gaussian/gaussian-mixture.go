@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
-	"github.com/golang/glog"
 	"github.com/gonum/floats"
 	"io"
 	"math"
@@ -286,7 +285,7 @@ type GMMValues struct {
 	NumSamples    float64
 	Diagonal      bool
 	NumComponents int
-	PosteriorSum  []float64
+	PosteriorSum  []float64 `json:",omitempty"`
 	Weights       []float64
 	Likelihood    float64
 	Components    []interface{}
