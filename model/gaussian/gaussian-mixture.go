@@ -5,7 +5,6 @@ import (
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
 	"github.com/gonum/floats"
-	"io"
 	"math"
 	"math/rand"
 )
@@ -62,6 +61,7 @@ func NewGaussianMixture(numElements, numComponents int,
 		name:          name,
 		trainable:     trainable,
 	}
+	gmm.Base.Model = gmm
 
 	for i, _ := range gmm.components {
 		cname := getComponentName(name, i, gmm.numComponents)
@@ -311,9 +311,4 @@ func (gmm *GMM) Values() interface{} {
 	}
 
 	return values
-}
-
-func (gmm *GMM) Write(w io.Writer) error {
-
-	return gmm.WriteModel(w, gmm)
 }

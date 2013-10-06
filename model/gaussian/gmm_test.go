@@ -249,18 +249,7 @@ func TestTrainGMM2(t *testing.T) {
 
 	// Write model.
 	fn := os.TempDir() + "gmm.json"
-	f, err := os.Create(fn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-
-	ee := gmm.Write(f)
-	if ee != nil {
-		t.Fatal(err)
-	}
-
-	t.Logf("Wrote to file %s.", fn)
+	gmm.WriteToFile(fn)
 }
 
 func CompareGaussians(t *testing.T, g1 *Gaussian, g2 *Gaussian, epsilon float64) {

@@ -15,7 +15,6 @@ import (
 	"github.com/akualab/gjoa/model"
 	"github.com/golang/glog"
 	"github.com/gonum/floats"
-	"io"
 	"math"
 	"math/rand"
 )
@@ -126,6 +125,7 @@ func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []mod
 		trainerConfig: trainerConfig,
 		generator:     NewGenerator(hmm, trainerConfig.HMM.GeneratorSeed),
 	}
+	hmm.Base.Model = hmm
 
 	if !trainable {
 		return
@@ -662,9 +662,4 @@ func (hmm *HMM) Values() interface{} {
 	}
 
 	return values
-}
-
-func (hmm *HMM) Write(w io.Writer) error {
-
-	return hmm.WriteModel(w, hmm)
 }

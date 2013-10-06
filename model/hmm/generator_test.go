@@ -153,18 +153,7 @@ func TestTrainHMM(t *testing.T) {
 
 	// Write model.
 	fn := os.TempDir() + "hmm.json"
-	f, err := os.Create(fn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-
-	ee := hmm.Write(f)
-	if ee != nil {
-		t.Fatal(err)
-	}
-
-	t.Logf("Wrote to file %s.", fn)
+	hmm.WriteToFile(fn)
 }
 
 func CompareGaussians(t *testing.T, g1 *gaussian.Gaussian, g2 *gaussian.Gaussian, eps float64) {

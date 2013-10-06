@@ -53,19 +53,7 @@ func TestWriteGaussian(t *testing.T) {
 	}
 
 	fn := os.TempDir() + "gaussian.json"
-	f, err := os.Create(fn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-
-	ee := g.Write(f)
-	if ee != nil {
-		t.Fatal(err)
-	}
-
-	t.Logf("Wrote to file %s.", fn)
-
+	g.WriteToFile(fn)
 }
 
 func TestTrainGaussian(t *testing.T) {

@@ -5,7 +5,6 @@ import (
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
 	"github.com/gonum/floats"
-	"io"
 	"math"
 	"math/rand"
 )
@@ -74,6 +73,7 @@ func NewGaussian(numElements int, mean, variance []float64,
 		trainable:   trainable,
 		fpool:       floatx.NewPool(numElements),
 	}
+	g.Base.Model = g
 
 	if mean == nil {
 		g.mean = make([]float64, numElements)
@@ -248,9 +248,4 @@ func (g *Gaussian) Values() interface{} {
 	}
 
 	return values
-}
-
-func (g *Gaussian) Write(w io.Writer) error {
-
-	return g.WriteModel(w, g)
 }
