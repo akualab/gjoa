@@ -10,11 +10,14 @@ package hmm
 
 import (
 	"fmt"
+	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
 	"github.com/golang/glog"
 	"github.com/gonum/floats"
+	"io"
 	"math"
+	"math/rand"
 )
 
 const (
@@ -28,6 +31,7 @@ func setValueFunc(f float64) floatx.ApplyFunc {
 }
 
 type HMM struct {
+	model.Base
 
 	// Model name.
 	name string
@@ -62,17 +66,14 @@ type HMM struct {
 	// Φ = (A, B, π)
 
 	// Train HMM params.
-	trainable     bool
-	sumXi         [][]float64
-	sumGamma      []float64
-	sumLogProb    float64
-	sumInitProbs  []float64
-	trainingFlags TrainingFlags
-}
+	trainable    bool
+	sumXi        [][]float64
+	sumGamma     []float64
+	sumLogProb   float64
+	sumInitProbs []float64
 
-type TrainingFlags struct {
-	update_tp bool
-	update_ip bool
+	generator     *Generator
+	trainerConfig *gjoa.TrainerConfig
 }
 
 // Define functions for elementwise transformations.
@@ -80,13 +81,26 @@ var log = func(r int, v float64) float64 { return math.Log(v) }
 var log2D = func(r int, c int, v float64) float64 { return math.Log(v) }
 
 // Create a new HMM.
-func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []model.Trainer, trainable bool, name string) (hmm *HMM, e error) {
+func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []model.Trainer, trainable bool, name string, trainerConfig *gjoa.TrainerConfig) (hmm *HMM, e error) {
 
 	r, _ := floatx.Check2D(transProbs)
 	r1 := len(initialStateProbs)
 
 	if r != r1 {
 		e = fmt.Errorf("Num states mismatch. transProbs has [%d] and initialStateProbs have [%d].", r, r1)
+	}
+
+	// Set default config values.
+	if trainerConfig == nil {
+
+		trainerConfig = &gjoa.TrainerConfig{
+			HMM: gjoa.HMM{
+				UpdateIP:        true,
+				UpdateTP:        true,
+				GeneratorSeed:   0,
+				GeneratorMaxLen: 100,
+			},
+		}
 	}
 
 	// init logTransProbs and logInitProbs
@@ -109,6 +123,8 @@ func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []mod
 		logInitProbs:  logInitProbs,
 		numElements:   obsModels[0].NumElements(),
 		name:          name,
+		trainerConfig: trainerConfig,
+		generator:     NewGenerator(hmm, trainerConfig.HMM.GeneratorSeed),
 	}
 
 	if !trainable {
@@ -119,7 +135,17 @@ func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []mod
 	hmm.sumGamma = make([]float64, r)
 	hmm.sumInitProbs = make([]float64, r)
 	hmm.trainable = true
-	hmm.trainingFlags = TrainingFlags{update_tp: true, update_ip: true}
+
+	if hmm.trainerConfig == nil {
+
+		hmm.trainerConfig = &gjoa.TrainerConfig{
+			HMM: gjoa.HMM{
+				UpdateIP: true,
+				UpdateTP: true,
+			},
+		}
+	}
+
 	return
 }
 
@@ -431,14 +457,14 @@ func (hmm *HMM) Estimate() error {
 
 	// Initial state probabilities.
 	s := floats.Sum(hmm.sumInitProbs)
-	if hmm.trainingFlags.update_ip {
+	if hmm.trainerConfig.HMM.UpdateIP {
 		glog.Infof("Sum Init. Probs:    %v.", hmm.sumInitProbs)
 		floatx.Apply(floatx.ScaleFunc(1.0/s), hmm.sumInitProbs, hmm.logInitProbs)
 		floatx.Apply(floatx.Log, hmm.logInitProbs, nil)
 	}
 
 	// Transition probabilities.
-	if hmm.trainingFlags.update_tp {
+	if hmm.trainerConfig.HMM.UpdateTP {
 		for i, sxi := range hmm.sumXi {
 			sg := hmm.sumGamma[i]
 			floatx.Apply(floatx.ScaleFunc(1.0/sg), sxi, hmm.logTransProbs[i])
@@ -464,10 +490,31 @@ func (hmm *HMM) Clear() error {
 	return nil
 }
 
+// Returns the log probability.
+func (hmm *HMM) LogProb(observation interface{}) float64 {
+
+	// TODO
+	//obs := observation.([][]float64)
+	return 0
+}
+
+// Returns the probability.
+func (hmm *HMM) Prob(observation interface{}) float64 {
+
+	obs := observation.([][]float64)
+	return math.Exp(hmm.LogProb(obs))
+}
+
+func (hmm *HMM) Random(r *rand.Rand) (interface{}, []int, error) {
+
+	return hmm.generator.Next(hmm.trainerConfig.HMM.GeneratorMaxLen)
+}
+
 func (hmm *HMM) SetName(name string) {}
 func (hmm *HMM) NumSamples() float64 { return 0.0 }
 func (hmm *HMM) NumElements() int    { return hmm.numElements }
 func (hmm *HMM) Name() string        { return hmm.name }
+func (hmm *HMM) Trainable() bool     { return hmm.trainable }
 
 // Compute α and β.
 func (hmm *HMM) alphaBeta(observations [][]float64) (α, β [][]float64, logProb float64, e error) {
@@ -577,4 +624,47 @@ func compareSliceFloat(s1, s2 []float64) bool {
 		}
 	}
 	return true
+}
+
+// Export struct.
+type HMMValues struct {
+	Name         string
+	Type         string
+	NumElements  int
+	NumStates    int
+	Likelihood   float64
+	OutputModels []interface{}
+	TransProbs   [][]float64
+	InitProbs    []float64
+	SumXi        [][]float64
+	SumGamma     []float64
+	SumInitProbs []float64
+}
+
+func (hmm *HMM) Values() interface{} {
+
+	values := &HMMValues{
+		Name:         hmm.name,
+		Type:         "HMM",
+		NumElements:  hmm.numElements,
+		NumStates:    hmm.nstates,
+		Likelihood:   hmm.sumLogProb,
+		OutputModels: make([]interface{}, hmm.nstates),
+		TransProbs:   hmm.logTransProbs,
+		InitProbs:    hmm.logInitProbs,
+		SumXi:        hmm.sumXi,
+		SumGamma:     hmm.sumGamma,
+		SumInitProbs: hmm.sumInitProbs,
+	}
+
+	for k, v := range hmm.obsModels {
+		values.OutputModels[k] = v.Values()
+	}
+
+	return values
+}
+
+func (hmm *HMM) Write(w io.Writer) error {
+
+	return hmm.WriteModel(w, hmm)
 }

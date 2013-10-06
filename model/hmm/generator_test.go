@@ -5,6 +5,7 @@ import (
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/gjoa/model/gaussian"
 	"math/rand"
+	"os"
 	"testing"
 	"time"
 )
@@ -31,7 +32,7 @@ func MakeHMM2(t *testing.T) *HMM {
 	for i, v := range models {
 		m[i] = v
 	}
-	hmm, e := NewHMM(transProbs, initialStateProbs, m, false, "testhmm")
+	hmm, e := NewHMM(transProbs, initialStateProbs, m, false, "testhmm", nil)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -69,7 +70,7 @@ func MakeRandHMM(t *testing.T, seed int64) *HMM {
 	for i, v := range models {
 		m[i] = v
 	}
-	hmm, e := NewHMM(transProbs, initialStateProbs, m, true, "testhmm")
+	hmm, e := NewHMM(transProbs, initialStateProbs, m, true, "testhmm", nil)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -77,18 +78,9 @@ func MakeRandHMM(t *testing.T, seed int64) *HMM {
 }
 
 func TestTrainHMM(t *testing.T) {
-	RunTestTrainHMM(t, true, true)
-	RunTestTrainHMM(t, true, false)
-	RunTestTrainHMM(t, false, true)
-	RunTestTrainHMM(t, false, false)
-}
-
-func RunTestTrainHMM(t *testing.T, update_tp, update_ip bool) {
 
 	hmm0 := MakeHMM2(t)
 	hmm := MakeRandHMM(t, 35)
-	hmm.trainingFlags.update_tp = update_tp
-	hmm.trainingFlags.update_ip = update_ip
 	log_ip := make([]float64, 0)
 	copy(log_ip, hmm.logInitProbs)
 	log_tp_0 := make([]float64, 0)
@@ -115,19 +107,21 @@ func RunTestTrainHMM(t *testing.T, update_tp, update_ip bool) {
 	t0 := time.Now() // Start timer.
 	for i := 0; i < iter; i++ {
 		t.Logf("iter [%d]", i)
+
+		// Reset all counters.
+		hmm.Clear()
+
 		// fix the seed to get the same sequence
-		gen := MakeHMMGenerator(hmm0, 33)
+		gen := NewGenerator(hmm0, 33)
 		for j := 0; j < m; j++ {
-			obs, _, err := gen.next(n)
+			obs, _, err := gen.Next(n)
 			if err != nil {
 				t.Fatal(err)
 			}
 			hmm.Update(obs, 1.0)
 		}
 		hmm.Estimate()
-		// t.Logf here
-		// Prepare for next iteration.
-		hmm.Clear()
+
 		// stats
 		m0 = hmm.obsModels[0].(*gaussian.Gaussian)
 		m1 = hmm.obsModels[1].(*gaussian.Gaussian)
@@ -145,28 +139,32 @@ func RunTestTrainHMM(t *testing.T, update_tp, update_ip bool) {
 	//var m0 *gaussian.Gaussian
 	CompareGaussians(t, m00, m0, eps)
 	CompareGaussians(t, m11, m1, eps)
-	if update_tp {
-		model.CompareSliceFloat(t, hmm0.logTransProbs[0], hmm.logTransProbs[0],
-			"error in logTransProbs[0]", eps)
-		model.CompareSliceFloat(t, hmm0.logTransProbs[1], hmm.logTransProbs[1],
-			"error in logTransProbs[1]", eps)
-	} else {
-		model.CompareSliceFloat(t, log_tp_0, hmm.logTransProbs[0],
-			"error in logTransProbs[0]", 0.0001)
-		model.CompareSliceFloat(t, log_tp_1, hmm.logTransProbs[1],
-			"error in logTransProbs[1]", 0.0001)
-	}
-	if update_ip {
-		model.CompareSliceFloat(t, hmm0.logInitProbs, hmm.logInitProbs,
-			"error in logInitProbs", eps)
-	} else {
-		model.CompareSliceFloat(t, log_ip, hmm.logInitProbs,
-			"error in logInitProbs", 0.0001)
-	}
+	model.CompareSliceFloat(t, hmm0.logTransProbs[0], hmm.logTransProbs[0],
+		"error in logTransProbs[0]", eps)
+	model.CompareSliceFloat(t, hmm0.logTransProbs[1], hmm.logTransProbs[1],
+		"error in logTransProbs[1]", eps)
+
+	model.CompareSliceFloat(t, hmm0.logInitProbs, hmm.logInitProbs,
+		"error in logInitProbs", eps)
 	// Print time stats.
 	t.Logf("Total time: %v", dur)
 	t.Logf("Time per iteration: %v", dur/time.Duration(iter))
 	t.Logf("Time per frame: %v", dur/time.Duration(iter*n*m))
+
+	// Write model.
+	fn := os.TempDir() + "hmm.json"
+	f, err := os.Create(fn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	ee := hmm.Write(f)
+	if ee != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("Wrote to file %s.", fn)
 }
 
 func CompareGaussians(t *testing.T, g1 *gaussian.Gaussian, g2 *gaussian.Gaussian, eps float64) {

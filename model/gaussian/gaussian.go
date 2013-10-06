@@ -5,6 +5,7 @@ import (
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
 	"github.com/gonum/floats"
+	"io"
 	"math"
 	"math/rand"
 )
@@ -16,6 +17,7 @@ const (
 
 // Multivariate Gaussian distribution.
 type Gaussian struct {
+	model.Base
 	name        string
 	numElements int
 	trainable   bool
@@ -98,8 +100,9 @@ func NewGaussian(numElements int, mean, variance []float64,
 	return
 }
 
-func (g *Gaussian) LogProb(obs []float64) (v float64) {
+func (g *Gaussian) LogProb(observation interface{}) (v float64) {
 
+	obs := observation.([]float64)
 	for i, x := range obs {
 		s := g.mean[i] - x
 		v += s * s * g.varianceInv[i] / 2.0
@@ -109,7 +112,9 @@ func (g *Gaussian) LogProb(obs []float64) (v float64) {
 	return
 }
 
-func (g *Gaussian) Prob(obs []float64) float64 {
+func (g *Gaussian) Prob(observation interface{}) float64 {
+
+	obs := observation.([]float64)
 
 	return math.Exp(g.LogProb(obs))
 }
@@ -204,8 +209,9 @@ func (g *Gaussian) StandardDeviation() (sd []float64) {
 	return
 }
 
-func (g *Gaussian) Random(r *rand.Rand) ([]float64, error) {
-	return model.RandNormalVector(g.Mean(), g.StandardDeviation(), r)
+func (g *Gaussian) Random(r *rand.Rand) (interface{}, []int, error) {
+	obs, e := model.RandNormalVector(g.Mean(), g.StandardDeviation(), r)
+	return obs, nil, e
 }
 
 func (g *Gaussian) Name() string        { return g.name }
@@ -213,3 +219,38 @@ func (g *Gaussian) NumSamples() float64 { return g.numSamples }
 func (g *Gaussian) NumElements() int    { return g.numElements }
 func (g *Gaussian) Trainable() bool     { return g.trainable }
 func (g *Gaussian) SetName(name string) { g.name = name }
+
+// Export struct.
+type GaussianValues struct {
+	Name        string
+	Type        string
+	NumElements int
+	NumSamples  float64
+	Diagonal    bool
+	Mean        []float64
+	StdDev      []float64
+	Sumx        []float64
+	Sumxsq      []float64
+}
+
+func (g *Gaussian) Values() interface{} {
+
+	values := &GaussianValues{
+		Name:        g.name,
+		Type:        "Gaussian",
+		NumElements: g.numElements,
+		NumSamples:  g.numSamples,
+		Diagonal:    g.diagonal,
+		Mean:        g.mean,
+		StdDev:      g.StandardDeviation(),
+		Sumx:        g.sumx,
+		Sumxsq:      g.sumxsq,
+	}
+
+	return values
+}
+
+func (g *Gaussian) Write(w io.Writer) error {
+
+	return g.WriteModel(w, g)
+}

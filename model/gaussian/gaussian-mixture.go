@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
+	"github.com/golang/glog"
 	"github.com/gonum/floats"
+	"io"
 	"math"
 	"math/rand"
 )
@@ -13,6 +15,7 @@ type GMMConfig struct {
 }
 
 type GMM struct {
+	model.Base
 	name            string
 	numElements     int
 	trainable       bool
@@ -102,13 +105,16 @@ func (gmm *GMM) logProbInternal(obs, probs []float64) float64 {
 }
 
 // Returns the log probability.
-func (gmm *GMM) LogProb(obs []float64) float64 {
+func (gmm *GMM) LogProb(observation interface{}) float64 {
 
+	obs := observation.([]float64)
 	return gmm.logProbInternal(obs, nil)
 }
 
 // Returns the probability.
-func (gmm *GMM) Prob(obs []float64) float64 {
+func (gmm *GMM) Prob(observation interface{}) float64 {
+
+	obs := observation.([]float64)
 	return math.Exp(gmm.LogProb(obs))
 }
 
@@ -185,11 +191,11 @@ func (gmm *GMM) Clear() error {
 }
 
 // Returns a random GMM vector
-func (gmm *GMM) Random(r *rand.Rand) ([]float64, error) {
+func (gmm *GMM) Random(r *rand.Rand) (interface{}, []int, error) {
 	// Choose a component using weights
 	comp, err := model.RandIntFromDist(gmm.weights, r)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// Get a random vector from that component
 	return gmm.components[comp].Random(r)
@@ -271,3 +277,44 @@ func (gmm *GMM) NumSamples() float64 { return gmm.numSamples }
 func (gmm *GMM) NumElements() int    { return gmm.numElements }
 func (gmm *GMM) Trainable() bool     { return gmm.trainable }
 func (gmm *GMM) SetName(name string) { gmm.name = name }
+
+// Export struct.
+type GMMValues struct {
+	Name          string
+	Type          string
+	NumElements   int
+	NumSamples    float64
+	Diagonal      bool
+	NumComponents int
+	PosteriorSum  []float64
+	Weights       []float64
+	Likelihood    float64
+	Components    []interface{}
+}
+
+func (gmm *GMM) Values() interface{} {
+
+	values := &GMMValues{
+		Name:          gmm.name,
+		Type:          "GMM",
+		NumElements:   gmm.numElements,
+		NumSamples:    gmm.numSamples,
+		Diagonal:      gmm.diagonal,
+		NumComponents: gmm.numComponents,
+		PosteriorSum:  gmm.posteriorSum,
+		Weights:       gmm.weights,
+		Likelihood:    gmm.totalLikelihood,
+		Components:    make([]interface{}, gmm.numComponents),
+	}
+
+	for k, v := range gmm.components {
+		values.Components[k] = v.Values()
+	}
+
+	return values
+}
+
+func (gmm *GMM) Write(w io.Writer) error {
+
+	return gmm.WriteModel(w, gmm)
+}

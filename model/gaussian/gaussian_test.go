@@ -3,6 +3,7 @@ package gaussian
 import (
 	"github.com/akualab/gjoa/model"
 	"math/rand"
+	"os"
 	"testing"
 )
 
@@ -34,6 +35,37 @@ func TestGaussian(t *testing.T) {
 	if !model.Comparef64(expected, p, epsilon) {
 		t.Errorf("Wrong LogProb. Expected: [%f], Got: [%f]", expected, p)
 	}
+}
+
+func TestWriteGaussian(t *testing.T) {
+
+	g, e := NewGaussian(10, nil, nil, true, true, "testing")
+	if e != nil {
+		t.Fatal(e)
+	}
+
+	mean := []float64{0.5, 1, 2}
+	variance := []float64{1, 2, 4}
+
+	g, e = NewGaussian(3, mean, variance, true, true, "testing")
+	if e != nil {
+		t.Fatal(e)
+	}
+
+	fn := os.TempDir() + "gaussian.json"
+	f, err := os.Create(fn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	ee := g.Write(f)
+	if ee != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("Wrote to file %s.", fn)
+
 }
 
 func TestTrainGaussian(t *testing.T) {

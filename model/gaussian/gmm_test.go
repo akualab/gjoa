@@ -1,10 +1,17 @@
 package gaussian
 
 import (
+	"flag"
 	"github.com/akualab/gjoa/model"
 	"math/rand"
+	"os"
 	"testing"
 )
+
+func init() {
+	flag.Set("logtostderr", "true")
+	flag.Set("v", "2")
+}
 
 func TestGMMName(t *testing.T) {
 
@@ -203,16 +210,19 @@ func TestTrainGMM2(t *testing.T) {
 	for iter := 0; iter < numIter; iter++ {
 		t.Logf("Starting GMM trainign iteration %d.", iter)
 
+		// Reset all counters..
+		gmm.Clear()
+
 		// Reset the same random number generator to make sure we use the
 		// same observations in each iterations.
 		r := rand.New(rand.NewSource(seed))
 		for i := 0; i < numObs; i++ {
 			// random from gmm0
-			rv, err := gmm0.Random(r)
+			rv, _, err := gmm0.Random(r)
 			if err != nil {
 				t.Fatal(err)
 			}
-			gmm.Update(rv, 1.0)
+			gmm.Update(rv.([]float64), 1.0)
 		}
 		gmm.Estimate()
 
@@ -226,8 +236,6 @@ func TestTrainGMM2(t *testing.T) {
 			t.Logf("%s: STD: \n%+v", c.Name(), c.StandardDeviation())
 		}
 
-		// Prepare for next iteration.
-		gmm.Clear()
 	}
 	// Checking results
 	// The components can be in different orders
@@ -238,6 +246,21 @@ func TestTrainGMM2(t *testing.T) {
 		CompareGaussians(t, gmm0.components[1], gmm.components[0], epsilon)
 		CompareGaussians(t, gmm0.components[0], gmm.components[1], epsilon)
 	}
+
+	// Write model.
+	fn := os.TempDir() + "gmm.json"
+	f, err := os.Create(fn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	ee := gmm.Write(f)
+	if ee != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("Wrote to file %s.", fn)
 }
 
 func CompareGaussians(t *testing.T, g1 *Gaussian, g2 *Gaussian, epsilon float64) {

@@ -6,14 +6,14 @@ import (
 	"math/rand"
 )
 
-type HMMGenerator struct {
+type Generator struct {
 	hmm *HMM
 	r   *rand.Rand
 }
 
-func MakeHMMGenerator(hmm *HMM, seed int64) (gen *HMMGenerator) {
+func NewGenerator(hmm *HMM, seed int64) (gen *Generator) {
 	r := rand.New(rand.NewSource(seed))
-	gen = &HMMGenerator{
+	gen = &Generator{
 		hmm: hmm,
 		r:   r,
 	}
@@ -22,7 +22,7 @@ func MakeHMMGenerator(hmm *HMM, seed int64) (gen *HMMGenerator) {
 
 // Given n, the length of the seq, generates random sequence
 // for a given hmm.
-func (gen *HMMGenerator) next(n int) ([][]float64, []int, error) {
+func (gen *Generator) Next(n int) ([][]float64, []int, error) {
 
 	obs := make([][]float64, n)
 	states := make([]int, n)
@@ -35,7 +35,8 @@ func (gen *HMMGenerator) next(n int) ([][]float64, []int, error) {
 	for i := 0; i < n; i++ {
 		states[i] = state0
 		g := gen.hmm.obsModels[state0]
-		obs[i], err0 = g.Random(r)
+		x, _, err0 := g.Random(r)
+		obs[i] = x.([]float64)
 		if err0 != nil {
 			return nil, nil, fmt.Errorf("Error generating Random model")
 		}

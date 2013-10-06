@@ -72,7 +72,7 @@ func MakeHMM(t *testing.T) *HMM {
 	for i, v := range models {
 		m[i] = v
 	}
-	hmm, e := NewHMM(transProbs, initialStateProbs, m, false, "testhmm")
+	hmm, e := NewHMM(transProbs, initialStateProbs, m, false, "testhmm", nil)
 	if e != nil {
 		t.Fatal(e)
 	}

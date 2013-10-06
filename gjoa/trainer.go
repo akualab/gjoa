@@ -11,20 +11,6 @@ import (
 	"path"
 )
 
-type TrainerConfig struct {
-	Model string `yaml:"model"`
-
-	HMM struct {
-		UpdateTP   bool   `yaml:"update_tp,omitempty"`
-		UpdateIP   bool   `yaml:"update_ip,omitempty"`
-		OutputDist string `yaml:"output_distribution,omitempty"`
-	}
-
-	GMM struct{}
-
-	Gaussian struct{}
-}
-
 var cmdTrainer = &Command{
 	Run:       trainer,
 	UsageLine: "train [options]",
@@ -92,7 +78,7 @@ func trainer(cmd *Command, args []string) {
 	fn := fmt.Sprintf("%s%c%s", dir, os.PathSeparator, configFilename)
 	data, err := ioutil.ReadFile(fn)
 	gjoa.Fatal(err)
-	config := TrainerConfig{}
+	config := gjoa.TrainerConfig{}
 	err = goyaml.Unmarshal(data, &config)
 	gjoa.Fatal(err)
 
