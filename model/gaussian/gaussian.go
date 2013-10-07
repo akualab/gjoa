@@ -2,6 +2,7 @@ package gaussian
 
 import (
 	"fmt"
+	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
 	"github.com/gonum/floats"
@@ -16,7 +17,7 @@ const (
 
 // Multivariate Gaussian distribution.
 type Gaussian struct {
-	model.Base
+	model.BaseModel
 	name        string
 	numElements int
 	trainable   bool
@@ -56,6 +57,11 @@ func scaleFunc(f float64) floatx.ApplyFunc {
 	return func(r int, v float64) float64 { return v * f }
 }
 
+func init() {
+	m := new(Gaussian)
+	model.Register(m)
+}
+
 func NewGaussian(numElements int, mean, variance []float64,
 	trainable, diagonal bool, name string) (g *Gaussian, e error) {
 
@@ -73,7 +79,7 @@ func NewGaussian(numElements int, mean, variance []float64,
 		trainable:   trainable,
 		fpool:       floatx.NewPool(numElements),
 	}
-	g.Base.Model = g
+	g.BaseModel.Model = g
 
 	if mean == nil {
 		g.mean = make([]float64, numElements)
@@ -237,7 +243,7 @@ func (g *Gaussian) Values() interface{} {
 
 	values := &GaussianValues{
 		Name:        g.name,
-		Type:        "Gaussian",
+		Type:        g.Type(),
 		NumElements: g.numElements,
 		NumSamples:  g.numSamples,
 		Diagonal:    g.diagonal,
@@ -248,4 +254,25 @@ func (g *Gaussian) Values() interface{} {
 	}
 
 	return values
+}
+
+func (g *Gaussian) New(values interface{}) (model.Modeler, error) {
+
+	v := values.(*GaussianValues)
+
+	variance := make([]float64, v.NumElements)
+	floatx.Apply(sq, v.StdDev, variance)
+
+	ng, e := NewGaussian(v.NumElements, v.Mean, variance,
+		true, v.Diagonal, v.Name)
+	gjoa.Fatal(e)
+
+	if len(v.Sumx) > 0 {
+		ng.sumx = v.Sumx
+	}
+	if len(v.Sumxsq) > 0 {
+		ng.sumxsq = v.Sumxsq
+	}
+
+	return ng, nil
 }

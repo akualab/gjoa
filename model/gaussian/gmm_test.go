@@ -246,10 +246,58 @@ func TestTrainGMM2(t *testing.T) {
 		CompareGaussians(t, gmm0.components[1], gmm.components[0], epsilon)
 		CompareGaussians(t, gmm0.components[0], gmm.components[1], epsilon)
 	}
+}
+
+func TestWriteReadGMM(t *testing.T) {
+	var seed int64 = 33
+	dim := 2
+	numComp := 2
+	numIter := 10
+	numObs := 10000
+	gmm0 := MakeGMM(t)
+	gmm, e := NewGaussianMixture(dim, numComp, true, true, "mygmm")
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Logf("Initial Weights: \n%+v", gmm.weights)
+	mean01 := []float64{2.5, 3}
+	var01 := []float64{0.5, 0.5}
+	gmm, e = RandomGMM(mean01, var01, numComp, "mygmm", 99)
+	if e != nil {
+		t.Fatal(e)
+	}
+	for iter := 0; iter < numIter; iter++ {
+		t.Logf("Starting GMM trainign iteration %d.", iter)
+		gmm.Clear()
+
+		r := rand.New(rand.NewSource(seed))
+		for i := 0; i < numObs; i++ {
+			rv, _, err := gmm0.Random(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			gmm.Update(rv.([]float64), 1.0)
+		}
+		gmm.Estimate()
+
+		t.Logf("Iter: %d", iter)
+	}
 
 	// Write model.
 	fn := os.TempDir() + "gmm.json"
-	gmm.WriteToFile(fn)
+	gmm.WriteFile(fn)
+	x, e1 := gmm.ReadFile(fn)
+	if e1 != nil {
+		t.Fatal(e1)
+	}
+	gmm1 := x.(*GMM)
+
+	// Compare gmm and gmm1
+	for k, v := range gmm.components {
+		CompareGaussians(t, v, gmm1.components[k], epsilon)
+	}
+	model.CompareSliceFloat(t, gmm.weights, gmm1.weights, "Weights don't match.", epsilon)
+	model.CompareSliceFloat(t, gmm.posteriorSum, gmm1.posteriorSum, "PosteriorSum doesn't match.", epsilon)
 }
 
 func CompareGaussians(t *testing.T, g1 *Gaussian, g2 *Gaussian, epsilon float64) {

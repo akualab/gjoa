@@ -53,7 +53,19 @@ func TestWriteGaussian(t *testing.T) {
 	}
 
 	fn := os.TempDir() + "gaussian.json"
-	g.WriteToFile(fn)
+	g.WriteFile(fn)
+
+	// Create another Gaussian model.
+	g1, e1 := g.ReadFile(fn)
+	if e1 != nil {
+		t.Fatal(e1)
+	}
+
+	// Read values from file.
+	t.Logf("Original model:\n%v\n", g.Values())
+	t.Logf("New model read from file:\n%v\n", g1.Values())
+
+	CompareGaussians(t, g, g1.(*Gaussian), epsilon)
 }
 
 func TestTrainGaussian(t *testing.T) {

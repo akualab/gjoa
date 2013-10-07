@@ -13,7 +13,7 @@ type GMMConfig struct {
 }
 
 type GMM struct {
-	model.Base
+	model.BaseModel
 	name            string
 	numElements     int
 	trainable       bool
@@ -28,6 +28,11 @@ type GMM struct {
 	totalLikelihood float64
 	components      []*Gaussian
 	iteration       int
+}
+
+func init() {
+	m := new(GMM)
+	model.Register(m)
 }
 
 // A multivariate Gaussian mixture model.
@@ -61,7 +66,7 @@ func NewGaussianMixture(numElements, numComponents int,
 		name:          name,
 		trainable:     trainable,
 	}
-	gmm.Base.Model = gmm
+	gmm.BaseModel.Model = gmm
 
 	for i, _ := range gmm.components {
 		cname := getComponentName(name, i, gmm.numComponents)
@@ -295,7 +300,7 @@ func (gmm *GMM) Values() interface{} {
 
 	values := &GMMValues{
 		Name:          gmm.name,
-		Type:          "GMM",
+		Type:          gmm.Type(),
 		NumElements:   gmm.numElements,
 		NumSamples:    gmm.numSamples,
 		Diagonal:      gmm.diagonal,
@@ -311,4 +316,34 @@ func (gmm *GMM) Values() interface{} {
 	}
 
 	return values
+}
+
+func (gmm *GMM) New(values interface{}) (model.Modeler, error) {
+
+	v := values.(*GMMValues)
+
+	ng, e := NewGaussianMixture(v.NumElements, v.NumComponents, true, v.Diagonal, v.Name)
+	if e != nil {
+		return nil, e
+	}
+
+	gaussian := &Gaussian{}
+	for k, gv := range v.Components {
+
+		// Create a Gaussian component using the Gaussian values.
+		g, e := gaussian.New(gv)
+		if e != nil {
+			return nil, e
+		}
+		ng.components[k] = g.(*Gaussian)
+	}
+	ng.weights = v.Weights
+	ng.numSamples = v.NumSamples
+	ng.totalLikelihood = v.Likelihood
+
+	if len(v.PosteriorSum) > 0 {
+		ng.posteriorSum = v.PosteriorSum
+	}
+
+	return ng, nil
 }
