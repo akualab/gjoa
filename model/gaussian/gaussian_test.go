@@ -19,9 +19,9 @@ func TestGaussian(t *testing.T) {
 	}
 
 	mean := []float64{0.5, 1, 2}
-	variance := []float64{1, 1, 1}
+	sd := []float64{1, 1, 1}
 
-	g, e = NewGaussian(3, mean, variance, true, true, "testing")
+	g, e = NewGaussian(3, mean, sd, true, true, "testing")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -37,7 +37,7 @@ func TestGaussian(t *testing.T) {
 	}
 }
 
-func TestWriteGaussian(t *testing.T) {
+func TestWriteReadGaussian(t *testing.T) {
 
 	g, e := NewGaussian(10, nil, nil, true, true, "testing")
 	if e != nil {
@@ -45,9 +45,10 @@ func TestWriteGaussian(t *testing.T) {
 	}
 
 	mean := []float64{0.5, 1, 2}
-	variance := []float64{1, 2, 4}
+	//	variance := []float64{1, 2, 4}
+	sd := []float64{1, 2, 4}
 
-	g, e = NewGaussian(3, mean, variance, true, true, "testing")
+	g, e = NewGaussian(3, mean, sd, true, true, "testing")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -56,16 +57,18 @@ func TestWriteGaussian(t *testing.T) {
 	g.WriteFile(fn)
 
 	// Create another Gaussian model.
-	g1, e1 := g.ReadFile(fn)
+	m1, e1 := g.ReadFile(fn)
 	if e1 != nil {
 		t.Fatal(e1)
 	}
+	g1 := m1.(*Gaussian)
+	g1.Initialize()
 
 	// Read values from file.
-	t.Logf("Original model:\n%v\n", g.Values())
-	t.Logf("New model read from file:\n%v\n", g1.Values())
+	t.Logf("Original model:\n%+v\n", g)
+	t.Logf("New model read from file:\n%+v\n", g1)
 
-	CompareGaussians(t, g, g1.(*Gaussian), epsilon)
+	CompareGaussians(t, g, g1, epsilon)
 }
 
 func TestTrainGaussian(t *testing.T) {
@@ -89,17 +92,17 @@ func TestTrainGaussian(t *testing.T) {
 		g.Update(rv, 1.0)
 	}
 	g.Estimate()
-	t.Logf("Mean: \n%+v", g.Mean())
-	t.Logf("STD: \n%+v", g.StandardDeviation())
+	t.Logf("Mean: \n%+v", g.Mean)
+	t.Logf("STD: \n%+v", g.StdDev)
 
 	for i, _ := range mean {
-		if !model.Comparef64(mean[i], g.Mean()[i], epsilon) {
+		if !model.Comparef64(mean[i], g.Mean[i], epsilon) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
-				i, mean[i], g.Mean()[i])
+				i, mean[i], g.Mean[i])
 		}
-		if !model.Comparef64(std[i], g.StandardDeviation()[i], epsilon) {
+		if !model.Comparef64(std[i], g.StdDev[i], epsilon) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
-				i, std[i], g.StandardDeviation()[i])
+				i, std[i], g.StdDev[i])
 		}
 	}
 }

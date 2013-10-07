@@ -2,7 +2,6 @@ package gaussian
 
 import (
 	"fmt"
-	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
 	"github.com/gonum/floats"
@@ -11,25 +10,27 @@ import (
 )
 
 const (
-	SMALL_VARIANCE  = 0.01
+	SMALL_SD        = 0.01
+	SMALL_VARIANCE  = SMALL_SD * SMALL_SD
 	MIN_NUM_SAMPLES = 0.01
 )
 
 // Multivariate Gaussian distribution.
 type Gaussian struct {
 	model.BaseModel
-	name        string
-	numElements int
-	trainable   bool
-	numSamples  float64
-	diagonal    bool
-	sumx        []float64
-	sumxsq      []float64
-	mean        []float64
+	ModelName   string    `json:"name,omitempty"`
+	NE          int       `json:"num_elements"`
+	IsTrainable bool      `json:"trainable"`
+	NSamples    float64   `json:"nsamples"`
+	Diag        bool      `json:"diag"`
+	Sumx        []float64 `json:"sumx,omitempty"`
+	Sumxsq      []float64 `json:"sumx_sq,omitempty"`
+	Mean        []float64 `json:"mean"`
+	StdDev      []float64 `json:"sd"`
 	variance    []float64
 	varianceInv []float64
 	tmpArray    []float64
-	const1      float64 // -(N/2)log(2PI) Depends only on numElements.
+	const1      float64 // -(N/2)log(2PI) Depends only on NE.
 	const2      float64 // const1 - sum(log sigma_i) Also depends on variance.
 	fpool       *floatx.Pool
 }
@@ -62,7 +63,7 @@ func init() {
 	model.Register(m)
 }
 
-func NewGaussian(numElements int, mean, variance []float64,
+func NewGaussian(numElements int, mean, sd []float64,
 	trainable, diagonal bool, name string) (g *Gaussian, e error) {
 
 	if !diagonal {
@@ -71,36 +72,44 @@ func NewGaussian(numElements int, mean, variance []float64,
 	}
 
 	g = &Gaussian{
-		mean:        mean,
-		variance:    variance,
-		diagonal:    true,
-		numElements: numElements,
-		name:        name,
-		trainable:   trainable,
+		Mean:        mean,
+		StdDev:      sd,
+		Diag:        true,
+		NE:          numElements,
+		ModelName:   name,
+		IsTrainable: trainable,
 		fpool:       floatx.NewPool(numElements),
 	}
 	g.BaseModel.Model = g
+	g.Initialize()
+	return
+}
 
-	if mean == nil {
-		g.mean = make([]float64, numElements)
-	}
-	if variance == nil {
-		g.variance = make([]float64, numElements)
-		floatx.Apply(setValueFunc(SMALL_VARIANCE), g.variance, nil)
-	}
+func (g *Gaussian) Initialize() {
 
-	g.varianceInv = make([]float64, numElements)
-	copy(g.varianceInv, g.variance)
-	floatx.Apply(inv, g.varianceInv, nil)
-
-	if trainable {
-		g.sumx = make([]float64, numElements)
-		g.sumxsq = make([]float64, numElements)
+	if g.Mean == nil {
+		g.Mean = make([]float64, g.NE)
 	}
 
-	g.tmpArray = make([]float64, numElements)
+	g.variance = make([]float64, g.NE)
+	g.varianceInv = make([]float64, g.NE)
+	if g.StdDev == nil {
+		g.StdDev = make([]float64, g.NE)
+		floatx.Apply(setValueFunc(SMALL_SD), g.StdDev, nil)
+	}
+	floatx.Apply(sq, g.StdDev, g.variance)
+
+	// Initializes variance, varianceInv, and StdDev.
+	g.setVariance(g.variance)
+
+	if g.IsTrainable {
+		g.Sumx = make([]float64, g.NE)
+		g.Sumxsq = make([]float64, g.NE)
+	}
+
+	g.tmpArray = make([]float64, g.NE)
 	floatx.Apply(log, g.variance, g.tmpArray)
-	g.const1 = -float64(numElements) * math.Log(2.0*math.Pi) / 2.0
+	g.const1 = -float64(g.NE) * math.Log(2.0*math.Pi) / 2.0
 	g.const2 = g.const1 - floats.Sum(g.tmpArray)/2.0
 
 	return
@@ -110,7 +119,7 @@ func (g *Gaussian) LogProb(observation interface{}) (v float64) {
 
 	obs := observation.([]float64)
 	for i, x := range obs {
-		s := g.mean[i] - x
+		s := g.Mean[i] - x
 		v += s * s * g.varianceInv[i] / 2.0
 	}
 	v = g.const2 - v
@@ -127,49 +136,48 @@ func (g *Gaussian) Prob(observation interface{}) float64 {
 
 func (g *Gaussian) Update(obs []float64, w float64) error {
 
-	if !g.trainable {
+	if !g.IsTrainable {
 		return fmt.Errorf("Attempted to update model [%s] which is not trainable.", g.Name())
 	}
 
 	/* Update sufficient statistics. */
 	floatx.Apply(scaleFunc(w), obs, g.tmpArray)
-	floats.Add(g.sumx, g.tmpArray)
+	floats.Add(g.Sumx, g.tmpArray)
 	floatx.Apply(sq, obs, g.tmpArray)
 	floats.Scale(w, g.tmpArray)
-	floats.Add(g.sumxsq, g.tmpArray)
-	g.numSamples += w
+	floats.Add(g.Sumxsq, g.tmpArray)
+	g.NSamples += w
 
 	return nil
 }
 
 func (g *Gaussian) Estimate() error {
 
-	if !g.trainable {
-		return fmt.Errorf("Attempted to estimate model [%s] which is not trainable.", g.name)
+	if !g.IsTrainable {
+		return fmt.Errorf("Attempted to estimate model [%s] which is not trainable.", g.ModelName)
 	}
 
-	if g.numSamples > MIN_NUM_SAMPLES {
+	if g.NSamples > MIN_NUM_SAMPLES {
 
 		/* Estimate the mean. */
-		floatx.Apply(scaleFunc(1.0/g.numSamples), g.sumx, g.mean)
+		floatx.Apply(scaleFunc(1.0/g.NSamples), g.Sumx, g.Mean)
 		/*
 		 * Estimate the variance. sigma_sq = 1/n (sumxsq - 1/n sumx^2) or
 		 * 1/n sumxsq - mean^2.
 		 */
 		tmp := g.variance // borrow as an intermediate array.
 
-		floatx.Apply(sq, g.mean, g.tmpArray)
-		floatx.Apply(scaleFunc(1.0/g.numSamples), g.sumxsq, tmp)
+		floatx.Apply(sq, g.Mean, g.tmpArray)
+		floatx.Apply(scaleFunc(1.0/g.NSamples), g.Sumxsq, tmp)
 		floats.SubTo(g.variance, tmp, g.tmpArray)
 		floatx.Apply(floorv, g.variance, nil)
-		floatx.Apply(inv, g.variance, g.varianceInv)
 	} else {
 
 		/* Not enough training sample. */
 		floatx.Apply(setValueFunc(SMALL_VARIANCE), g.variance, nil)
-		floatx.Apply(inv, g.variance, g.varianceInv)
-		floatx.Apply(setValueFunc(0), g.mean, nil)
+		floatx.Apply(setValueFunc(0), g.Mean, nil)
 	}
+	g.setVariance(g.variance) // to update varInv and stddev.
 
 	/* Update log Gaussian constant. */
 	floatx.Apply(log, g.variance, g.tmpArray)
@@ -180,99 +188,37 @@ func (g *Gaussian) Estimate() error {
 
 func (g *Gaussian) Clear() error {
 
-	if !g.trainable {
-		return fmt.Errorf("Attempted to clear model [%s] which is not trainable.", g.name)
+	if !g.IsTrainable {
+		return fmt.Errorf("Attempted to clear model [%s] which is not trainable.", g.ModelName)
 	}
 
-	floatx.Apply(setValueFunc(0), g.sumx, nil)
-	floatx.Apply(setValueFunc(0), g.sumxsq, nil)
-	g.numSamples = 0
+	floatx.Apply(setValueFunc(0), g.Sumx, nil)
+	floatx.Apply(setValueFunc(0), g.Sumxsq, nil)
+	g.NSamples = 0
 
 	return nil
 }
 
-func (g *Gaussian) Mean() []float64 {
-	return g.mean
-}
-
-func (g *Gaussian) SetMean(mean []float64) {
-	g.mean = mean
-}
-
-func (g *Gaussian) Variance() []float64 {
-	return g.variance
-}
-
-func (g *Gaussian) SetVariance(variance []float64) {
+func (g *Gaussian) setVariance(variance []float64) {
 	copy(g.variance, variance)
 	floatx.Apply(inv, g.variance, g.varianceInv)
+	g.StdDev = g.standardDeviation()
 }
 
-func (g *Gaussian) StandardDeviation() (sd []float64) {
+func (g *Gaussian) standardDeviation() (sd []float64) {
 
-	sd = make([]float64, g.numElements)
+	sd = make([]float64, g.NE)
 	floatx.Apply(sqrt, g.variance, sd)
 	return
 }
 
 func (g *Gaussian) Random(r *rand.Rand) (interface{}, []int, error) {
-	obs, e := model.RandNormalVector(g.Mean(), g.StandardDeviation(), r)
+	obs, e := model.RandNormalVector(g.Mean, g.StdDev, r)
 	return obs, nil, e
 }
 
-func (g *Gaussian) Name() string        { return g.name }
-func (g *Gaussian) NumSamples() float64 { return g.numSamples }
-func (g *Gaussian) NumElements() int    { return g.numElements }
-func (g *Gaussian) Trainable() bool     { return g.trainable }
-func (g *Gaussian) SetName(name string) { g.name = name }
-
-// Export struct.
-type GaussianValues struct {
-	Name        string
-	Type        string
-	NumElements int
-	NumSamples  float64
-	Diagonal    bool
-	Mean        []float64
-	StdDev      []float64
-	Sumx        []float64 `json:",omitempty"`
-	Sumxsq      []float64 `json:",omitempty"`
-}
-
-func (g *Gaussian) Values() interface{} {
-
-	values := &GaussianValues{
-		Name:        g.name,
-		Type:        g.Type(),
-		NumElements: g.numElements,
-		NumSamples:  g.numSamples,
-		Diagonal:    g.diagonal,
-		Mean:        g.mean,
-		StdDev:      g.StandardDeviation(),
-		Sumx:        g.sumx,
-		Sumxsq:      g.sumxsq,
-	}
-
-	return values
-}
-
-func (g *Gaussian) New(values interface{}) (model.Modeler, error) {
-
-	v := values.(*GaussianValues)
-
-	variance := make([]float64, v.NumElements)
-	floatx.Apply(sq, v.StdDev, variance)
-
-	ng, e := NewGaussian(v.NumElements, v.Mean, variance,
-		true, v.Diagonal, v.Name)
-	gjoa.Fatal(e)
-
-	if len(v.Sumx) > 0 {
-		ng.sumx = v.Sumx
-	}
-	if len(v.Sumxsq) > 0 {
-		ng.sumxsq = v.Sumxsq
-	}
-
-	return ng, nil
-}
+func (g *Gaussian) Name() string        { return g.ModelName }
+func (g *Gaussian) NumSamples() float64 { return g.NSamples }
+func (g *Gaussian) NumElements() int    { return g.NE }
+func (g *Gaussian) Trainable() bool     { return g.IsTrainable }
+func (g *Gaussian) SetName(name string) { g.ModelName = name }

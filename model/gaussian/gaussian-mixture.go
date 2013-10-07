@@ -205,31 +205,30 @@ func (gmm *GMM) Random(r *rand.Rand) (interface{}, []int, error) {
 	return gmm.components[comp].Random(r)
 }
 
-// Returns a random vector using the mean and variance vector.
-func RandomVector(mean, variance []float64, r *rand.Rand) (vec []float64, e error) {
+// Returns a random vector using the mean and sd vectors.
+func RandomVector(mean, sd []float64, r *rand.Rand) (vec []float64, e error) {
 
 	nrows := len(mean)
-	if !floats.EqualLengths(mean, variance) {
+	if !floats.EqualLengths(mean, sd) {
 		panic(floatx.ErrLength)
 	}
 
 	vec = make([]float64, nrows)
 	for i := 0; i < nrows; i++ {
-		std := math.Sqrt(variance[i])
-		v := r.NormFloat64()*std + mean[i]
+		v := r.NormFloat64()*sd[i] + mean[i]
 		vec[i] = v
 	}
 	return
 }
 
 // Generates a random Gaussian mixture model using mean and variance vectors as seed.
-// Use this function to initialize the GMM before training. The mean and variance
+// Use this function to initialize the GMM before training. The mean and sd
 // vector can be estimated from the data set using a Gaussian model.
-func RandomGMM(mean, variance []float64, numComponents int,
+func RandomGMM(mean, sd []float64, numComponents int,
 	name string, seed int64) (gmm *GMM, e error) {
 
 	nrows := len(mean)
-	if !floats.EqualLengths(mean, variance) {
+	if !floats.EqualLengths(mean, sd) {
 		panic(floatx.ErrLength)
 	}
 
@@ -241,11 +240,13 @@ func RandomGMM(mean, variance []float64, numComponents int,
 	r := rand.New(rand.NewSource(seed))
 	for _, c := range gmm.components {
 		var rv []float64
-		if rv, e = RandomVector(mean, variance, r); e != nil {
+		if rv, e = RandomVector(mean, sd, r); e != nil {
 			return
 		}
-		c.SetMean(rv)
-		c.SetVariance(variance)
+		c.Mean = rv
+		variance := make([]float64, len(sd))
+		floatx.Apply(sq, sd, variance)
+		c.setVariance(variance)
 	}
 	return
 }
@@ -281,9 +282,10 @@ func (gmm *GMM) NumSamples() float64 { return gmm.numSamples }
 func (gmm *GMM) NumElements() int    { return gmm.numElements }
 func (gmm *GMM) Trainable() bool     { return gmm.trainable }
 func (gmm *GMM) SetName(name string) { gmm.name = name }
+func (gmm *GMM) Initialize()         {}
 
 // Export struct.
-type GMMValues struct {
+/*type GMMValues struct {
 	Name          string
 	Type          string
 	NumElements   int
@@ -317,7 +319,8 @@ func (gmm *GMM) Values() interface{} {
 
 	return values
 }
-
+*/
+/*
 func (gmm *GMM) New(values interface{}) (model.Modeler, error) {
 
 	v := values.(*GMMValues)
@@ -347,3 +350,4 @@ func (gmm *GMM) New(values interface{}) (model.Modeler, error) {
 
 	return ng, nil
 }
+*/

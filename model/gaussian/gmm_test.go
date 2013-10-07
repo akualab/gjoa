@@ -76,11 +76,11 @@ func TestTrainGMM(t *testing.T) {
 	}
 	g.Estimate()
 	t.Logf("Gaussian Model for training set:")
-	t.Logf("Mean: \n%+v", g.Mean())
-	t.Logf("STD: \n%+v", g.StandardDeviation())
+	t.Logf("Mean: \n%+v", g.Mean)
+	t.Logf("STD: \n%+v", g.StdDev)
 
 	// Use the estimated mean and variance to generate a seed GMM.
-	gmm, e = RandomGMM(g.Mean(), g.Variance(), numComp,
+	gmm, e = RandomGMM(g.Mean, g.StdDev, numComp,
 		"mygmm", 99)
 	if e != nil {
 		t.Fatal(e)
@@ -116,8 +116,8 @@ func TestTrainGMM(t *testing.T) {
 		t.Logf("Likelihood: %f", gmm.totalLikelihood)
 		t.Logf("Num Samples: %f", gmm.numSamples)
 		for _, c := range gmm.components {
-			t.Logf("%s: Mean: \n%+v", c.Name(), c.Mean())
-			t.Logf("%s: STD: \n%+v", c.Name(), c.StandardDeviation())
+			t.Logf("%s: Mean: \n%+v", c.Name(), c.Mean)
+			t.Logf("%s: STD: \n%+v", c.Name(), c.StdDev)
 		}
 
 		// Prepare for next iteration.
@@ -126,25 +126,25 @@ func TestTrainGMM(t *testing.T) {
 
 	for i := 0; i < dim; i++ {
 		g := gmm.components[1]
-		if !model.Comparef64(mean0[i], g.Mean()[i], epsilon) {
+		if !model.Comparef64(mean0[i], g.Mean[i], epsilon) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
-				i, mean0[i], g.Mean()[i])
+				i, mean0[i], g.Mean[i])
 		}
-		if !model.Comparef64(std0[i], g.StandardDeviation()[i], epsilon) {
+		if !model.Comparef64(std0[i], g.StdDev[i], epsilon) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
-				i, std0[i], g.StandardDeviation()[i])
+				i, std0[i], g.StdDev[i])
 		}
 	}
 
 	for i := 0; i < dim; i++ {
 		g := gmm.components[0]
-		if !model.Comparef64(mean1[i], g.Mean()[i], epsilon) {
+		if !model.Comparef64(mean1[i], g.Mean[i], epsilon) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
-				i, mean1[i], g.Mean()[i])
+				i, mean1[i], g.Mean[i])
 		}
-		if !model.Comparef64(std1[i], g.StandardDeviation()[i], epsilon) {
+		if !model.Comparef64(std1[i], g.StdDev[i], epsilon) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
-				i, std1[i], g.StandardDeviation()[i])
+				i, std1[i], g.StdDev[i])
 		}
 	}
 
@@ -232,14 +232,14 @@ func TestTrainGMM2(t *testing.T) {
 		t.Logf("Likelihood: %f", gmm.totalLikelihood)
 		t.Logf("Num Samples: %f", gmm.numSamples)
 		for _, c := range gmm.components {
-			t.Logf("%s: Mean: \n%+v", c.Name(), c.Mean())
-			t.Logf("%s: STD: \n%+v", c.Name(), c.StandardDeviation())
+			t.Logf("%s: Mean: \n%+v", c.Name(), c.Mean)
+			t.Logf("%s: STD: \n%+v", c.Name(), c.StdDev)
 		}
 
 	}
 	// Checking results
 	// The components can be in different orders
-	if model.Comparef64(1.0, gmm.components[0].Mean()[0], epsilon) {
+	if model.Comparef64(1.0, gmm.components[0].Mean[0], epsilon) {
 		CompareGaussians(t, gmm0.components[0], gmm.components[0], epsilon)
 		CompareGaussians(t, gmm0.components[1], gmm.components[1], epsilon)
 	} else {
@@ -301,6 +301,6 @@ func TestWriteReadGMM(t *testing.T) {
 }
 
 func CompareGaussians(t *testing.T, g1 *Gaussian, g2 *Gaussian, epsilon float64) {
-	model.CompareSliceFloat(t, g1.Mean(), g2.Mean(), "Wrong Mean", epsilon)
-	model.CompareSliceFloat(t, g1.Variance(), g2.Variance(), "Wrong Variance", epsilon)
+	model.CompareSliceFloat(t, g1.Mean, g2.Mean, "Wrong Mean", epsilon)
+	model.CompareSliceFloat(t, g1.StdDev, g2.StdDev, "Wrong SD", epsilon)
 }

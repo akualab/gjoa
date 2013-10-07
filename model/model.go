@@ -46,8 +46,9 @@ type Generator interface {
 // A read-only model.
 type Modeler interface {
 
-	// Creates a new model using the values sturct.
-	New(values interface{}) (Modeler, error)
+	// Initializes model. Must be called to initialized private fields when
+	// the model is created using a Read method.
+	Initialize()
 
 	// Returns the probabilty of obs given the model.
 	Prob(obs interface{}) float64
@@ -64,11 +65,6 @@ type Modeler interface {
 	// True if the model is trainable.
 	Trainable() bool
 
-	// Writes values to a Writer.
-	Write(w io.Writer) error
-
-	// Returns the model values.
-	Values() interface{}
 	Generator
 }
 
@@ -98,7 +94,7 @@ type SequenceTrainer interface {
 // this type. The field Base.Model must be initialized to point to the model
 // implementation.
 type BaseModel struct {
-	Model Modeler
+	Model Modeler `json:"-"`
 }
 
 func NewBaseModel(m Modeler) BaseModel {
@@ -114,14 +110,20 @@ func (base *BaseModel) Read(r io.Reader) (Modeler, error) {
 		return nil, err
 	}
 
-	values := base.Model.Values()
-	err = json.Unmarshal(b, values)
-	m, e := base.Model.New(values)
+	// Get a Modeler object.
+	model := base.Model
+	value := reflect.Indirect(reflect.ValueOf(model))
+	o := reflect.New(value.Type()).Interface().(Modeler)
+
+	//values := base.Model.Values()
+	e := json.Unmarshal(b, &o)
+
+	//e := model.(json.Unmarshaler).UnmarshalJSON(b)
 	if e != nil {
 		return nil, e
 	}
 
-	return m, err
+	return o, e
 }
 
 // Reads model data from file. See Read().
@@ -137,7 +139,7 @@ func (base *BaseModel) ReadFile(fn string) (Modeler, error) {
 // Writes model values to an io.Writer.
 func (base *BaseModel) Write(w io.Writer) error {
 
-	b, err := json.Marshal(base.Model.Values())
+	b, err := json.Marshal(base.Model)
 	if err != nil {
 		return err
 	}
