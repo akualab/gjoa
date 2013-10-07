@@ -6,7 +6,6 @@ Search graph.
 package hmm
 
 import (
-	"fmt"
 	"github.com/akualab/gjoa/floatx"
 )
 
@@ -30,14 +29,9 @@ func (hmm *HMM) viterbi(observations [][]float64) (bt []int, logViterbiProb floa
 	// Num states
 	N := hmm.nstates
 
-	// expected num rows: numElements
-	// expected num cols: T
-	T, ne := floatx.Check2D(observations)
-
-	if ne != hmm.numElements {
-		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].", ne, hmm.numElements)
-		return
-	}
+	// num rows: T
+	// num cols: numElements
+	T, _ := floatx.Check2D(observations)
 
 	// Allocate delta, index and bt
 	delta := floatx.MakeFloat2D(N, T)

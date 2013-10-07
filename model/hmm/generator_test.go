@@ -5,7 +5,6 @@ import (
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/gjoa/model/gaussian"
 	"math/rand"
-	"os"
 	"testing"
 	"time"
 )
@@ -28,7 +27,7 @@ func MakeHMM2(t *testing.T) *HMM {
 	initialStateProbs := []float64{0.25, 0.75}
 	transProbs := [][]float64{{0.7, 0.3}, {0.5, 0.5}}
 	models := []*gaussian.Gaussian{g0, g1}
-	m := make([]model.Trainer, len(models))
+	m := make([]model.Modeler, len(models))
 	for i, v := range models {
 		m[i] = v
 	}
@@ -66,7 +65,7 @@ func MakeRandHMM(t *testing.T, seed int64) *HMM {
 	initialStateProbs := []float64{ran0, 1 - ran0}
 	transProbs := [][]float64{{ran1, 1 - ran1}, {ran2, 1 - ran2}}
 	models := []*gaussian.Gaussian{g0, g1}
-	m := make([]model.Trainer, len(models))
+	m := make([]model.Modeler, len(models))
 	for i, v := range models {
 		m[i] = v
 	}
@@ -151,9 +150,6 @@ func TestTrainHMM(t *testing.T) {
 	t.Logf("Time per iteration: %v", dur/time.Duration(iter))
 	t.Logf("Time per frame: %v", dur/time.Duration(iter*n*m))
 
-	// Write model.
-	fn := os.TempDir() + "hmm.json"
-	hmm.WriteToFile(fn)
 }
 
 func CompareGaussians(t *testing.T, g1 *gaussian.Gaussian, g2 *gaussian.Gaussian, eps float64) {

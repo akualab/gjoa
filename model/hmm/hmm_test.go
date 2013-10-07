@@ -5,6 +5,7 @@ import (
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/gjoa/model/gaussian"
+	"os"
 	"testing"
 )
 
@@ -65,10 +66,10 @@ func MakeHMM(t *testing.T) *HMM {
 	// These are the models.
 	models := []*gaussian.Gaussian{g1, g2}
 
-	// To pass the to an HMM we need to convert []*gaussian.Gaussian[]
+	// To pass an HMM we need to convert []*gaussian.Gaussian[]
 	// to []model.Trainer
 	// see http://golang.org/doc/faq#convert_slice_of_interface
-	m := make([]model.Trainer, len(models))
+	m := make([]model.Modeler, len(models))
 	for i, v := range models {
 		m[i] = v
 	}
@@ -142,6 +143,25 @@ func TestEvaluationXi(t *testing.T) {
 	xsi1 := Convert3DSlideTo1D(xi)
 	message := "Error in xi"
 	model.CompareSliceFloat(t, xsi, xsi1, message, epsilon)
+}
+
+func TestWriteReadHMM(t *testing.T) {
+
+	hmm := MakeHMM(t)
+
+	fn := os.TempDir() + "hmm.json"
+	hmm.WriteFile(fn)
+	x, e1 := hmm.ReadFile(fn)
+	if e1 != nil {
+		t.Fatal(e1)
+	}
+	hmm1 := x.(*HMM)
+	for i, v := range hmm.obsModels {
+		m := v.(*gaussian.Gaussian)
+		m1 := hmm1.obsModels[i].(*gaussian.Gaussian)
+		CompareGaussians(t, m, m1, 0.01)
+	}
+
 }
 
 var (

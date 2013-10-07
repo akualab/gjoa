@@ -13,6 +13,7 @@ import (
 	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
+	"github.com/akualab/gjoa/model/gaussian"
 	"github.com/golang/glog"
 	"github.com/gonum/floats"
 	"math"
@@ -30,7 +31,7 @@ func setValueFunc(f float64) floatx.ApplyFunc {
 }
 
 type HMM struct {
-	model.Base
+	model.BaseModel
 
 	// Model name.
 	name string
@@ -51,15 +52,12 @@ type HMM struct {
 
 	// Observation probability distribution functions. [nstates x 1]
 	// b(j,k) = P[o(t) | q(t) = j]
-	obsModels []model.Trainer
+	obsModels []model.Modeler
 
 	// Initial state distribution. [nstates x 1]
 	// π(i) = P[q(0) = i]; 0<=i<N
 	// => saved in log domain.
 	logInitProbs []float64
-
-	// Num elements in obs vector.
-	numElements int
 
 	// Complete HMM model.
 	// Φ = (A, B, π)
@@ -79,8 +77,13 @@ type HMM struct {
 var log = func(r int, v float64) float64 { return math.Log(v) }
 var log2D = func(r int, c int, v float64) float64 { return math.Log(v) }
 
+func init() {
+	m := new(HMM)
+	model.Register(m)
+}
+
 // Create a new HMM.
-func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []model.Trainer, trainable bool, name string, trainerConfig *gjoa.TrainerConfig) (hmm *HMM, e error) {
+func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []model.Modeler, trainable bool, name string, trainerConfig *gjoa.TrainerConfig) (hmm *HMM, e error) {
 
 	r, _ := floatx.Check2D(transProbs)
 	r1 := len(initialStateProbs)
@@ -120,12 +123,11 @@ func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []mod
 		logTransProbs: logTransProbs,
 		obsModels:     obsModels,
 		logInitProbs:  logInitProbs,
-		numElements:   obsModels[0].NumElements(),
 		name:          name,
 		trainerConfig: trainerConfig,
 		generator:     NewGenerator(hmm, trainerConfig.HMM.GeneratorSeed),
 	}
-	hmm.Base.Model = hmm
+	hmm.BaseModel.Model = hmm
 
 	if !trainable {
 		return
@@ -167,18 +169,9 @@ func (hmm *HMM) alpha(observations [][]float64) (α [][]float64, logProb float64
 	// Num states.
 	N := hmm.nstates
 
-	// expected num rows: numElements
-	// expected num cols: T
-	T, ne := floatx.Check2D(observations)
-
-	if ne != hmm.numElements {
-		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].", ne, hmm.numElements)
-		return
-	}
-
-	if glog.V(3) {
-		//glog.Infof("N: %d, T: %d", N, T)
-	}
+	// num rows: T
+	// num cols: ne
+	T, _ := floatx.Check2D(observations)
 
 	// Allocate log-alpha matrix.
 	// TODO: use a reusable data structure to minimize garbage.
@@ -231,14 +224,9 @@ func (hmm *HMM) beta(observations [][]float64) (β [][]float64, e error) {
 	// Num states.
 	N := hmm.nstates
 
-	// expected num rows: numElements
-	// expected num cols: T
-	T, ne := floatx.Check2D(observations)
-
-	if ne != hmm.numElements {
-		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].", ne, hmm.numElements)
-		return
-	}
+	// num rows: T
+	// num cols: numElements
+	T, _ := floatx.Check2D(observations)
 
 	// Allocate log-beta matrix.
 	// TODO: use a reusable data structure to minimize garbage.
@@ -328,7 +316,7 @@ func (hmm *HMM) xi(observations, α, β [][]float64) (ζ [][][]float64, e error)
 	a := hmm.logTransProbs
 	αr, αc := floatx.Check2D(α)
 	βr, βc := floatx.Check2D(β)
-	oc, or := floatx.Check2D(observations)
+	oc, _ := floatx.Check2D(observations)
 
 	if αr != βr || αc != βc {
 		e = fmt.Errorf("Shape mismatch: alpha[%d,%d] beta[%d,%d]", αr, αc, βr, βc)
@@ -337,11 +325,6 @@ func (hmm *HMM) xi(observations, α, β [][]float64) (ζ [][][]float64, e error)
 
 	T := αc
 	N := hmm.nstates
-	if or != hmm.numElements {
-		e = fmt.Errorf("Mismatch in num elements in observations [%d] expected [%d].",
-			or, hmm.numElements)
-		return
-	}
 	if oc != T {
 		e = fmt.Errorf("Mismatch in T observations has [%d], expected [%d].", oc, T)
 		return
@@ -432,7 +415,7 @@ func (hmm *HMM) Update(observations [][]float64, w float64) (e error) {
 		sumg := floats.Sum(tmp[:T-1])
 		hmm.sumGamma[i] += sumg
 
-		outputStatePDF := hmm.obsModels[i]
+		outputStatePDF := hmm.obsModels[i].(model.Trainer)
 		for t := 0; t < T; t++ {
 			obs := observations[t]
 			outputStatePDF.Update(obs, tmp[t]) // exp(g(t))
@@ -472,7 +455,7 @@ func (hmm *HMM) Estimate() error {
 		}
 	}
 	for _, m := range hmm.obsModels {
-		m.Estimate()
+		m.(model.Trainer).Estimate()
 	}
 	return nil
 }
@@ -480,7 +463,7 @@ func (hmm *HMM) Estimate() error {
 func (hmm *HMM) Clear() error {
 
 	for _, m := range hmm.obsModels {
-		m.Clear()
+		m.(model.Trainer).Clear()
 	}
 	floatx.Clear2D(hmm.sumXi)
 	floatx.Clear(hmm.sumGamma)
@@ -512,9 +495,15 @@ func (hmm *HMM) Random(r *rand.Rand) (interface{}, []int, error) {
 
 func (hmm *HMM) SetName(name string) {}
 func (hmm *HMM) NumSamples() float64 { return 0.0 }
-func (hmm *HMM) NumElements() int    { return hmm.numElements }
-func (hmm *HMM) Name() string        { return hmm.name }
-func (hmm *HMM) Trainable() bool     { return hmm.trainable }
+func (hmm *HMM) NumElements() int {
+
+	if hmm.obsModels[0] == nil {
+		glog.Fatalf("No observation model available.")
+	}
+	return hmm.obsModels[0].NumElements()
+}
+func (hmm *HMM) Name() string    { return hmm.name }
+func (hmm *HMM) Trainable() bool { return hmm.trainable }
 
 // Compute α and β.
 func (hmm *HMM) alphaBeta(observations [][]float64) (α, β [][]float64, logProb float64, e error) {
@@ -630,7 +619,6 @@ func compareSliceFloat(s1, s2 []float64) bool {
 type HMMValues struct {
 	Name         string
 	Type         string
-	NumElements  int
 	NumStates    int
 	Likelihood   float64
 	OutputModels []interface{}
@@ -645,8 +633,7 @@ func (hmm *HMM) Values() interface{} {
 
 	values := &HMMValues{
 		Name:         hmm.name,
-		Type:         "HMM",
-		NumElements:  hmm.numElements,
+		Type:         hmm.Type(),
 		NumStates:    hmm.nstates,
 		Likelihood:   hmm.sumLogProb,
 		OutputModels: make([]interface{}, hmm.nstates),
@@ -662,4 +649,51 @@ func (hmm *HMM) Values() interface{} {
 	}
 
 	return values
+}
+
+func (hmm *HMM) New(values interface{}) (model.Modeler, error) {
+
+	v := values.(*HMMValues)
+	obsModels := make([]model.Modeler, v.NumStates)
+	ng, e := NewHMM(v.TransProbs, v.InitProbs, obsModels, true, v.Name, nil)
+	if e != nil {
+		return nil, e
+	}
+	/*
+		for k, mv := range v.OutputModels {
+			m, ee := model.Model(mv.Type)
+			if ee != nil {
+				return nil, ee
+			}
+
+			om, e := m.New(mv)
+			if e != nil {
+				return nil, e
+			}
+			ng.obsModels[k] = om
+		}
+	*/
+	ng.sumLogProb = v.Likelihood
+	ng.sumXi = v.SumXi
+	ng.sumGamma = v.SumGamma
+	ng.sumInitProbs = v.SumInitProbs
+
+	return ng, nil
+}
+
+func modelForType(name string) model.Trainer {
+
+	// TODO: I had to hardcode the model type here. We need a more general solution
+	// so we can use any model type without creating a dependency here.
+	var m model.Trainer
+	switch name {
+	case "Gaussian":
+		m = &gaussian.Gaussian{}
+	case "GMM":
+		m = &gaussian.GMM{}
+	default:
+		e := fmt.Errorf("HMM output model type [%s] not supported.", name)
+		glog.Fatal(e)
+	}
+	return m
 }
