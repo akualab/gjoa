@@ -19,7 +19,6 @@ import (
 	"github.com/gonum/floats"
 	"math"
 	"math/rand"
-	//"reflect"
 )
 
 const (
@@ -632,7 +631,6 @@ func (os *ObsSlice) UnmarshalJSON(b []byte) error {
 	bcopy := make([]byte, len(b))
 	copy(bcopy, b)
 	rm := json.RawMessage(bcopy)
-	fmt.Printf("DEBUG: %s\n", rm)
 
 	// Now that we have a raw message we just want to unmarshal the
 	// json "type" attribute into the ModelType field.
