@@ -13,21 +13,20 @@ type GMMConfig struct {
 }
 
 type GMM struct {
-	model.BaseModel
-	name            string
-	numElements     int
-	trainable       bool
-	numSamples      float64
-	diagonal        bool
-	trainingMethod  int
-	numComponents   int
-	posteriorSum    []float64
-	weights         []float64
-	logWeights      []float64
-	tmpProbs        []float64
-	totalLikelihood float64
-	components      []*Gaussian
-	iteration       int
+	*model.BaseModel
+	ModelName    string      `json:"name"`
+	NE           int         `json:"num_elements"`
+	IsTrainable  bool        `json:"trainable"`
+	NSamples     float64     `json:"nsamples"`
+	Diag         bool        `json:"diag"`
+	NComponents  int         `json:"num_components"`
+	PosteriorSum []float64   `json:"posterior_sum,omitempty"`
+	Weights      []float64   `json:"-"`
+	LogWeights   []float64   `json:"weights,omitempty"`
+	Likelihood   float64     `json:"likelihood"`
+	Components   []*Gaussian `json:"components,omitempty"`
+	Iteration    int         `json:"iteration"`
+	tmpProbs     []float64
 }
 
 func init() {
@@ -45,42 +44,56 @@ func NewGaussianMixture(numElements, numComponents int,
 	}
 
 	if !trainable {
-		return &GMM{
-			numComponents: numComponents,
-			diagonal:      true,
-			numElements:   numElements,
-			name:          name,
-			trainable:     trainable,
-		}, nil
+		gmm = &GMM{
+			NComponents: numComponents,
+			Diag:        true,
+			NE:          numElements,
+			ModelName:   name,
+			IsTrainable: trainable,
+		}
+		return
 	}
 
 	gmm = &GMM{
-		numComponents: numComponents,
-		components:    make([]*Gaussian, numComponents, numComponents),
-		posteriorSum:  make([]float64, numComponents),
-		weights:       make([]float64, numComponents),
-		logWeights:    make([]float64, numComponents),
-		tmpProbs:      make([]float64, numComponents),
-		diagonal:      true,
-		numElements:   numElements,
-		name:          name,
-		trainable:     trainable,
+		NComponents:  numComponents,
+		Components:   make([]*Gaussian, numComponents, numComponents),
+		PosteriorSum: make([]float64, numComponents),
+		LogWeights:   make([]float64, numComponents),
+		Diag:         true,
+		NE:           numElements,
+		ModelName:    name,
+		IsTrainable:  trainable,
 	}
-	gmm.BaseModel.Model = gmm
+	// Initialize base model.
+	gmm.BaseModel = model.NewBaseModel(gmm)
 
-	for i, _ := range gmm.components {
-		cname := getComponentName(name, i, gmm.numComponents)
-		gmm.components[i], e = NewGaussian(numElements, nil, nil, trainable, diagonal, cname)
+	for i, _ := range gmm.Components {
+		cname := getComponentName(gmm.ModelName, i, gmm.NComponents)
+		gmm.Components[i], e = NewGaussian(gmm.NE, nil, nil, gmm.IsTrainable, gmm.Diag, cname)
 		if e != nil {
 			return
 		}
 	}
 
 	// Initialize weights.
-	w := 1.0 / float64(numComponents)
-	floatx.Apply(setValueFunc(w), gmm.weights, nil)
-	floatx.Apply(setValueFunc(math.Log(w)), gmm.logWeights, nil)
+	logw := -math.Log(float64(gmm.NComponents))
+	floatx.Apply(setValueFunc(logw), gmm.LogWeights, nil)
+
+	e = gmm.Initialize()
+	if e != nil {
+		return
+	}
 	return
+}
+
+func (gmm *GMM) Initialize() error {
+
+	gmm.tmpProbs = make([]float64, gmm.NComponents)
+
+	// Initialize weights.
+	gmm.Weights = make([]float64, gmm.NComponents)
+	floatx.Apply(exp, gmm.LogWeights, gmm.Weights)
+	return nil
 }
 
 // Computes log prob for mixture.// SIDE EFFECT => returns logProb of
@@ -90,9 +103,9 @@ func (gmm *GMM) logProbInternal(obs, probs []float64) float64 {
 	var max float64 = -math.MaxFloat64
 
 	/* Compute log probabilities for this observation. */
-	for i, c := range gmm.components {
+	for i, c := range gmm.Components {
 		v1 := c.LogProb(obs)
-		v2 := gmm.logWeights[i]
+		v2 := gmm.LogWeights[i]
 		v := v1 + v2
 
 		if probs != nil {
@@ -129,67 +142,67 @@ func (gmm *GMM) Prob(observation interface{}) float64 {
    p(c(i)|o) ~ ---------------------
                 max{p(o|c(i)) p(c(i))}
 
-   The vector gmm.posteriorSum has te
+   The vector gmm.PosteriorSum has te
 */
 
 func (gmm *GMM) Update(obs []float64, w float64) error {
 
-	if !gmm.trainable {
-		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.name)
+	if !gmm.IsTrainable {
+		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.ModelName)
 	}
 
 	maxProb := gmm.logProbInternal(obs, gmm.tmpProbs)
-	gmm.totalLikelihood += maxProb
+	gmm.Likelihood += maxProb
 	floatx.Apply(addScalarFunc(-maxProb+math.Log(w)), gmm.tmpProbs, nil)
 
 	// Compute posterior probabilities.
 	floatx.Apply(exp, gmm.tmpProbs, nil)
 
 	// Update posterior sum, needed to compute mixture weights.
-	floats.Add(gmm.posteriorSum, gmm.tmpProbs)
+	floats.Add(gmm.PosteriorSum, gmm.tmpProbs)
 
 	// Update Gaussian components.
-	for i, c := range gmm.components {
+	for i, c := range gmm.Components {
 		c.Update(obs, gmm.tmpProbs[i])
 	}
 
 	// Count number of observations.
-	gmm.numSamples += w
+	gmm.NSamples += w
 
 	return nil
 }
 
 func (gmm *GMM) Estimate() error {
 
-	if !gmm.trainable {
-		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.name)
+	if !gmm.IsTrainable {
+		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.ModelName)
 	}
 
 	// Estimate mixture weights.
-	floatx.Apply(scaleFunc(1.0/gmm.numSamples), gmm.posteriorSum, gmm.weights)
-	floatx.Apply(log, gmm.weights, gmm.logWeights)
+	floatx.Apply(scaleFunc(1.0/gmm.NSamples), gmm.PosteriorSum, gmm.Weights)
+	floatx.Apply(log, gmm.Weights, gmm.LogWeights)
 
 	// Estimate component density.
-	for _, c := range gmm.components {
+	for _, c := range gmm.Components {
 		c.Estimate()
 	}
-	gmm.iteration += 1
+	gmm.Iteration += 1
 
 	return nil
 }
 
 func (gmm *GMM) Clear() error {
 
-	if !gmm.trainable {
-		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.name)
+	if !gmm.IsTrainable {
+		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.ModelName)
 	}
 
-	for _, c := range gmm.components {
+	for _, c := range gmm.Components {
 		c.Clear()
 	}
-	floatx.Apply(setValueFunc(0), gmm.posteriorSum, nil)
-	gmm.numSamples = 0
-	gmm.totalLikelihood = 0
+	floatx.Apply(setValueFunc(0), gmm.PosteriorSum, nil)
+	gmm.NSamples = 0
+	gmm.Likelihood = 0
 
 	return nil
 }
@@ -197,12 +210,12 @@ func (gmm *GMM) Clear() error {
 // Returns a random GMM vector
 func (gmm *GMM) Random(r *rand.Rand) (interface{}, []int, error) {
 	// Choose a component using weights
-	comp, err := model.RandIntFromDist(gmm.weights, r)
+	comp, err := model.RandIntFromDist(gmm.Weights, r)
 	if err != nil {
 		return nil, nil, err
 	}
 	// Get a random vector from that component
-	return gmm.components[comp].Random(r)
+	return gmm.Components[comp].Random(r)
 }
 
 // Returns a random vector using the mean and sd vectors.
@@ -238,7 +251,7 @@ func RandomGMM(mean, sd []float64, numComponents int,
 	}
 
 	r := rand.New(rand.NewSource(seed))
-	for _, c := range gmm.components {
+	for _, c := range gmm.Components {
 		var rv []float64
 		if rv, e = RandomVector(mean, sd, r); e != nil {
 			return
@@ -252,10 +265,11 @@ func RandomGMM(mean, sd []float64, numComponents int,
 }
 
 // Returns the Gaussian components.
+/*
 func (gmm *GMM) Components() []*Gaussian {
-	return gmm.components
+	return gmm.Components
 }
-
+*/
 func getComponentName(name string, n, numComponents int) string {
 
 	max := numComponents - 1
@@ -277,12 +291,11 @@ func getComponentName(name string, n, numComponents int) string {
 	}
 }
 
-func (gmm *GMM) Name() string        { return gmm.name }
-func (gmm *GMM) NumSamples() float64 { return gmm.numSamples }
-func (gmm *GMM) NumElements() int    { return gmm.numElements }
-func (gmm *GMM) Trainable() bool     { return gmm.trainable }
-func (gmm *GMM) SetName(name string) { gmm.name = name }
-func (gmm *GMM) Initialize()         {}
+func (gmm *GMM) Name() string        { return gmm.ModelName }
+func (gmm *GMM) NumSamples() float64 { return gmm.NSamples }
+func (gmm *GMM) NumElements() int    { return gmm.NE }
+func (gmm *GMM) Trainable() bool     { return gmm.IsTrainable }
+func (gmm *GMM) SetName(name string) { gmm.ModelName = name }
 
 // Export struct.
 /*type GMMValues struct {
@@ -307,8 +320,8 @@ func (gmm *GMM) Values() interface{} {
 		NumSamples:    gmm.numSamples,
 		Diagonal:      gmm.diagonal,
 		NumComponents: gmm.numComponents,
-		PosteriorSum:  gmm.posteriorSum,
-		Weights:       gmm.weights,
+		PosteriorSum:  gmm.PosteriorSum,
+		Weights:       gmm.Weights,
 		Likelihood:    gmm.totalLikelihood,
 		Components:    make([]interface{}, gmm.numComponents),
 	}
@@ -340,12 +353,12 @@ func (gmm *GMM) New(values interface{}) (model.Modeler, error) {
 		}
 		ng.components[k] = g.(*Gaussian)
 	}
-	ng.weights = v.Weights
+	ng.Weights = v.Weights
 	ng.numSamples = v.NumSamples
 	ng.totalLikelihood = v.Likelihood
 
 	if len(v.PosteriorSum) > 0 {
-		ng.posteriorSum = v.PosteriorSum
+		ng.PosteriorSum = v.PosteriorSum
 	}
 
 	return ng, nil

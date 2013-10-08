@@ -27,7 +27,7 @@ import (
 func (hmm *HMM) viterbi(observations [][]float64) (bt []int, logViterbiProb float64, e error) {
 
 	// Num states
-	N := hmm.nstates
+	N := hmm.NStates
 
 	// num rows: T
 	// num cols: numElements
@@ -43,8 +43,8 @@ func (hmm *HMM) viterbi(observations [][]float64) (bt []int, logViterbiProb floa
 
 	// Init delta
 	for i := 0; i < N; i++ {
-		b := hmm.obsModels[i].LogProb(observations[0])
-		delta[i][0] = hmm.logInitProbs[i] + b
+		b := hmm.ObsModels[i].LogProb(observations[0])
+		delta[i][0] = hmm.InitProbs[i] + b
 	}
 
 	// Recursion
@@ -52,11 +52,11 @@ func (hmm *HMM) viterbi(observations [][]float64) (bt []int, logViterbiProb floa
 		for i := 0; i < N; i++ {
 			// Computing max in k to define delta(i,t)
 			// init max with k=0
-			b := hmm.obsModels[i].LogProb(observations[t])
-			max := delta[0][t-1] + hmm.logTransProbs[0][i] + b
+			b := hmm.ObsModels[i].LogProb(observations[t])
+			max := delta[0][t-1] + hmm.TransProbs[0][i] + b
 			argmax := 0
 			for k := 1; k < N; k++ {
-				tempProb := delta[k][t-1] + hmm.logTransProbs[k][i] + b
+				tempProb := delta[k][t-1] + hmm.TransProbs[k][i] + b
 				if tempProb > max {
 					max = tempProb
 					argmax = k

@@ -47,15 +47,15 @@ func MakeHMM(t *testing.T) *HMM {
 
 	// Gaussian 1.
 	mean1 := []float64{1}
-	var1 := []float64{1}
-	g1, eg1 := gaussian.NewGaussian(1, mean1, var1, true, true, "g1")
+	sd1 := []float64{1}
+	g1, eg1 := gaussian.NewGaussian(1, mean1, sd1, true, true, "g1")
 	if eg1 != nil {
 		t.Fatal(eg1)
 	}
 	// Gaussian 2.
 	mean2 := []float64{4}
-	var2 := []float64{4}
-	g2, eg2 := gaussian.NewGaussian(1, mean2, var2, true, true, "g2")
+	sd2 := []float64{2}
+	g2, eg2 := gaussian.NewGaussian(1, mean2, sd2, true, true, "g2")
 	if eg2 != nil {
 		t.Fatal(eg2)
 	}
@@ -156,9 +156,9 @@ func TestWriteReadHMM(t *testing.T) {
 		t.Fatal(e1)
 	}
 	hmm1 := x.(*HMM)
-	for i, v := range hmm.obsModels {
+	for i, v := range hmm.ObsModels {
 		m := v.(*gaussian.Gaussian)
-		m1 := hmm1.obsModels[i].(*gaussian.Gaussian)
+		m1 := hmm1.ObsModels[i].(*gaussian.Gaussian)
 		CompareGaussians(t, m, m1, 0.01)
 	}
 

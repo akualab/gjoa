@@ -24,7 +24,7 @@ func TestGMMName(t *testing.T) {
 	// 	t.Logf("Name for comp #%4d: %s", i, c.Name())
 	// }
 
-	name := gmm.Components()[111].Name()
+	name := gmm.Components[111].Name()
 	if name != "mygmm-111" {
 		t.Errorf("Wrong component name in gmm. Expected: [mygmm-111], Got: [%s]", name)
 	}
@@ -32,7 +32,7 @@ func TestGMMName(t *testing.T) {
 
 // Trains a GMM as follows:
 // 1 - Estimate a Gaussian model params for the trainign set.
-// 2 - Use teh mean and variance of the training set to generate
+// 2 - Use the mean and sd of the training set to generate
 //     a random GMM to be used as seed.
 // 3 - Run several iterations of the GMM max likelihood training algorithm
 //     to estimate the GMM weights and the Gaussian component mean, and
@@ -54,7 +54,7 @@ func TestTrainGMM(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	t.Logf("Initial Weights: \n%+v", gmm.weights)
+	t.Logf("Initial Weights: \n%+v", gmm.Weights)
 
 	// Estimate mean variance of the data.
 	g, e := NewGaussian(dim, nil, nil, true, true, "test training")
@@ -77,9 +77,9 @@ func TestTrainGMM(t *testing.T) {
 	g.Estimate()
 	t.Logf("Gaussian Model for training set:")
 	t.Logf("Mean: \n%+v", g.Mean)
-	t.Logf("STD: \n%+v", g.StdDev)
+	t.Logf("SD: \n%+v", g.StdDev)
 
-	// Use the estimated mean and variance to generate a seed GMM.
+	// Use the estimated mean and sd to generate a seed GMM.
 	gmm, e = RandomGMM(g.Mean, g.StdDev, numComp,
 		"mygmm", 99)
 	if e != nil {
@@ -112,10 +112,10 @@ func TestTrainGMM(t *testing.T) {
 
 		t.Logf("Iter: %d", iter)
 		t.Logf("GMM: %+v", gmm)
-		t.Logf("Weights: \n%+v", gmm.weights)
-		t.Logf("Likelihood: %f", gmm.totalLikelihood)
-		t.Logf("Num Samples: %f", gmm.numSamples)
-		for _, c := range gmm.components {
+		t.Logf("Weights: \n%+v", gmm.Weights)
+		t.Logf("Likelihood: %f", gmm.Likelihood)
+		t.Logf("Num Samples: %f", gmm.NSamples)
+		for _, c := range gmm.Components {
 			t.Logf("%s: Mean: \n%+v", c.Name(), c.Mean)
 			t.Logf("%s: STD: \n%+v", c.Name(), c.StdDev)
 		}
@@ -125,7 +125,7 @@ func TestTrainGMM(t *testing.T) {
 	}
 
 	for i := 0; i < dim; i++ {
-		g := gmm.components[1]
+		g := gmm.Components[1]
 		if !model.Comparef64(mean0[i], g.Mean[i], epsilon) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
 				i, mean0[i], g.Mean[i])
@@ -137,7 +137,7 @@ func TestTrainGMM(t *testing.T) {
 	}
 
 	for i := 0; i < dim; i++ {
-		g := gmm.components[0]
+		g := gmm.Components[0]
 		if !model.Comparef64(mean1[i], g.Mean[i], epsilon) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
 				i, mean1[i], g.Mean[i])
@@ -148,14 +148,14 @@ func TestTrainGMM(t *testing.T) {
 		}
 	}
 
-	if !model.Comparef64(0.5, gmm.weights[0], epsilon) {
+	if !model.Comparef64(0.5, gmm.Weights[0], epsilon) {
 		t.Errorf("Wrong weights[0]. Expected: [%f], Got: [%f]",
-			0.5, gmm.weights[0])
+			0.5, gmm.Weights[0])
 	}
 
-	if !model.Comparef64(0.5, gmm.weights[1], epsilon) {
+	if !model.Comparef64(0.5, gmm.Weights[1], epsilon) {
 		t.Errorf("Wrong weights[0]. Expected: [%f], Got: [%f]",
-			0.5, gmm.weights[1])
+			0.5, gmm.Weights[1])
 	}
 
 }
@@ -163,17 +163,17 @@ func TestTrainGMM(t *testing.T) {
 func MakeGMM(t *testing.T) *GMM {
 
 	mean0 := []float64{1, 2}
-	var0 := []float64{0.09, 0.09}
+	sd0 := []float64{0.3, 0.3}
 	mean1 := []float64{4, 4}
-	var1 := []float64{1, 1}
+	sd1 := []float64{1, 1}
 	weights := []float64{0.6, 0.4}
 	dim := len(mean0)
 
-	g0, eg0 := NewGaussian(2, mean0, var0, true, true, "g0")
+	g0, eg0 := NewGaussian(2, mean0, sd0, true, true, "g0")
 	if eg0 != nil {
 		t.Fatal(eg0)
 	}
-	g1, eg1 := NewGaussian(2, mean1, var1, true, true, "g1")
+	g1, eg1 := NewGaussian(2, mean1, sd1, true, true, "g1")
 	if eg1 != nil {
 		t.Fatal(eg1)
 	}
@@ -183,8 +183,8 @@ func MakeGMM(t *testing.T) *GMM {
 		t.Fatal(e)
 	}
 	// this should probably be done in NewGaussianMixture
-	gmm.components = components
-	gmm.weights = weights
+	gmm.Components = components
+	gmm.Weights = weights
 	return gmm
 }
 
@@ -200,10 +200,10 @@ func TestTrainGMM2(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	t.Logf("Initial Weights: \n%+v", gmm.weights)
+	t.Logf("Initial Weights: \n%+v", gmm.Weights)
 	mean01 := []float64{2.5, 3}
-	var01 := []float64{0.5, 0.5}
-	gmm, e = RandomGMM(mean01, var01, numComp, "mygmm", 99)
+	sd01 := []float64{0.70710678118, 0.70710678118}
+	gmm, e = RandomGMM(mean01, sd01, numComp, "mygmm", 99)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -228,10 +228,10 @@ func TestTrainGMM2(t *testing.T) {
 
 		t.Logf("Iter: %d", iter)
 		t.Logf("GMM: %+v", gmm)
-		t.Logf("Weights: \n%+v", gmm.weights)
-		t.Logf("Likelihood: %f", gmm.totalLikelihood)
-		t.Logf("Num Samples: %f", gmm.numSamples)
-		for _, c := range gmm.components {
+		t.Logf("Weights: \n%+v", gmm.Weights)
+		t.Logf("Likelihood: %f", gmm.Likelihood)
+		t.Logf("Num Samples: %f", gmm.NSamples)
+		for _, c := range gmm.Components {
 			t.Logf("%s: Mean: \n%+v", c.Name(), c.Mean)
 			t.Logf("%s: STD: \n%+v", c.Name(), c.StdDev)
 		}
@@ -239,12 +239,12 @@ func TestTrainGMM2(t *testing.T) {
 	}
 	// Checking results
 	// The components can be in different orders
-	if model.Comparef64(1.0, gmm.components[0].Mean[0], epsilon) {
-		CompareGaussians(t, gmm0.components[0], gmm.components[0], epsilon)
-		CompareGaussians(t, gmm0.components[1], gmm.components[1], epsilon)
+	if model.Comparef64(1.0, gmm.Components[0].Mean[0], epsilon) {
+		CompareGaussians(t, gmm0.Components[0], gmm.Components[0], epsilon)
+		CompareGaussians(t, gmm0.Components[1], gmm.Components[1], epsilon)
 	} else {
-		CompareGaussians(t, gmm0.components[1], gmm.components[0], epsilon)
-		CompareGaussians(t, gmm0.components[0], gmm.components[1], epsilon)
+		CompareGaussians(t, gmm0.Components[1], gmm.Components[0], epsilon)
+		CompareGaussians(t, gmm0.Components[0], gmm.Components[1], epsilon)
 	}
 }
 
@@ -259,10 +259,10 @@ func TestWriteReadGMM(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	t.Logf("Initial Weights: \n%+v", gmm.weights)
+	t.Logf("Initial Weights: \n%+v", gmm.Weights)
 	mean01 := []float64{2.5, 3}
-	var01 := []float64{0.5, 0.5}
-	gmm, e = RandomGMM(mean01, var01, numComp, "mygmm", 99)
+	sd01 := []float64{0.70710678118, 0.70710678118}
+	gmm, e = RandomGMM(mean01, sd01, numComp, "mygmm", 99)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -286,18 +286,28 @@ func TestWriteReadGMM(t *testing.T) {
 	// Write model.
 	fn := os.TempDir() + "gmm.json"
 	gmm.WriteFile(fn)
-	x, e1 := gmm.ReadFile(fn)
+	/*
+		x, e1 := gmm.ReadFile(fn)
+		if e1 != nil {
+			t.Fatal(e1)
+		}
+		gmm1 := x.(*GMM)
+	*/
+
+	// Create another Gaussian model.
+	m1, e1 := gmm.ReadFile(fn)
 	if e1 != nil {
 		t.Fatal(e1)
 	}
-	gmm1 := x.(*GMM)
+	gmm1 := m1.(*GMM)
+	gmm1.Initialize()
 
 	// Compare gmm and gmm1
-	for k, v := range gmm.components {
-		CompareGaussians(t, v, gmm1.components[k], epsilon)
+	for k, v := range gmm.Components {
+		CompareGaussians(t, v, gmm1.Components[k], epsilon)
 	}
-	model.CompareSliceFloat(t, gmm.weights, gmm1.weights, "Weights don't match.", epsilon)
-	model.CompareSliceFloat(t, gmm.posteriorSum, gmm1.posteriorSum, "PosteriorSum doesn't match.", epsilon)
+	model.CompareSliceFloat(t, gmm.Weights, gmm1.Weights, "Weights don't match.", epsilon)
+	model.CompareSliceFloat(t, gmm.PosteriorSum, gmm1.PosteriorSum, "PosteriorSum doesn't match.", epsilon)
 }
 
 func CompareGaussians(t *testing.T, g1 *Gaussian, g2 *Gaussian, epsilon float64) {

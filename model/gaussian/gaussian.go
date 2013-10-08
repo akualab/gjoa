@@ -17,7 +17,7 @@ const (
 
 // Multivariate Gaussian distribution.
 type Gaussian struct {
-	model.BaseModel
+	*model.BaseModel
 	ModelName   string    `json:"name,omitempty"`
 	NE          int       `json:"num_elements"`
 	IsTrainable bool      `json:"trainable"`
@@ -80,12 +80,14 @@ func NewGaussian(numElements int, mean, sd []float64,
 		IsTrainable: trainable,
 		fpool:       floatx.NewPool(numElements),
 	}
-	g.BaseModel.Model = g
+	// Initialize base model.
+	g.BaseModel = model.NewBaseModel(g)
+
 	g.Initialize()
 	return
 }
 
-func (g *Gaussian) Initialize() {
+func (g *Gaussian) Initialize() error {
 
 	if g.Mean == nil {
 		g.Mean = make([]float64, g.NE)
@@ -112,7 +114,7 @@ func (g *Gaussian) Initialize() {
 	g.const1 = -float64(g.NE) * math.Log(2.0*math.Pi) / 2.0
 	g.const2 = g.const1 - floats.Sum(g.tmpArray)/2.0
 
-	return
+	return nil
 }
 
 func (g *Gaussian) LogProb(observation interface{}) (v float64) {

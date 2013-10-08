@@ -23,7 +23,6 @@ func Register(model Modeler) {
 	value := reflect.Indirect(reflect.ValueOf(model))
 	name := value.Type().Name()
 	modelTypes[name] = model
-	fmt.Printf("DEBUG: name: %s\n", name)
 }
 
 // Returns an uninitialized instance of the model.
@@ -48,7 +47,7 @@ type Modeler interface {
 
 	// Initializes model. Must be called to initialized private fields when
 	// the model is created using a Read method.
-	Initialize()
+	Initialize() error
 
 	// Returns the probabilty of obs given the model.
 	Prob(obs interface{}) float64
@@ -94,11 +93,19 @@ type SequenceTrainer interface {
 // this type. The field Base.Model must be initialized to point to the model
 // implementation.
 type BaseModel struct {
-	Model Modeler `json:"-"`
+	Model     Modeler `json:"-"`
+	ModelType string  `json:"type"`
 }
 
-func NewBaseModel(m Modeler) BaseModel {
-	return BaseModel{m}
+func NewBaseModel(model Modeler) *BaseModel {
+
+	value := reflect.Indirect(reflect.ValueOf(model))
+	modelType := value.Type().Name()
+
+	return &BaseModel{
+		Model:     model,
+		ModelType: modelType,
+	}
 }
 
 // Unmarshals data into a Values struct. The original model instance is not modified.
@@ -139,6 +146,7 @@ func (base *BaseModel) ReadFile(fn string) (Modeler, error) {
 // Writes model values to an io.Writer.
 func (base *BaseModel) Write(w io.Writer) error {
 
+	base.ModelType = base.Type()
 	b, err := json.Marshal(base.Model)
 	if err != nil {
 		return err

@@ -4,6 +4,7 @@ import (
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/gjoa/model/gaussian"
+	"math"
 	"math/rand"
 	"testing"
 	"time"
@@ -12,15 +13,15 @@ import (
 func MakeHMM2(t *testing.T) *HMM {
 
 	mean0 := []float64{1, 2}
-	var0 := []float64{0.5, 0.3}
+	sd0 := []float64{0.70710678118, 0.5477225575}
 	mean1 := []float64{4, 4}
-	var1 := []float64{0.2, 3}
+	sd1 := []float64{0.4472135955, 1.73205080757}
 
-	g0, eg0 := gaussian.NewGaussian(2, mean0, var0, true, true, "g0")
+	g0, eg0 := gaussian.NewGaussian(2, mean0, sd0, true, true, "g0")
 	if eg0 != nil {
 		t.Fatal(eg0)
 	}
-	g1, eg1 := gaussian.NewGaussian(2, mean1, var1, true, true, "g1")
+	g1, eg1 := gaussian.NewGaussian(2, mean1, sd1, true, true, "g1")
 	if eg1 != nil {
 		t.Fatal(eg1)
 	}
@@ -52,13 +53,13 @@ func MakeRandHMM(t *testing.T, seed int64) *HMM {
 	ran2 := r.Float64()
 	ran3 := r.Float64()
 	ran4 := r.Float64()
-	var0 := []float64{ran3, 1 - ran3}
-	var1 := []float64{ran4, 1 - ran4}
-	g0, eg0 := gaussian.NewGaussian(2, mean0, var0, true, true, "g0")
+	sd0 := []float64{math.Sqrt(ran3), math.Sqrt(1 - ran3)}
+	sd1 := []float64{math.Sqrt(ran4), math.Sqrt(1 - ran4)}
+	g0, eg0 := gaussian.NewGaussian(2, mean0, sd0, true, true, "g0")
 	if eg0 != nil {
 		t.Fatal(eg0)
 	}
-	g1, eg1 := gaussian.NewGaussian(2, mean1, var1, true, true, "g1")
+	g1, eg1 := gaussian.NewGaussian(2, mean1, sd1, true, true, "g1")
 	if eg1 != nil {
 		t.Fatal(eg1)
 	}
@@ -81,11 +82,11 @@ func TestTrainHMM(t *testing.T) {
 	hmm0 := MakeHMM2(t)
 	hmm := MakeRandHMM(t, 35)
 	log_ip := make([]float64, 0)
-	copy(log_ip, hmm.logInitProbs)
+	copy(log_ip, hmm.InitProbs)
 	log_tp_0 := make([]float64, 0)
 	log_tp_1 := make([]float64, 0)
-	copy(log_tp_0, hmm.logTransProbs[0])
-	copy(log_tp_1, hmm.logTransProbs[1])
+	copy(log_tp_0, hmm.TransProbs[0])
+	copy(log_tp_1, hmm.TransProbs[1])
 	// number of updates
 	iter := 5
 	// size of the generated sequence
@@ -98,10 +99,10 @@ func TestTrainHMM(t *testing.T) {
 		m = 1000
 		eps = 0.03
 	}
-	m00 := hmm0.obsModels[0].(*gaussian.Gaussian)
-	m11 := hmm0.obsModels[1].(*gaussian.Gaussian)
-	m0 := hmm.obsModels[0].(*gaussian.Gaussian)
-	m1 := hmm.obsModels[1].(*gaussian.Gaussian)
+	m00 := hmm0.ObsModels[0].(*gaussian.Gaussian)
+	m11 := hmm0.ObsModels[1].(*gaussian.Gaussian)
+	m0 := hmm.ObsModels[0].(*gaussian.Gaussian)
+	m1 := hmm.ObsModels[1].(*gaussian.Gaussian)
 
 	t0 := time.Now() // Start timer.
 	for i := 0; i < iter; i++ {
@@ -122,28 +123,27 @@ func TestTrainHMM(t *testing.T) {
 		hmm.Estimate()
 
 		// stats
-		m0 = hmm.obsModels[0].(*gaussian.Gaussian)
-		m1 = hmm.obsModels[1].(*gaussian.Gaussian)
-		t.Logf("mean[0] %v, Variance %v", m0.Mean(), m0.Variance())
-		t.Logf("mean[1] %v, Variance %v", m1.Mean(), m1.Variance())
+		m0 = hmm.ObsModels[0].(*gaussian.Gaussian)
+		m1 = hmm.ObsModels[1].(*gaussian.Gaussian)
+		t.Logf("mean[0] %v, SD %v", m0.Mean, m0.StdDev)
+		t.Logf("mean[1] %v, SD %v", m1.Mean, m1.StdDev)
 		tmp := make([]float64, 2)
-		floatx.Apply(exp, hmm.logTransProbs[0], tmp)
+		floatx.Apply(exp, hmm.TransProbs[0], tmp)
 		t.Logf("transition prob [0] %v", tmp)
-		floatx.Apply(exp, hmm.logTransProbs[1], tmp)
+		floatx.Apply(exp, hmm.TransProbs[1], tmp)
 		t.Logf("transition prob [1] %v", tmp)
-		floatx.Apply(exp, hmm.logInitProbs, tmp)
+		floatx.Apply(exp, hmm.InitProbs, tmp)
 		t.Logf("logInitProbs %v", tmp)
 	}
 	dur := time.Now().Sub(t0)
-	//var m0 *gaussian.Gaussian
 	CompareGaussians(t, m00, m0, eps)
 	CompareGaussians(t, m11, m1, eps)
-	model.CompareSliceFloat(t, hmm0.logTransProbs[0], hmm.logTransProbs[0],
-		"error in logTransProbs[0]", eps)
-	model.CompareSliceFloat(t, hmm0.logTransProbs[1], hmm.logTransProbs[1],
-		"error in logTransProbs[1]", eps)
+	model.CompareSliceFloat(t, hmm0.TransProbs[0], hmm.TransProbs[0],
+		"error in TransProbs[0]", eps)
+	model.CompareSliceFloat(t, hmm0.TransProbs[1], hmm.TransProbs[1],
+		"error in TransProbs[1]", eps)
 
-	model.CompareSliceFloat(t, hmm0.logInitProbs, hmm.logInitProbs,
+	model.CompareSliceFloat(t, hmm0.InitProbs, hmm.InitProbs,
 		"error in logInitProbs", eps)
 	// Print time stats.
 	t.Logf("Total time: %v", dur)
@@ -153,6 +153,6 @@ func TestTrainHMM(t *testing.T) {
 }
 
 func CompareGaussians(t *testing.T, g1 *gaussian.Gaussian, g2 *gaussian.Gaussian, eps float64) {
-	model.CompareSliceFloat(t, g1.Mean(), g2.Mean(), "Wrong Mean", eps)
-	model.CompareSliceFloat(t, g1.Variance(), g2.Variance(), "Wrong Variance", eps)
+	model.CompareSliceFloat(t, g1.Mean, g2.Mean, "Wrong Mean", eps)
+	model.CompareSliceFloat(t, g1.StdDev, g2.StdDev, "Wrong SD", eps)
 }
