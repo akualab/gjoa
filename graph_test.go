@@ -2,7 +2,6 @@ package gjoa
 
 import (
 	"io/ioutil"
-	"math"
 	"os"
 	"testing"
 )
@@ -43,10 +42,8 @@ func TestGraph(t *testing.T) {
 	CompareSliceFloat(t, expectedProbs[2], tpm[2], "Error in row 2", 0.0001)
 	CompareSliceFloat(t, expectedProbs[3], tpm[3], "Error in row 3", 0.0001)
 
-	for k, v := range tpm[5] {
-		if !math.IsNaN(v) {
-			t.Fatalf("Expected NaN, got %v for index %d.", v, k)
-		}
+	if len(tpm[5]) > 0 {
+		t.Fatalf("Expected nil, got %v.", tpm[5])
 	}
 }
 

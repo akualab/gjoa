@@ -1,7 +1,6 @@
 package gjoa
 
 import (
-	"github.com/akualab/gjoa/floatx"
 	"github.com/golang/glog"
 	"github.com/gonum/floats"
 	"io"
@@ -86,12 +85,13 @@ func (g *Graph) WriteFile(fn string) error {
 	return nil
 }
 
-// Returns the nodes in the graph and a transition probability
-// matrix.
+// Returns the nodes and transition probability
+// matrix. The matrix is a [][]float64. Note that
+// rows with no outgoing edges  have a nil slice.
 func (g *Graph) Nodes() (nodes []*Node, probs [][]float64) {
 
 	n := len(g.nodes)
-	probs = floatx.MakeFloat2D(n, n)
+	probs = make([][]float64, n)
 
 	// Put nodes in slice.
 	nodes = make([]*Node, n)
@@ -114,11 +114,17 @@ func (g *Graph) Nodes() (nodes []*Node, probs [][]float64) {
 	for _, v := range g.Edges {
 		i := index[v.FromName]
 		j := index[v.ToName]
+		if len(probs[i]) == 0 {
+			probs[i] = make([]float64, n)
+		}
 		probs[i][j] = v.Weight
 	}
 
 	// Make rows add to 1.
 	for i, v := range probs {
+		if len(probs[i]) == 0 {
+			continue
+		}
 		sum := floats.Sum(probs[i])
 		for j, _ := range v {
 			probs[i][j] = probs[i][j] / sum
