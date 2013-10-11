@@ -1,16 +1,16 @@
-# Room Recogmition using HMMs
+# Room Recogition using Statistical Models
 
 The task is to recognize the trajectory of a mobile phone inside a house. The house is divided in "rooms"
 and the topology of the rooms is known. The transitions within the home are constrained by the topology.
 The recognizer must be able to hypothesize the most likely sequence of rooms using features recorded by
 the mobile phone.
 
-* Data
+## Data
 
 The data is stored in files using the following format:
 
 
-* Topology
+## Topology
 
 The topology of the house is provided in the file topology-southcourt.yaml. Here is a sample:
 
@@ -44,7 +44,7 @@ transition is used. These are estimates provided by the home dwellers.
 	g.WriteFile("myhouse.yaml")
 ```
 
-* Modeling
+## Modeling
 
 We have a sequence of feature vectors sampled every 4 seconds. The simplest approach is to train a
 multivariate Gaussian model for each room using the labeled data. In the next section we will show how to
@@ -53,7 +53,7 @@ search the optimal room sequence using a Markov model.
 To train the Gaussians we do:
 
 
-* Search
+## Search
 
 
-* Results
+## Results
