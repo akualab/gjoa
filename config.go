@@ -2,7 +2,7 @@ package gjoa
 
 import ()
 
-type TrainerConfig struct {
+type Config struct {
 	Model string `yaml:"model" json:"model"`
 
 	HMM HMM

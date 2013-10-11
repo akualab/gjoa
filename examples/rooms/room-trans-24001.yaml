@@ -1,0 +1,13 @@
+name: southcourt
+edges:
+  - {from: BACKYARD, to: DINING, weight: 2}
+  - {from: BACKYARD, to: LIVING, weight: 1}
+  - {from: BACKYARD, to: KITCHEN, weight: 1}
+  - {from: BATH1, to: BED1, weight: 3}
+  - {from: BATH1, to: BED2, weight: 2}
+  - {from: BATH2, to: BED4, weight: 2}
+  - {from: BATH2, to: BED2, weight: 2}
+  - {from: BATH3, to: BED5, weight: 2}
+  - {from: BATH3, to: DINING, weight: 3}
+  - {from: BED1, to: BED4, weight: 2}
+  - {from: BED1, to: BATH1, weight: 2}

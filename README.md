@@ -6,7 +6,7 @@
 
 ## Basics
 
-Install: `go install github.com/akualab/gjoa/gjoa` (you specified the full package name under GOPATH) teh command `go run` won't work because the main package uses multiple files.
+Install: `go install github.com/akualab/gjoa/gjoa` (you specified the full package name under GOPATH) the command `go run` won't work because the main package uses multiple files.
 
 Print log to stderr. [Learn how to use glog](http://google-glog.googlecode.com/svn/trunk/doc/glog.html)
 ```
@@ -16,11 +16,11 @@ gjoa -logtostderr
 Run the trainer
 ```
 cd my/project
-touch trainer.yaml
+touch gjoa.yaml
 gjoa -logtostderr train
 ```
 
-edit trainer.yaml:
+edit gjoa.yaml:
 ```
 model: hmm
 hmm:

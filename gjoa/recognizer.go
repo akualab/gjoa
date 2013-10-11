@@ -6,7 +6,7 @@ import (
 
 var cmdRecognizer = &Command{
 	Run:       recognizer,
-	UsageLine: "recognizer [options]",
+	UsageLine: "rec [options]",
 	Short:     "runs recognizer",
 	Long: `
 runs recognizer.

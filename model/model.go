@@ -108,8 +108,8 @@ func NewBaseModel(model Modeler) *BaseModel {
 	}
 }
 
-// Unmarshals data into a Values struct. The original model instance is not modified.
-// Returns a new model instance of teh same type as the original.
+// Unmarshals data into a struct. The original model instance is not modified.
+// Returns a new model instance of the same type as the original.
 func (base *BaseModel) Read(r io.Reader) (Modeler, error) {
 
 	b, err := ioutil.ReadAll(r)
@@ -122,10 +122,8 @@ func (base *BaseModel) Read(r io.Reader) (Modeler, error) {
 	value := reflect.Indirect(reflect.ValueOf(model))
 	o := reflect.New(value.Type()).Interface().(Modeler)
 
-	//values := base.Model.Values()
 	e := json.Unmarshal(b, &o)
 
-	//e := model.(json.Unmarshaler).UnmarshalJSON(b)
 	if e != nil {
 		return nil, e
 	}

@@ -56,7 +56,7 @@ func addTrainerFlags(cmd *Command) {
 	// Common.
 	cmd.Flag.StringVar(&dir, "dir", defaultDir, "the project dir")
 	cmd.Flag.StringVar(&eid, "eid", defaultEID, "the experiment id")
-	cmd.Flag.StringVar(&configFilename, "config-file", "trainer.yaml", "the trainer config file")
+	cmd.Flag.StringVar(&configFilename, "config-file", "gjoa.yaml", "the trainer config file")
 
 	// Selects a model.
 	cmd.Flag.StringVar(&model, "model", "gaussian", "select a model to train {gaussian, gmm, hmm}")
@@ -78,7 +78,7 @@ func trainer(cmd *Command, args []string) {
 	fn := fmt.Sprintf("%s%c%s", dir, os.PathSeparator, configFilename)
 	data, err := ioutil.ReadFile(fn)
 	gjoa.Fatal(err)
-	config := gjoa.TrainerConfig{}
+	config := gjoa.Config{}
 	err = goyaml.Unmarshal(data, &config)
 	gjoa.Fatal(err)
 

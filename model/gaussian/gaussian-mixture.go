@@ -142,7 +142,6 @@ func (gmm *GMM) Prob(observation interface{}) float64 {
    p(c(i)|o) ~ ---------------------
                 max{p(o|c(i)) p(c(i))}
 
-   The vector gmm.PosteriorSum has te
 */
 
 func (gmm *GMM) Update(obs []float64, w float64) error {

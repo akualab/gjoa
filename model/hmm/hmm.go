@@ -71,9 +71,8 @@ type HMM struct {
 	SumGamma     []float64   `json:"sum_gamma,omitempty"`
 	SumProb      float64     `json:"sum_probs,omitempty"`
 	SumInitProbs []float64   `json:"sum_init_probs,omitempty"`
-
-	generator     *Generator
-	TrainerConfig *gjoa.TrainerConfig `json:"trainer_config,omitempty"`
+	generator    *Generator
+	Config       *gjoa.Config `json:"trainer_config,omitempty"`
 }
 
 // Define functions for elementwise transformations.
@@ -86,7 +85,7 @@ func init() {
 }
 
 // Create a new HMM.
-func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []model.Modeler, trainable bool, name string, trainerConfig *gjoa.TrainerConfig) (hmm *HMM, e error) {
+func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []model.Modeler, trainable bool, name string, config *gjoa.Config) (hmm *HMM, e error) {
 
 	r, _ := floatx.Check2D(transProbs)
 	r1 := len(initialStateProbs)
@@ -96,9 +95,9 @@ func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []mod
 	}
 
 	// Set default config values.
-	if trainerConfig == nil {
+	if config == nil {
 
-		trainerConfig = &gjoa.TrainerConfig{
+		config = &gjoa.Config{
 			HMM: gjoa.HMM{
 				UpdateIP:        true,
 				UpdateTP:        true,
@@ -122,12 +121,12 @@ func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []mod
 	glog.Infof("Trans. Probs:         %v.", transProbs)
 	glog.Infof("Log Trans. Probs:     %v.", logTransProbs)
 	hmm = &HMM{
-		NStates:       r,
-		TransProbs:    logTransProbs,
-		ObsModels:     obsModels,
-		InitProbs:     logInitProbs,
-		ModelName:     name,
-		TrainerConfig: trainerConfig,
+		NStates:    r,
+		TransProbs: logTransProbs,
+		ObsModels:  obsModels,
+		InitProbs:  logInitProbs,
+		ModelName:  name,
+		Config:     config,
 	}
 
 	// Initialize base model.
@@ -152,7 +151,7 @@ INIT:
 
 func (hmm *HMM) Initialize() error {
 
-	hmm.generator = NewGenerator(hmm, hmm.TrainerConfig.HMM.GeneratorSeed)
+	hmm.generator = NewGenerator(hmm, hmm.Config.HMM.GeneratorSeed)
 	return nil
 }
 
@@ -445,14 +444,14 @@ func (hmm *HMM) Estimate() error {
 
 	// Initial state probabilities.
 	s := floats.Sum(hmm.SumInitProbs)
-	if hmm.TrainerConfig.HMM.UpdateIP {
+	if hmm.Config.HMM.UpdateIP {
 		glog.Infof("Sum Init. Probs:    %v.", hmm.SumInitProbs)
 		floatx.Apply(floatx.ScaleFunc(1.0/s), hmm.SumInitProbs, hmm.InitProbs)
 		floatx.Apply(floatx.Log, hmm.InitProbs, nil)
 	}
 
 	// Transition probabilities.
-	if hmm.TrainerConfig.HMM.UpdateTP {
+	if hmm.Config.HMM.UpdateTP {
 		for i, sxi := range hmm.SumXi {
 			sg := hmm.SumGamma[i]
 			floatx.Apply(floatx.ScaleFunc(1.0/sg), sxi, hmm.TransProbs[i])
@@ -495,7 +494,7 @@ func (hmm *HMM) Prob(observation interface{}) float64 {
 
 func (hmm *HMM) Random(r *rand.Rand) (interface{}, []int, error) {
 
-	return hmm.generator.Next(hmm.TrainerConfig.HMM.GeneratorMaxLen)
+	return hmm.generator.Next(hmm.Config.HMM.GeneratorMaxLen)
 }
 
 func (hmm *HMM) SetName(name string) {}
