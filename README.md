@@ -4,8 +4,6 @@
 
 [Gjøa](http://en.wikipedia.org/wiki/Gj%C3%B8a) was the first vessel to transit the Northwest Passage. With a crew of six, Roald Amundsen traversed the passage in a three year journey, finishing in 1906.
 
-![](https://raw.github.com/akualab/gjoa/master/data/gjoa.jpg)
-
 ## Basics
 
 Install: `go install github.com/akualab/gjoa/gjoa` (you specified the full package name under GOPATH) the command `go run` won't work because the main package uses multiple files.
