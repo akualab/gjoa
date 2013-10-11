@@ -2,6 +2,7 @@ package gaussian
 
 import (
 	"flag"
+	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/model"
 	"math/rand"
 	"os"
@@ -126,11 +127,11 @@ func TestTrainGMM(t *testing.T) {
 
 	for i := 0; i < dim; i++ {
 		g := gmm.Components[1]
-		if !model.Comparef64(mean0[i], g.Mean[i], epsilon) {
+		if !gjoa.Comparef64(mean0[i], g.Mean[i], epsilon) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
 				i, mean0[i], g.Mean[i])
 		}
-		if !model.Comparef64(std0[i], g.StdDev[i], epsilon) {
+		if !gjoa.Comparef64(std0[i], g.StdDev[i], epsilon) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
 				i, std0[i], g.StdDev[i])
 		}
@@ -138,22 +139,22 @@ func TestTrainGMM(t *testing.T) {
 
 	for i := 0; i < dim; i++ {
 		g := gmm.Components[0]
-		if !model.Comparef64(mean1[i], g.Mean[i], epsilon) {
+		if !gjoa.Comparef64(mean1[i], g.Mean[i], epsilon) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
 				i, mean1[i], g.Mean[i])
 		}
-		if !model.Comparef64(std1[i], g.StdDev[i], epsilon) {
+		if !gjoa.Comparef64(std1[i], g.StdDev[i], epsilon) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
 				i, std1[i], g.StdDev[i])
 		}
 	}
 
-	if !model.Comparef64(0.5, gmm.Weights[0], epsilon) {
+	if !gjoa.Comparef64(0.5, gmm.Weights[0], epsilon) {
 		t.Errorf("Wrong weights[0]. Expected: [%f], Got: [%f]",
 			0.5, gmm.Weights[0])
 	}
 
-	if !model.Comparef64(0.5, gmm.Weights[1], epsilon) {
+	if !gjoa.Comparef64(0.5, gmm.Weights[1], epsilon) {
 		t.Errorf("Wrong weights[0]. Expected: [%f], Got: [%f]",
 			0.5, gmm.Weights[1])
 	}
@@ -239,7 +240,7 @@ func TestTrainGMM2(t *testing.T) {
 	}
 	// Checking results
 	// The components can be in different orders
-	if model.Comparef64(1.0, gmm.Components[0].Mean[0], epsilon) {
+	if gjoa.Comparef64(1.0, gmm.Components[0].Mean[0], epsilon) {
 		CompareGaussians(t, gmm0.Components[0], gmm.Components[0], epsilon)
 		CompareGaussians(t, gmm0.Components[1], gmm.Components[1], epsilon)
 	} else {
@@ -306,11 +307,11 @@ func TestWriteReadGMM(t *testing.T) {
 	for k, v := range gmm.Components {
 		CompareGaussians(t, v, gmm1.Components[k], epsilon)
 	}
-	model.CompareSliceFloat(t, gmm.Weights, gmm1.Weights, "Weights don't match.", epsilon)
-	model.CompareSliceFloat(t, gmm.PosteriorSum, gmm1.PosteriorSum, "PosteriorSum doesn't match.", epsilon)
+	gjoa.CompareSliceFloat(t, gmm.Weights, gmm1.Weights, "Weights don't match.", epsilon)
+	gjoa.CompareSliceFloat(t, gmm.PosteriorSum, gmm1.PosteriorSum, "PosteriorSum doesn't match.", epsilon)
 }
 
 func CompareGaussians(t *testing.T, g1 *Gaussian, g2 *Gaussian, epsilon float64) {
-	model.CompareSliceFloat(t, g1.Mean, g2.Mean, "Wrong Mean", epsilon)
-	model.CompareSliceFloat(t, g1.StdDev, g2.StdDev, "Wrong SD", epsilon)
+	gjoa.CompareSliceFloat(t, g1.Mean, g2.Mean, "Wrong Mean", epsilon)
+	gjoa.CompareSliceFloat(t, g1.StdDev, g2.StdDev, "Wrong SD", epsilon)
 }

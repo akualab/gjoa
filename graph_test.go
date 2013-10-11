@@ -2,6 +2,7 @@ package gjoa
 
 import (
 	"io/ioutil"
+	"math"
 	"os"
 	"testing"
 )
@@ -30,6 +31,23 @@ func TestGraph(t *testing.T) {
 	}
 	t.Logf("Wrote to file %s", fn)
 
+	// Get transition probs.
+	nodes, tpm := g.Nodes()
+	for k, v := range tpm {
+		t.Logf("From: %20s: %v", nodes[k].Name, v)
+	}
+
+	// Check values.
+	CompareSliceFloat(t, expectedProbs[0], tpm[0], "Error in row 0", 0.0001)
+	CompareSliceFloat(t, expectedProbs[1], tpm[1], "Error in row 1", 0.0001)
+	CompareSliceFloat(t, expectedProbs[2], tpm[2], "Error in row 2", 0.0001)
+	CompareSliceFloat(t, expectedProbs[3], tpm[3], "Error in row 3", 0.0001)
+
+	for k, v := range tpm[5] {
+		if !math.IsNaN(v) {
+			t.Fatalf("Expected NaN, got %v for index %d.", v, k)
+		}
+	}
 }
 
 const graphData string = `
@@ -47,3 +65,10 @@ edges:
   - {from: BED1, to: BED4, weight: 2.0}
   - {from: BED1, to: BATH1, weight: 2.0}
 `
+
+var expectedProbs = [][]float64{
+	{0, 0, 0, 0, 0, 0, 0, 0, 0.5, 0.25, 0.25},
+	{0, 0, 0, 0, 0.6, 0.4, 0, 0, 0, 0, 0},
+	{0, 0, 0, 0, 0, 0.5, 0.5, 0, 0, 0, 0},
+	{0, 0, 0, 0, 0, 0, 0, 0.4, 0.6, 0, 0},
+}

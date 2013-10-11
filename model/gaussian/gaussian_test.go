@@ -1,6 +1,7 @@
 package gaussian
 
 import (
+	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/model"
 	"math/rand"
 	"os"
@@ -32,7 +33,7 @@ func TestGaussian(t *testing.T) {
 	t.Logf("Prob: %f", g.Prob(obs))
 
 	expected := -3.3818
-	if !model.Comparef64(expected, p, epsilon) {
+	if !gjoa.Comparef64(expected, p, epsilon) {
 		t.Errorf("Wrong LogProb. Expected: [%f], Got: [%f]", expected, p)
 	}
 }
@@ -96,11 +97,11 @@ func TestTrainGaussian(t *testing.T) {
 	t.Logf("STD: \n%+v", g.StdDev)
 
 	for i, _ := range mean {
-		if !model.Comparef64(mean[i], g.Mean[i], epsilon) {
+		if !gjoa.Comparef64(mean[i], g.Mean[i], epsilon) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
 				i, mean[i], g.Mean[i])
 		}
-		if !model.Comparef64(std[i], g.StdDev[i], epsilon) {
+		if !gjoa.Comparef64(std[i], g.StdDev[i], epsilon) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
 				i, std[i], g.StdDev[i])
 		}

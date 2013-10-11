@@ -1,11 +1,14 @@
 package gjoa
 
 import (
+	"github.com/akualab/gjoa/floatx"
 	"github.com/golang/glog"
+	"github.com/gonum/floats"
 	"io"
 	"io/ioutil"
 	"launchpad.net/goyaml"
 	"os"
+	"sort"
 )
 
 type Node struct {
@@ -83,6 +86,47 @@ func (g *Graph) WriteFile(fn string) error {
 	return nil
 }
 
+// Returns the nodes in the graph and a transition probability
+// matrix.
+func (g *Graph) Nodes() (nodes []*Node, probs [][]float64) {
+
+	n := len(g.nodes)
+	probs = floatx.MakeFloat2D(n, n)
+
+	// Put nodes in slice.
+	nodes = make([]*Node, n)
+	index := make(map[string]int)
+	var k int
+	for _, x := range g.nodes {
+		nodes[k] = x
+		k += 1
+	}
+
+	// Sort nodes by name.
+	sort.Sort(ByName{nodes})
+
+	// Map Node name to matrix index.
+	for k, v := range nodes {
+		index[v.Name] = k
+	}
+
+	// Put transition weights in matrix.
+	for _, v := range g.Edges {
+		i := index[v.FromName]
+		j := index[v.ToName]
+		probs[i][j] = v.Weight
+	}
+
+	// Make rows add to 1.
+	for i, v := range probs {
+		sum := floats.Sum(probs[i])
+		for j, _ := range v {
+			probs[i][j] = probs[i][j] / sum
+		}
+	}
+	return
+}
+
 // Create the nodes given the names.
 func (g *Graph) createNodes() error {
 
@@ -106,3 +150,15 @@ func (g *Graph) createNodes() error {
 	glog.Infof("Read %d nodes.", len(g.nodes))
 	return nil
 }
+
+// Sort Nodes.
+
+type Nodes []*Node
+
+func (s Nodes) Len() int      { return len(s) }
+func (s Nodes) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+
+// ByName implements sort.Interface by providing Less and using the Len and
+type ByName struct{ Nodes }
+
+func (s ByName) Less(i, j int) bool { return s.Nodes[i].Name < s.Nodes[j].Name }

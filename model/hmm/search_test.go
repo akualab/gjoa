@@ -2,7 +2,7 @@ package hmm
 
 import (
 	"flag"
-	"github.com/akualab/gjoa/model"
+	"github.com/akualab/gjoa"
 	"testing"
 )
 
@@ -14,8 +14,8 @@ func TestViterbi(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectedViterbiLog := -26.8129904950932
-	model.CompareFloats(t, expectedViterbiLog, logProbViterbi, "Error in logProbViterbi", epsilon)
-	model.CompareSliceInt(t, viterbiSeq, bt, "Error in viterbi seq")
+	gjoa.CompareFloats(t, expectedViterbiLog, logProbViterbi, "Error in logProbViterbi", epsilon)
+	gjoa.CompareSliceInt(t, viterbiSeq, bt, "Error in viterbi seq")
 }
 
 var (

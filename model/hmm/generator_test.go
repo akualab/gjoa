@@ -1,6 +1,7 @@
 package hmm
 
 import (
+	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/gjoa/model/gaussian"
@@ -138,12 +139,12 @@ func TestTrainHMM(t *testing.T) {
 	dur := time.Now().Sub(t0)
 	CompareGaussians(t, m00, m0, eps)
 	CompareGaussians(t, m11, m1, eps)
-	model.CompareSliceFloat(t, hmm0.TransProbs[0], hmm.TransProbs[0],
+	gjoa.CompareSliceFloat(t, hmm0.TransProbs[0], hmm.TransProbs[0],
 		"error in TransProbs[0]", eps)
-	model.CompareSliceFloat(t, hmm0.TransProbs[1], hmm.TransProbs[1],
+	gjoa.CompareSliceFloat(t, hmm0.TransProbs[1], hmm.TransProbs[1],
 		"error in TransProbs[1]", eps)
 
-	model.CompareSliceFloat(t, hmm0.InitProbs, hmm.InitProbs,
+	gjoa.CompareSliceFloat(t, hmm0.InitProbs, hmm.InitProbs,
 		"error in logInitProbs", eps)
 	// Print time stats.
 	t.Logf("Total time: %v", dur)
@@ -153,6 +154,6 @@ func TestTrainHMM(t *testing.T) {
 }
 
 func CompareGaussians(t *testing.T, g1 *gaussian.Gaussian, g2 *gaussian.Gaussian, eps float64) {
-	model.CompareSliceFloat(t, g1.Mean, g2.Mean, "Wrong Mean", eps)
-	model.CompareSliceFloat(t, g1.StdDev, g2.StdDev, "Wrong SD", eps)
+	gjoa.CompareSliceFloat(t, g1.Mean, g2.Mean, "Wrong Mean", eps)
+	gjoa.CompareSliceFloat(t, g1.StdDev, g2.StdDev, "Wrong SD", eps)
 }
