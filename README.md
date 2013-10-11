@@ -1,8 +1,10 @@
 # Gjøa Statistical Modeling, Machine Learning, and Pattern Recognition.
 
-## About the Name
+## Less is More
 
 [Gjøa](http://en.wikipedia.org/wiki/Gj%C3%B8a) was the first vessel to transit the Northwest Passage. With a crew of six, Roald Amundsen traversed the passage in a three year journey, finishing in 1906.
+
+![](https://raw.github.com/akualab/gjoa/master/data/gjoa.jpg)
 
 ## Basics
 
