@@ -9,7 +9,16 @@ the mobile phone.
 
 The data is stored in files using the following format:
 
+```JSON
+{"n":0,"c":"BED5","data":[-40.8,-41.2]}
+{"n":1,"c":"BED5","data":[-41.8,-41.1]}
+{"n":2,"c":"BED5","data":[-42.8,-40.34]}
+{"n":3,"c":"DINING","data":[-42.9,-40.11]}
+{"n":4,"c":"DINING","data":[-42.764,-39.98]}
+{"n":5,"c":"DINING","data":[-42.209,-39.6]}
+```
 
+where `f` is the frema id, `c` is the class name, and `f0, f1` are the features
 ## Topology
 
 The topology of the house is provided in the file topology-southcourt.yaml. Here is a sample:

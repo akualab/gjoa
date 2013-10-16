@@ -39,3 +39,10 @@ func CompareSliceInt(t *testing.T, expected []int, actual []int, message string)
 		}
 	}
 }
+
+func CheckError(t *testing.T, e error) {
+
+	if e != nil {
+		t.Fatal(e)
+	}
+}

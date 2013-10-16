@@ -1,0 +1,4 @@
+path: data/train
+files:
+  - southcourt-001.json
+  - southcourt-002.json
