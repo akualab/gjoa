@@ -20,7 +20,7 @@ func main() {
 
 	args := flag.Args()
 	if len(args) < 1 {
-		fmt.Printf("Please provide at least one argument try \ngjoa -v")
+		fmt.Printf("Please provide at least one argument try, gjoa -v\n")
 		//glog.Fatal(commands.Description)
 		return
 	}

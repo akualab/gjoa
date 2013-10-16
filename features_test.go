@@ -64,6 +64,11 @@ func TestDataSet(t *testing.T) {
 		t.Fatalf("Num features is [%d]. Expected \"12\".", n)
 	}
 
+	nClasses := len(fl.ClassForString)
+	if nClasses != 3 {
+		t.Fatalf("Num classes is [%d]. Expected \"3\".", nClasses)
+	}
+
 }
 
 const filelistData string = `

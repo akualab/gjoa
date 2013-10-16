@@ -3,12 +3,10 @@ package gjoa
 import ()
 
 type Config struct {
-	Model string `yaml:"model" json:"model"`
-
-	HMM HMM
-
-	GMM GMM
-
+	DataSet  string `yaml:"data_set" json:"data_set"`
+	Model    string `yaml:"model" json:"model"`
+	HMM      HMM
+	GMM      GMM
 	Gaussian Gaussian
 }
 

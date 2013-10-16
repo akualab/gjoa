@@ -1,0 +1,2 @@
+model: gaussian
+data_set: train.yaml

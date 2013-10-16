@@ -4,7 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"github.com/akualab/gjoa"
+	"github.com/akualab/gjoa/model/gaussian"
 	"github.com/golang/glog"
+	"io"
 	"io/ioutil"
 	"launchpad.net/goyaml"
 	"os"
@@ -44,6 +46,7 @@ var updateTP bool
 var updateIP bool
 var outputDistribution string
 var configFilename string
+var dataSet string
 
 func addTrainerFlags(cmd *Command) {
 
@@ -57,6 +60,7 @@ func addTrainerFlags(cmd *Command) {
 	cmd.Flag.StringVar(&dir, "dir", defaultDir, "the project dir")
 	cmd.Flag.StringVar(&eid, "eid", defaultEID, "the experiment id")
 	cmd.Flag.StringVar(&configFilename, "config-file", "gjoa.yaml", "the trainer config file")
+	cmd.Flag.StringVar(&dataSet, "data-set", "train.yaml", "the file with the list of data files")
 
 	// Selects a model.
 	cmd.Flag.StringVar(&model, "model", "gaussian", "select a model to train {gaussian, gmm, hmm}")
@@ -94,12 +98,23 @@ func trainer(cmd *Command, args []string) {
 			config.HMM.UpdateTP = updateTP
 		case "hmm-update-ip":
 			config.HMM.UpdateIP = updateIP
+		case "data-set":
+			config.DataSet = dataSet
 		default:
 			goto DONE
 		}
 		glog.Infof("Overwriting config using flag [%s] with value [%v]", f.Name, f.Value)
 	DONE:
 	})
+
+	// Validations.
+	if len(config.DataSet) == 0 {
+		glog.Fatalf("DataSet is empty.")
+	}
+
+	// Read data set.
+	ds, e := gjoa.ReadDataSet(config.DataSet, nil)
+	gjoa.Fatal(e)
 
 	// Print config.
 	glog.Infof("Read configuration:\n%+v", config)
@@ -110,6 +125,13 @@ func trainer(cmd *Command, args []string) {
 	// Select the models, here do validation, bookkeeping, etc.
 	switch model {
 	case "gaussian":
+		gs := trainGaussians(ds)
+
+		if glog.V(3) {
+			for k, v := range gs {
+				glog.Infof("Model: %s\n%+v", k, v)
+			}
+		}
 
 	case "gmm":
 
@@ -129,4 +151,36 @@ func trainer(cmd *Command, args []string) {
 	default:
 		glog.Fatalf("Unknown model: %s.", model)
 	}
+}
+
+func trainGaussians(ds *gjoa.DataSet) (gs map[string]*gaussian.Gaussian) {
+
+	gs = make(map[string]*gaussian.Gaussian)
+	var numFrames int
+	for {
+		features, e := ds.Next()
+		if e == io.EOF {
+			break
+		}
+		gjoa.Fatal(e)
+		numFrames += len(features)
+
+		for _, v := range features {
+			name := v.ClassName
+			g, ok := gs[name]
+			if !ok {
+				g, e = gaussian.NewGaussian(len(v.Values), nil, nil, true, true, v.ClassName)
+				gjoa.Fatal(e)
+				gs[name] = g
+			}
+			g.Update(v.Values, 1.0)
+		}
+	}
+
+	// Estimate params.
+	for _, g := range gs {
+		g.Estimate()
+	}
+
+	return
 }

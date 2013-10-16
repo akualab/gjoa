@@ -2,6 +2,7 @@ package gjoa
 
 import (
 	"encoding/json"
+	"github.com/golang/glog"
 	"io"
 	"io/ioutil"
 	"launchpad.net/goyaml"
@@ -58,7 +59,7 @@ func (ds *DataSet) Next() (features []Feature, e error) {
 		return nil, io.EOF
 	}
 	sep := string(os.PathSeparator)
-
+	glog.V(2).Infof("feature file: %s", ds.Path+sep+ds.Files[ds.index])
 	features, e = ReadFeaturesFile(ds.Path+sep+ds.Files[ds.index], ds.ClassForString)
 	if e != nil {
 		return
