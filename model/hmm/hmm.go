@@ -90,8 +90,14 @@ func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []mod
 	r, _ := floatx.Check2D(transProbs)
 	r1 := len(initialStateProbs)
 
-	if r != r1 {
+	if r1 > 0 && r != r1 {
 		e = fmt.Errorf("Num states mismatch. transProbs has [%d] and initialStateProbs have [%d].", r, r1)
+	}
+
+	// If no initial state probs, use equal probs.
+	if r1 == 0 {
+		initialStateProbs = make([]float64, r)
+		floatx.Apply(setValueFunc(1.0/float64(r)), initialStateProbs, nil)
 	}
 
 	// Set default config values.

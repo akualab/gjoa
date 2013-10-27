@@ -71,7 +71,7 @@ Train a bunch of gaussians:
 gjoa -logtostderr -v=3 train
 ```
 
-The output lokks like this:
+The output looks like this:
 
 ```
 $ gjoa -logtostderr -v=3 train

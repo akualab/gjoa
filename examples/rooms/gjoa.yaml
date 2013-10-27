@@ -1,2 +1,4 @@
 model: gaussian
 data_set: train.yaml
+hmm:
+  tp_graph: topology-southcourt.yaml

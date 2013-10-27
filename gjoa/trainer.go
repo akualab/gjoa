@@ -4,7 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"github.com/akualab/gjoa"
+	"github.com/akualab/gjoa/model"
 	"github.com/akualab/gjoa/model/gaussian"
+	"github.com/akualab/gjoa/model/hmm"
 	"github.com/golang/glog"
 	"io"
 	"io/ioutil"
@@ -39,14 +41,26 @@ func init() {
 	addTrainerFlags(cmdTrainer)
 }
 
+const (
+	DEFAULT_CONFIG_FILE = "gjoa.yaml"
+	DEFAULT_DATA_SET    = "train.yaml"
+	DEFAULT_OUT_MODEL   = "gaussian"
+	DEFAULT_MODEL       = "gaussian"
+	DEFAULT_TP_FILE     = "tp.yaml"
+)
+
 var eid string // experiment id
 var dir string
-var model string
+var tpFilename string
+var modelType string
 var updateTP bool
 var updateIP bool
+var useAlignments bool
 var outputDistribution string
 var configFilename string
 var dataSet string
+var modelOutFilename string
+var modelInFilename string
 
 func addTrainerFlags(cmd *Command) {
 
@@ -59,21 +73,24 @@ func addTrainerFlags(cmd *Command) {
 	// Common.
 	cmd.Flag.StringVar(&dir, "dir", defaultDir, "the project dir")
 	cmd.Flag.StringVar(&eid, "eid", defaultEID, "the experiment id")
-	cmd.Flag.StringVar(&configFilename, "config-file", "gjoa.yaml", "the trainer config file")
-	cmd.Flag.StringVar(&dataSet, "data-set", "train.yaml", "the file with the list of data files")
+	cmd.Flag.StringVar(&configFilename, "config-file", DEFAULT_CONFIG_FILE, "the trainer config file")
+	cmd.Flag.StringVar(&dataSet, "data-set", DEFAULT_DATA_SET, "the file with the list of data files")
+	cmd.Flag.StringVar(&modelOutFilename, "model-out", "model-out.json", "output model filename")
+	cmd.Flag.StringVar(&modelInFilename, "model-in", "model-in.json", "input model filename")
 
 	// Selects a model.
-	cmd.Flag.StringVar(&model, "model", "gaussian", "select a model to train {gaussian, gmm, hmm}")
+	cmd.Flag.StringVar(&modelType, "model", DEFAULT_MODEL, "select a model to train {gaussian, gmm, hmm}")
 
 	// Single Gaussian flags.
 
 	// Gaussian mixture flags.
 
 	// HMM flags.
-	cmd.Flag.BoolVar(&updateTP, "hmm-update-tp", true, "update HMM transition probabilities, overwrites config file when set")
-	cmd.Flag.BoolVar(&updateIP, "hmm-update-ip", true, "update HMM initial probabilities, overwrites config file when set")
-	cmd.Flag.StringVar(&outputDistribution, "hmm-output-distribution", "gaussian", "HMM state output distribution {gaussian, gmm}")
-
+	cmd.Flag.BoolVar(&updateTP, "hmm-update-tp", false, "update HMM transition probabilities, overwrites config file when set")
+	cmd.Flag.BoolVar(&updateIP, "hmm-update-ip", false, "update HMM initial probabilities, overwrites config file when set")
+	cmd.Flag.StringVar(&outputDistribution, "hmm-output-distribution", DEFAULT_OUT_MODEL, "HMM state output distribution {gaussian, gmm}")
+	cmd.Flag.BoolVar(&useAlignments, "use-alignments", false, "train output model using alignments")
+	cmd.Flag.StringVar(&tpFilename, "hmm-tp-graph", DEFAULT_TP_FILE, "HMM state transition probabilities graph")
 }
 
 func trainer(cmd *Command, args []string) {
@@ -86,20 +103,41 @@ func trainer(cmd *Command, args []string) {
 	err = goyaml.Unmarshal(data, &config)
 	gjoa.Fatal(err)
 
-	// Overwrite config when a flag is set.
+	// Defaualt config values.
+	if len(config.HMM.OutputDist) == 0 {
+		config.HMM.OutputDist = DEFAULT_OUT_MODEL
+	}
+	if len(config.DataSet) == 0 {
+		config.DataSet = DEFAULT_DATA_SET
+	}
+	if len(config.Model) == 0 {
+		config.Model = DEFAULT_MODEL
+	}
+	if len(config.HMM.TPGraphFilename) == 0 {
+		config.HMM.TPGraphFilename = DEFAULT_TP_FILE
+	}
+
+	// Overide config when a flag is set.
 	// TODO: Is this the best way to do this?
 	// I included this to show how it can be done. We probably want to have most
 	// params in config and a few in command line to run experiments.
 	cmd.Flag.Visit(func(f *flag.Flag) {
 
 		switch f.Name {
-
+		case "model":
+			config.Model = modelType
+		case "hmm-tp-graph":
+			config.HMM.TPGraphFilename = tpFilename
 		case "hmm-update-tp":
 			config.HMM.UpdateTP = updateTP
 		case "hmm-update-ip":
 			config.HMM.UpdateIP = updateIP
+		case "use-alignments":
+			config.HMM.UseAlignments = useAlignments
 		case "data-set":
 			config.DataSet = dataSet
+		case "hmm-output-distribution":
+			config.HMM.OutputDist = outputDistribution
 		default:
 			goto DONE
 		}
@@ -122,34 +160,48 @@ func trainer(cmd *Command, args []string) {
 	// Select model.
 	glog.Infof("Training Model: %s.", config.Model)
 
-	// Select the models, here do validation, bookkeeping, etc.
-	switch model {
+	// Select the models, here do validation, bookkeeping, etc
+	var gs map[string]*gaussian.Gaussian
+	switch config.Model {
 	case "gaussian":
-		gs := trainGaussians(ds)
+		gs = trainGaussians(ds)
 
 		if glog.V(3) {
 			for k, v := range gs {
 				glog.Infof("Model: %s\n%+v", k, v)
 			}
 		}
-
 	case "gmm":
-
+		glog.Fatalf("Not implemented: %s.", "train gmm")
 	case "hmm":
-
 		glog.Infof("Output distribution: %s.", config.HMM.OutputDist)
-		switch outputDistribution {
-
+		graph, tpe := gjoa.ReadFile(config.HMM.TPGraphFilename)
+		gjoa.Fatal(tpe)
+		nodes, probs := graph.Nodes()
+		switch config.HMM.OutputDist {
 		case "gaussian":
+			if config.HMM.UseAlignments {
+
+				// Trains one Gaussian model per class. Returns a map.
+				gs = trainGaussians(ds)
+
+				// Puts Gaussian models in a slice in the same order as probs.
+				gaussians := sortGaussians(gs, nodes)
+
+				hmm, e := hmm.NewHMM(probs, nil, gaussians, true, "hmm", &config)
+				gjoa.Fatal(e)
+				hmm.WriteFile(modelOutFilename)
+			} else {
+				glog.Fatalf("Not implemented: %s.", "train fb")
+			}
 
 		case "gmm":
-
+			glog.Fatalf("Not implemented: %s.", "output dist gmm")
 		default:
 			glog.Fatalf("Unknown output distribution: %s.", outputDistribution)
 		}
-
 	default:
-		glog.Fatalf("Unknown model: %s.", model)
+		glog.Fatalf("Unknown model: %s.", config.Model)
 	}
 }
 
@@ -182,5 +234,18 @@ func trainGaussians(ds *gjoa.DataSet) (gs map[string]*gaussian.Gaussian) {
 		g.Estimate()
 	}
 
+	return
+}
+
+func sortGaussians(gs map[string]*gaussian.Gaussian, nodes []*gjoa.Node) (gaussians []model.Modeler) {
+
+	gaussians = make([]model.Modeler, len(nodes))
+	for k, v := range nodes {
+		g, found := gs[v.Name]
+		if !found {
+			glog.Fatalf("There is no model for Node [%s].", v.Name)
+		}
+		gaussians[k] = g
+	}
 	return
 }
