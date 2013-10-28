@@ -166,7 +166,7 @@ func trainer(cmd *Command, args []string) {
 	case "gaussian":
 		gs = trainGaussians(ds)
 
-		if glog.V(3) {
+		if glog.V(1) {
 			for k, v := range gs {
 				glog.Infof("Model: %s\n%+v", k, v)
 			}
@@ -178,6 +178,15 @@ func trainer(cmd *Command, args []string) {
 		graph, tpe := gjoa.ReadFile(config.HMM.TPGraphFilename)
 		gjoa.Fatal(tpe)
 		nodes, probs := graph.Nodes()
+		if glog.V(1) {
+			glog.Infof("Graph:%s", graph.Name)
+			for k, v := range graph.Edges {
+				glog.Infof("Edge %2d: from [%s] to [%s] weight [%.2f].", k, v.FromName, v.ToName, v.Weight)
+			}
+			for k, v := range nodes {
+				glog.Infof("Node %2d: [%s].", k, v.Name)
+			}
+		}
 		switch config.HMM.OutputDist {
 		case "gaussian":
 			if config.HMM.UseAlignments {
@@ -190,7 +199,8 @@ func trainer(cmd *Command, args []string) {
 
 				hmm, e := hmm.NewHMM(probs, nil, gaussians, true, "hmm", &config)
 				gjoa.Fatal(e)
-				hmm.WriteFile(modelOutFilename)
+				e = hmm.WriteFile(modelOutFilename)
+				gjoa.Fatal(e)
 			} else {
 				glog.Fatalf("Not implemented: %s.", "train fb")
 			}

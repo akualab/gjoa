@@ -1,0 +1,9 @@
+name: random
+edges:
+  - {from: A, to: A, weight: 1.0}
+  - {from: A, to: B, weight: 2.0}
+  - {from: A, to: C, weight: 1.0}
+  - {from: B, to: B, weight: 1.0}
+  - {from: B, to: C, weight: 1.0}
+  - {from: C, to: C, weight: 1.0}
+  - {from: C, to: A, weight: 3.0}

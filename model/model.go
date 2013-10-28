@@ -135,6 +135,7 @@ func (base *BaseModel) Read(r io.Reader) (Modeler, error) {
 func (base *BaseModel) ReadFile(fn string) (Modeler, error) {
 
 	f, err := os.Open(fn)
+	defer f.Close()
 	if err != nil {
 		return nil, err
 	}

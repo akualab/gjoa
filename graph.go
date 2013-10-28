@@ -43,6 +43,12 @@ func ReadGraph(r io.Reader) (*Graph, error) {
 	if err != nil {
 		return nil, err
 	}
+	if glog.V(3) {
+		glog.Infof("Graph:%s", g.Name)
+		for k, v := range g.Edges {
+			glog.Infof("Edge %2d:%+v", k, *v)
+		}
+	}
 	g.createNodes()
 	return g, nil
 }
@@ -51,6 +57,7 @@ func ReadGraph(r io.Reader) (*Graph, error) {
 func ReadFile(fn string) (*Graph, error) {
 
 	f, err := os.Open(fn)
+	defer f.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +133,10 @@ func (g *Graph) Nodes() (nodes []*Node, probs [][]float64) {
 			continue
 		}
 		sum := floats.Sum(probs[i])
+		if sum == 0.0 {
+			glog.Infof("WARNING: sum of graph weights for row %d is zero. (Hint: use floats in yaml file.)", i)
+			continue
+		}
 		for j, _ := range v {
 			probs[i][j] = probs[i][j] / sum
 		}

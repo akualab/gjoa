@@ -121,6 +121,10 @@ func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []mod
 	logTransProbs = floatx.Apply2D(log2D, transProbs, logTransProbs)
 	logInitProbs = floatx.Apply(log, initialStateProbs, logInitProbs)
 
+	// replace Inf with MaxFloat64 value so we can write/read JSON.
+	logTransProbs = floatx.ConvertInfSlice2D(logTransProbs)
+	logInitProbs = floatx.ConvertInfSlice(logInitProbs)
+
 	glog.Infof("New HMM. Num states = %d.", r)
 	glog.Infof("Init. State Probs:    %v.", initialStateProbs)
 	glog.Infof("Log Init Probs:       %v.", logInitProbs)

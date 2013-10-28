@@ -14,6 +14,35 @@ const (
 	ErrLength          = Error("floatx: length mismatch")
 )
 
+// Replace Inf and -Inf to +/- MaxFloat64 value.
+func ConvertInf(value float64) float64 {
+	if math.IsInf(value, 1) {
+		return math.MaxFloat64
+	}
+	if math.IsInf(value, -1) {
+		return -math.MaxFloat64
+	}
+	return value
+}
+
+// Replace Inf and -Inf values in slice to +/- MaxFloat64 value.
+func ConvertInfSlice(values []float64) []float64 {
+
+	for k, v := range values {
+		values[k] = ConvertInf(v)
+	}
+	return values
+}
+
+// Replace Inf and -Inf values in slice of slices to +/- MaxFloat64 value.
+func ConvertInfSlice2D(values [][]float64) [][]float64 {
+
+	for k, v := range values {
+		values[k] = ConvertInfSlice(v)
+	}
+	return values
+}
+
 var Log = func(r int, v float64) float64 { return math.Log(v) }
 var Exp = func(r int, v float64) float64 { return math.Exp(v) }
 var Sq = func(r int, v float64) float64 { return v * v }
