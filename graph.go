@@ -1,6 +1,8 @@
 package gjoa
 
 import (
+	"bytes"
+	"fmt"
 	"github.com/golang/glog"
 	"github.com/gonum/floats"
 	"io"
@@ -24,7 +26,7 @@ type Edge struct {
 
 type Graph struct {
 	Name  string  `yaml:"name" json:"name"`
-	Edges []*Edge `yaml:"edges" json:"edges"`
+	Edges []*Edge `yaml:"edges,flow" json:"edges"`
 	nodes map[string]*Node
 }
 
@@ -44,7 +46,7 @@ func ReadGraph(r io.Reader) (*Graph, error) {
 		return nil, err
 	}
 	if glog.V(3) {
-		glog.Infof("Graph:%s", g.Name)
+		glog.Infof("Graph Name: %s", g.Name)
 		for k, v := range g.Edges {
 			glog.Infof("Edge %2d:%+v", k, *v)
 		}
@@ -57,10 +59,10 @@ func ReadGraph(r io.Reader) (*Graph, error) {
 func ReadFile(fn string) (*Graph, error) {
 
 	f, err := os.Open(fn)
-	defer f.Close()
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
 	return ReadGraph(f)
 }
 
@@ -77,6 +79,10 @@ func (g *Graph) Write(w io.Writer) error {
 
 // Writes Graph to a file.
 func (g *Graph) WriteFile(fn string) error {
+
+	if len(fn) == 0 {
+		glog.Fatalf("Missing filename.")
+	}
 
 	f, err := os.Create(fn)
 	if err != nil {
@@ -164,8 +170,65 @@ func (g *Graph) createNodes() error {
 		v.To = g.nodes[to]
 	}
 
-	glog.Infof("Read %d nodes.", len(g.nodes))
+	glog.Infof("Created %d nodes.", len(g.nodes))
 	return nil
+}
+
+func (g *Graph) appendEdge(from, to string, w float64) {
+	g.Edges = append(g.Edges, &Edge{FromName: from, ToName: to, Weight: w})
+}
+
+// Inserts a node between each pair of connected nodes. Assigns a weight of 1.0 to
+// the self-transition and the transition from the new node to the next node.
+func (g *Graph) InsertContextDependentStates() (ng *Graph, cdNodes map[string]bool) {
+
+	cdNodes = make(map[string]bool)
+	ng = &Graph{Name: g.Name + " CD"}
+	ng.nodes = make(map[string]*Node)
+	ng.Edges = make([]*Edge, 0, 3*len(g.Edges))
+
+	for _, v := range g.Edges {
+
+		// Weight of zero means no connection so we skip.
+		if v.Weight == 0.0 {
+			continue
+		}
+
+		// Skip after adding self transitions.
+		if v.From == v.To {
+			ng.appendEdge(v.FromName, v.FromName, v.Weight)
+			continue
+		}
+
+		// Insert edge to and from new context-dependent state.
+		cdName := v.FromName + "-" + v.ToName
+		cdNodes[cdName] = true
+		ng.appendEdge(v.FromName, cdName, v.Weight)
+		ng.appendEdge(cdName, v.ToName, 1.0)
+
+		// Self transition for new state.
+		ng.appendEdge(cdName, cdName, 1.0)
+	}
+	ng.createNodes()
+
+	if glog.V(3) {
+		glog.Infof("Graph Name: %s", ng.Name)
+		for k, v := range ng.Edges {
+			glog.Infof("Edge %2d:%+v", k, *v)
+		}
+	}
+	return
+}
+
+func (graph *Graph) String() string {
+
+	var buffer bytes.Buffer
+	fmt.Fprintf(&buffer, "Graph Name: %s\n", graph.Name)
+	for k, v := range graph.Edges {
+		fmt.Fprintf(&buffer, "Edge %2d: from [%s] to [%s] weight [%.2f].\n", k, v.FromName, v.ToName, v.Weight)
+	}
+
+	return buffer.String()
 }
 
 // Sort Nodes.

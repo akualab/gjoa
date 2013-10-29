@@ -6,12 +6,16 @@ import (
 	"github.com/golang/glog"
 )
 
+var eid string // experiment id
+var dir string
+
 func main() {
 
 	commands := NewCommands(
 		"gjoa statistical modeling toolkit.",
 		cmdTrainer,
 		cmdRecognizer,
+		cmdGraph,
 	)
 
 	flag.Usage = commands.Usage
@@ -28,4 +32,6 @@ func main() {
 	if err := commands.Parse(args); err != nil {
 		glog.Fatalf("%s", err)
 	}
+
+	glog.Flush()
 }

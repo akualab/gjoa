@@ -73,6 +73,38 @@ gjoa -logtostderr -v=3 train -use-alignments
 
 You should see the model trained from Gaussians in `model-out.json`.
 
+Let's use the subcommand `graph` to expand the graph by inserting a new state between the original states.
+
+```
+gjoa -logtostderr -v=3 graph -cd-state -in topology.yaml
+```
+
+Original:
+
+```YAML
+name: random
+edges:
+  - {from: A, to: A, weight: 1.0}
+  - {from: A, to: B, weight: 2.0}
+  - {from: A, to: C, weight: 1.0}
+  - {from: B, to: B, weight: 1.0}
+  - {from: B, to: C, weight: 1.0}
+  - {from: C, to: C, weight: 1.0}
+  - {from: C, to: A, weight: 3.0}
+```
+
+Expanded:
+
+```YAML
+name: random CD
+edges: [{from: A, to: A, weight: 1}, {from: A, to: A-B, weight: 2}, {from: A-B, to: B,
+    weight: 1}, {from: A-B, to: A-B, weight: 1}, {from: A, to: A-C, weight: 1}, {
+    from: A-C, to: C, weight: 1}, {from: A-C, to: A-C, weight: 1}, {from: B, to: B,
+    weight: 1}, {from: B, to: B-C, weight: 1}, {from: B-C, to: C, weight: 1}, {from: B-C,
+    to: B-C, weight: 1}, {from: C, to: C, weight: 1}, {from: C, to: C-A, weight: 3},
+  {from: C-A, to: A, weight: 1}, {from: C-A, to: C-A, weight: 1}]
+```
+
 ## Search
 
 

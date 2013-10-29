@@ -49,8 +49,6 @@ const (
 	DEFAULT_TP_FILE     = "tp.yaml"
 )
 
-var eid string // experiment id
-var dir string
 var tpFilename string
 var modelType string
 var updateTP bool
@@ -103,7 +101,7 @@ func trainer(cmd *Command, args []string) {
 	err = goyaml.Unmarshal(data, &config)
 	gjoa.Fatal(err)
 
-	// Defaualt config values.
+	// Default config values.
 	if len(config.HMM.OutputDist) == 0 {
 		config.HMM.OutputDist = DEFAULT_OUT_MODEL
 	}
@@ -178,15 +176,8 @@ func trainer(cmd *Command, args []string) {
 		graph, tpe := gjoa.ReadFile(config.HMM.TPGraphFilename)
 		gjoa.Fatal(tpe)
 		nodes, probs := graph.Nodes()
-		if glog.V(1) {
-			glog.Infof("Graph:%s", graph.Name)
-			for k, v := range graph.Edges {
-				glog.Infof("Edge %2d: from [%s] to [%s] weight [%.2f].", k, v.FromName, v.ToName, v.Weight)
-			}
-			for k, v := range nodes {
-				glog.Infof("Node %2d: [%s].", k, v.Name)
-			}
-		}
+		glog.V(1).Info(graph.String())
+
 		switch config.HMM.OutputDist {
 		case "gaussian":
 			if config.HMM.UseAlignments {
