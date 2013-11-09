@@ -47,12 +47,19 @@ func decoder(cmd *Command, args []string) {
         config := gjoa.Config{}
         err = goyaml.Unmarshal(data, &config)
         gjoa.Fatal(err)
-        glog.Info("config %v", config)
         if len(config.DataSet) == 0 {
                 glog.Fatalf("DataSet is empty.")
         }
-        // Read data set.
+        // Read data set files
         ds, e := gjoa.ReadDataSet(config.DataSet, nil)
         gjoa.Fatal(e)
-        glog.Info("ds %v", ds)
+        glog.Infof("ds:\n%+v", ds)
+        // Print config.
+        glog.Infof("Read configuration:\n%+v", config)
+
+        // read the hmm from file, this can be tricky
+
+        // Use the code in trainer.go trainGaussians(ds *gjoa.DataSet)
+        // write a function that given ds and the hmm calls virterbi for each data set
+
 }
