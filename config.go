@@ -18,6 +18,7 @@ type HMM struct {
 	OutputDist      string `yaml:"output_distribution,omitempty" json:"output_distribution,omitempty"`
 	GeneratorSeed   int64  `yaml:"generator_seed,omitempty" json:"generator_seed,omitempty"`
 	GeneratorMaxLen int    `yaml:"generator_max_length,omitempty" json:"generator_max_length,omitempty"`
+        HMMFile         string `yaml:"hmm_file,omitempty" json:"hmm_file,omitempty"`
 }
 
 type GMM struct{}

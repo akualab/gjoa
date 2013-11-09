@@ -1,0 +1,4 @@
+model: hmm
+data_set: decoder-random.yaml
+hmm:
+  hmm_file: model.json
