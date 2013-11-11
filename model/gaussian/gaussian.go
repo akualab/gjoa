@@ -71,17 +71,14 @@ func NewGaussian(numElements int, mean, sd []float64,
 		return
 	}
 
-	g = &Gaussian{
-		Mean:        mean,
-		StdDev:      sd,
-		Diag:        true,
-		NE:          numElements,
-		ModelName:   name,
-		IsTrainable: trainable,
-		fpool:       floatx.NewPool(numElements),
-	}
-	// Initialize base model.
-	g.BaseModel = model.NewBaseModel(g)
+	g = EmptyGaussian()
+	g.Mean = mean
+	g.StdDev = sd
+	g.Diag = true
+	g.NE = numElements
+	g.ModelName = name
+	g.IsTrainable = trainable
+	g.fpool = floatx.NewPool(numElements)
 
 	g.Initialize()
 	return
@@ -115,6 +112,15 @@ func (g *Gaussian) Initialize() error {
 	g.const2 = g.const1 - floats.Sum(g.tmpArray)/2.0
 
 	return nil
+}
+
+// Returns an empty model with the base modeled initialized.
+// Use it reading model from Reader.
+func EmptyGaussian() *Gaussian {
+
+	g := &Gaussian{}
+	g.BaseModel = model.NewBaseModel(model.Modeler(g))
+	return g
 }
 
 func (g *Gaussian) LogProb(observation interface{}) (v float64) {

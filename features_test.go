@@ -56,7 +56,7 @@ func TestDataSet(t *testing.T) {
 			break
 		}
 		CheckError(t, e)
-		t.Logf("data: \n", features)
+		t.Logf("data: \n%v\n", features)
 		n += len(features)
 	}
 

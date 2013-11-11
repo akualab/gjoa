@@ -5,3 +5,6 @@ edges: [{from: A, to: A, weight: 1}, {from: A, to: A-B, weight: 2}, {from: A-B, 
     weight: 1}, {from: B, to: B-C, weight: 1}, {from: B-C, to: C, weight: 1}, {from: B-C,
     to: B-C, weight: 1}, {from: C, to: C, weight: 1}, {from: C, to: C-A, weight: 3},
   {from: C-A, to: A, weight: 1}, {from: C-A, to: C-A, weight: 1}]
+nodes: {A: {name: A, atts: {}}, A-B: {name: A-B, atts: {cd: true}}, A-C: {name: A-C,
+    atts: {cd: true}}, B: {name: B, atts: {}}, B-C: {name: B-C, atts: {cd: true}},
+  C: {name: C, atts: {}}, C-A: {name: C-A, atts: {cd: true}}}

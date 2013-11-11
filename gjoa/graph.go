@@ -38,8 +38,8 @@ func addGraphFlags(cmd *Command) {
 
 	cmd.Flag.StringVar(&dir, "dir", defaultDir, "the project dir")
 	cmd.Flag.StringVar(&eid, "eid", defaultEID, "the experiment id")
-	cmd.Flag.StringVar(&inFilename, "in", "graph-in.json", "the input graph")
-	cmd.Flag.StringVar(&outFilename, "out", "graph-out.json", "the output graph")
+	cmd.Flag.StringVar(&inFilename, "in", "graph-in.yaml", "the input graph")
+	cmd.Flag.StringVar(&outFilename, "out", "graph-out.yaml", "the output graph")
 	cmd.Flag.BoolVar(&contextDependant, "cd-state", false, "inserts context dependent state for each edge - example: A <=> B becomes A => A-B => B and B => B-A => A")
 
 }
@@ -54,7 +54,7 @@ func graph(cmd *Command, args []string) {
 	if contextDependant {
 		g, tpe := gjoa.ReadFile(inFilename)
 		gjoa.Fatal(tpe)
-		nodes, probs := g.Nodes()
+		nodes, probs := g.NodesAndProbs()
 
 		glog.V(1).Info("Input Graph:\n")
 		glog.V(1).Info(g.String())

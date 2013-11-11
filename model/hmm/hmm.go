@@ -100,19 +100,6 @@ func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []mod
 		floatx.Apply(setValueFunc(1.0/float64(r)), initialStateProbs, nil)
 	}
 
-	// Set default config values.
-	if config == nil {
-
-		config = &gjoa.Config{
-			HMM: gjoa.HMM{
-				UpdateIP:        true,
-				UpdateTP:        true,
-				GeneratorSeed:   0,
-				GeneratorMaxLen: 100,
-			},
-		}
-	}
-
 	// init logTransProbs and logInitProbs
 	logTransProbs := floatx.MakeFloat2D(r, r)
 	logInitProbs := make([]float64, r)
@@ -130,17 +117,13 @@ func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []mod
 	glog.Infof("Log Init Probs:       %v.", logInitProbs)
 	glog.Infof("Trans. Probs:         %v.", transProbs)
 	glog.Infof("Log Trans. Probs:     %v.", logTransProbs)
-	hmm = &HMM{
-		NStates:    r,
-		TransProbs: logTransProbs,
-		ObsModels:  obsModels,
-		InitProbs:  logInitProbs,
-		ModelName:  name,
-		Config:     config,
-	}
 
-	// Initialize base model.
-	hmm.BaseModel = model.NewBaseModel(hmm)
+	hmm = EmptyHMM()
+	hmm.NStates = r
+	hmm.TransProbs = logTransProbs
+	hmm.ObsModels = obsModels
+	hmm.InitProbs = logInitProbs
+	hmm.ModelName = name
 
 	if !trainable {
 		goto INIT
@@ -159,10 +142,35 @@ INIT:
 	return
 }
 
+// Returns an empty model with the base modeled initialized.
+// Use it reading model from Reader.
+func EmptyHMM() *HMM {
+
+	hmm := &HMM{}
+	hmm.BaseModel = model.NewBaseModel(model.Modeler(hmm))
+	return hmm
+}
+
 func (hmm *HMM) Initialize() error {
 
+	if hmm.Config == nil {
+		hmm.Config = defaultConfig()
+	}
 	hmm.generator = NewGenerator(hmm, hmm.Config.HMM.GeneratorSeed)
 	return nil
+}
+
+func defaultConfig() *gjoa.Config {
+
+	config := &gjoa.Config{
+		HMM: gjoa.HMM{
+			UpdateIP:        true,
+			UpdateTP:        true,
+			GeneratorSeed:   0,
+			GeneratorMaxLen: 100,
+		},
+	}
+	return config
 }
 
 // Compute alphas. Indices are: α(state, time)

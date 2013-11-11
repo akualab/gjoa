@@ -13,7 +13,8 @@ import (
 )
 
 type Node struct {
-	Name string `yaml:"name" json:"name"`
+	Name string                 `yaml:"name" json:"name"`
+	Atts map[string]interface{} `yaml:"atts" json:"atts"`
 }
 
 type Edge struct {
@@ -25,9 +26,9 @@ type Edge struct {
 }
 
 type Graph struct {
-	Name  string  `yaml:"name" json:"name"`
-	Edges []*Edge `yaml:"edges,flow" json:"edges"`
-	nodes map[string]*Node
+	Name  string           `yaml:"name" json:"name"`
+	Edges []*Edge          `yaml:"edges,flow" json:"edges"`
+	Nodes map[string]*Node `yaml:"nodes,flow" json:"nodes"`
 }
 
 // Reads graph from io.Reader and creates a new Graph instance.
@@ -40,7 +41,7 @@ func ReadGraph(r io.Reader) (*Graph, error) {
 
 	// Read using Graph.
 	g := &Graph{}
-	g.nodes = make(map[string]*Node)
+	g.Nodes = make(map[string]*Node)
 	err = goyaml.Unmarshal([]byte(b), g)
 	if err != nil {
 		return nil, err
@@ -101,16 +102,16 @@ func (g *Graph) WriteFile(fn string) error {
 // Returns the nodes and transition probability
 // matrix. The matrix is a [][]float64. Note that
 // rows with no outgoing edges  have a nil slice.
-func (g *Graph) Nodes() (nodes []*Node, probs [][]float64) {
+func (g *Graph) NodesAndProbs() (nodes []*Node, probs [][]float64) {
 
-	n := len(g.nodes)
+	n := len(g.Nodes)
 	probs = make([][]float64, n)
 
 	// Put nodes in slice.
 	nodes = make([]*Node, n)
 	index := make(map[string]int)
 	var k int
-	for _, x := range g.nodes {
+	for _, x := range g.Nodes {
 		nodes[k] = x
 		k += 1
 	}
@@ -158,19 +159,19 @@ func (g *Graph) createNodes() error {
 		to := v.ToName
 
 		// Creates Node if it doesn't exist.
-		if _, ok := g.nodes[from]; !ok {
-			g.nodes[from] = &Node{Name: from}
+		if _, ok := g.Nodes[from]; !ok {
+			g.Nodes[from] = &Node{Name: from}
 		}
-		if _, ok := g.nodes[to]; !ok {
-			g.nodes[to] = &Node{Name: to}
+		if _, ok := g.Nodes[to]; !ok {
+			g.Nodes[to] = &Node{Name: to}
 		}
 
 		// Add Node object to Edge.
-		v.From = g.nodes[from]
-		v.To = g.nodes[to]
+		v.From = g.Nodes[from]
+		v.To = g.Nodes[to]
 	}
 
-	glog.Infof("Created %d nodes.", len(g.nodes))
+	glog.Infof("Created %d nodes.", len(g.Nodes))
 	return nil
 }
 
@@ -184,7 +185,7 @@ func (g *Graph) InsertContextDependentStates() (ng *Graph, cdNodes map[string]bo
 
 	cdNodes = make(map[string]bool)
 	ng = &Graph{Name: g.Name + " CD"}
-	ng.nodes = make(map[string]*Node)
+	ng.Nodes = make(map[string]*Node)
 	ng.Edges = make([]*Edge, 0, 3*len(g.Edges))
 
 	for _, v := range g.Edges {
@@ -211,6 +212,12 @@ func (g *Graph) InsertContextDependentStates() (ng *Graph, cdNodes map[string]bo
 	}
 	ng.createNodes()
 
+	// Mark context dependent nodes using an attribute.
+	for k, _ := range cdNodes {
+		ng.Nodes[k].Atts = make(map[string]interface{})
+		ng.Nodes[k].Atts["cd"] = true
+	}
+
 	if glog.V(3) {
 		glog.Infof("Graph Name: %s", ng.Name)
 		for k, v := range ng.Edges {
@@ -223,7 +230,13 @@ func (g *Graph) InsertContextDependentStates() (ng *Graph, cdNodes map[string]bo
 func (graph *Graph) String() string {
 
 	var buffer bytes.Buffer
+
 	fmt.Fprintf(&buffer, "Graph Name: %s\n", graph.Name)
+
+	for k, v := range graph.Nodes {
+		fmt.Fprintf(&buffer, "Node [%s], Atts: [%v]\n", k, v.Atts)
+	}
+
 	for k, v := range graph.Edges {
 		fmt.Fprintf(&buffer, "Edge %2d: from [%s] to [%s] weight [%.2f].\n", k, v.FromName, v.ToName, v.Weight)
 	}

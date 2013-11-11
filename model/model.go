@@ -121,8 +121,8 @@ func (base *BaseModel) Read(r io.Reader) (Modeler, error) {
 	model := base.Model
 	value := reflect.Indirect(reflect.ValueOf(model))
 	o := reflect.New(value.Type()).Interface().(Modeler)
-
 	e := json.Unmarshal(b, &o)
+	o.Initialize()
 
 	if e != nil {
 		return nil, e
