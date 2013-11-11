@@ -5,6 +5,7 @@ import (
         "flag"
         "fmt"
         "github.com/akualab/gjoa"
+        "github.com/akualab/gjoa/model/hmm"
         "github.com/golang/glog"
         "io/ioutil"
         "launchpad.net/goyaml"
@@ -56,9 +57,14 @@ func decoder(cmd *Command, args []string) {
         glog.Infof("ds:\n%+v", ds)
         // Print config.
         glog.Infof("Read configuration:\n%+v", config)
-
-        // read the hmm from file, this can be tricky
-
+        // read the hmm from file
+        hmm0 := &hmm.HMM{}
+        x, e1 := hmm0.ReadFile(config.HMM.HMMFile)
+        if e1 != nil {
+            glog.Infof("Problems with ReadFile")
+            gjoa.Fatal(e1)
+        }
+        glog.Infof("hmm:\n%+v", x)
         // Use the code in trainer.go trainGaussians(ds *gjoa.DataSet)
         // write a function that given ds and the hmm calls virterbi for each data set
 
