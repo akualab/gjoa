@@ -175,7 +175,7 @@ func trainer(cmd *Command, args []string) {
 		glog.Infof("Output distribution: %s.", config.HMM.OutputDist)
 		graph, tpe := gjoa.ReadFile(config.HMM.TPGraphFilename)
 		gjoa.Fatal(tpe)
-		nodes, probs := graph.Nodes()
+		nodes, probs := graph.NodesAndProbs()
 		glog.V(1).Info(graph.String())
 
 		switch config.HMM.OutputDist {

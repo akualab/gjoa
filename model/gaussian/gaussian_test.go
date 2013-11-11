@@ -58,12 +58,12 @@ func TestWriteReadGaussian(t *testing.T) {
 	g.WriteFile(fn)
 
 	// Create another Gaussian model.
-	m1, e1 := g.ReadFile(fn)
+	g0 := EmptyGaussian()
+	m1, e1 := g0.ReadFile(fn)
 	if e1 != nil {
 		t.Fatal(e1)
 	}
 	g1 := m1.(*Gaussian)
-	g1.Initialize()
 
 	// Read values from file.
 	t.Logf("Original model:\n%+v\n", g)

@@ -31,7 +31,7 @@ func TestGraph(t *testing.T) {
 	t.Logf("Wrote to file %s", fn)
 
 	// Get transition probs.
-	nodes, tpm := g.Nodes()
+	nodes, tpm := g.NodesAndProbs()
 	for k, v := range tpm {
 		t.Logf("From: %20s: %v", nodes[k].Name, v)
 	}

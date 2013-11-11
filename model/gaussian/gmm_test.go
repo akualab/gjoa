@@ -296,12 +296,12 @@ func TestWriteReadGMM(t *testing.T) {
 	*/
 
 	// Create another Gaussian model.
-	m1, e1 := gmm.ReadFile(fn)
+	gmm00 := EmptyGaussianMixture()
+	m1, e1 := gmm00.ReadFile(fn)
 	if e1 != nil {
 		t.Fatal(e1)
 	}
 	gmm1 := m1.(*GMM)
-	gmm1.Initialize()
 
 	// Compare gmm and gmm1
 	for k, v := range gmm.Components {

@@ -152,7 +152,9 @@ func TestWriteReadHMM(t *testing.T) {
 
 	fn := os.TempDir() + "hmm.json"
 	hmm.WriteFile(fn)
-	x, e1 := hmm.ReadFile(fn)
+
+	hmm0 := EmptyHMM()
+	x, e1 := hmm0.ReadFile(fn)
 	if e1 != nil {
 		t.Fatal(e1)
 	}

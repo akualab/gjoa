@@ -54,18 +54,15 @@ func NewGaussianMixture(numElements, numComponents int,
 		return
 	}
 
-	gmm = &GMM{
-		NComponents:  numComponents,
-		Components:   make([]*Gaussian, numComponents, numComponents),
-		PosteriorSum: make([]float64, numComponents),
-		LogWeights:   make([]float64, numComponents),
-		Diag:         true,
-		NE:           numElements,
-		ModelName:    name,
-		IsTrainable:  trainable,
-	}
-	// Initialize base model.
-	gmm.BaseModel = model.NewBaseModel(gmm)
+	gmm = EmptyGaussianMixture()
+	gmm.NComponents = numComponents
+	gmm.Components = make([]*Gaussian, numComponents, numComponents)
+	gmm.PosteriorSum = make([]float64, numComponents)
+	gmm.LogWeights = make([]float64, numComponents)
+	gmm.Diag = true
+	gmm.NE = numElements
+	gmm.ModelName = name
+	gmm.IsTrainable = trainable
 
 	for i, _ := range gmm.Components {
 		cname := getComponentName(gmm.ModelName, i, gmm.NComponents)
@@ -94,6 +91,15 @@ func (gmm *GMM) Initialize() error {
 	gmm.Weights = make([]float64, gmm.NComponents)
 	floatx.Apply(exp, gmm.LogWeights, gmm.Weights)
 	return nil
+}
+
+// Returns an empty model with the base modeled initialized.
+// Use it reading model from Reader.
+func EmptyGaussianMixture() *GMM {
+
+	gmm := &GMM{}
+	gmm.BaseModel = model.NewBaseModel(model.Modeler(gmm))
+	return gmm
 }
 
 // Computes log prob for mixture.// SIDE EFFECT => returns logProb of
