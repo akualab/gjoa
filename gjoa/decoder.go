@@ -58,7 +58,8 @@ func decoder(cmd *Command, args []string) {
         // Print config.
         glog.Infof("Read configuration:\n%+v", config)
         // read the hmm from file
-        hmm0 := &hmm.HMM{}
+        hmm0 := hmm.EmptyHMM()
+        glog.Infof("ds:\n%+v", hmm0)
         x, e1 := hmm0.ReadFile(config.HMM.HMMFile)
         if e1 != nil {
             glog.Infof("Problems with ReadFile")
