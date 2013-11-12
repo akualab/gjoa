@@ -16,7 +16,7 @@ func main() {
 		cmdTrainer,
 		cmdRecognizer,
 		cmdGraph,
-                cmdDecoder,
+		cmdDecoder,
 	)
 
 	flag.Usage = commands.Usage
@@ -30,7 +30,7 @@ func main() {
 		return
 	}
 
-        // Parsing and running command
+	// Parsing and running command
 	if err := commands.Parse(args); err != nil {
 		glog.Fatalf("%s", err)
 	}

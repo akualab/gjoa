@@ -24,7 +24,7 @@ import (
 // z*(t) = index(z*(t+1), t+1)  t in [0, T-2]
 // logProb = max_j delta(j, T-1)
 
-func (hmm *HMM) viterbi(observations [][]float64) (bt []int, logViterbiProb float64, e error) {
+func (hmm *HMM) Viterbi(observations [][]float64) (bt []int, logViterbiProb float64, e error) {
 
 	// Num states
 	N := hmm.NStates
