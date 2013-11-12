@@ -55,22 +55,14 @@ func decoder(cmd *Command, args []string) {
 	// Read data set files
 	ds, e := gjoa.ReadDataSet(config.DataSet, nil)
 	gjoa.Fatal(e)
-	glog.Infof("ds:\n%+v", ds)
-	// Print config.
-	glog.Infof("Read configuration:\n%+v", config)
 	// read the hmm from file
 	hmm0 := hmm.EmptyHMM()
-	glog.Infof("ds:\n%+v", hmm0)
 	x, e1 := hmm0.ReadFile(config.HMM.HMMFile)
 	if e1 != nil {
 		glog.Infof("Problems with ReadFile")
 		gjoa.Fatal(e1)
 	}
-	glog.Infof("modeler:\n%+v", x)
 	hmm1 := x.(*hmm.HMM)
-	glog.Infof("hmm:\n%+v", hmm1)
-	// Use the code in trainer.go trainGaussians(ds *gjoa.DataSet)
-	// write a function that given ds and the hmm calls virterbi for each data set
 	viterbier(ds, hmm1)
 }
 
@@ -82,16 +74,20 @@ func viterbier(ds *gjoa.DataSet, hmm0 *hmm.HMM) {
 			break
 		}
 		gjoa.Fatal(e)
-
+                // Aggregating the observations
+                all := make([][]float64, 0)
+                labels := make([]int,0)
 		for _, obs := range features {
-			glog.Infof("observations: %v", [][]float64{obs.Values})
-			bt, logProbViterbi, err := hmm0.Viterbi([][]float64{obs.Values})
-			if err != nil {
-				gjoa.Fatal(err)
-			}
-			glog.Infof("logProbViterbi: %d", logProbViterbi)
-			glog.Infof("bt: %s", bt)
+                        all = append(all, obs.Values)
+                        labels = append(labels, obs.ClassID)
 		}
+                // Running viterbi and metric for one
+                // sequence of observations
+                bt, _, err := hmm0.Viterbi(all)
+                if err != nil {
+                        gjoa.Fatal(err)
+                }
+                glog.Infof("labels: %+v", labels)
+                glog.Infof("viterb: %+v", bt)
 	}
-
 }

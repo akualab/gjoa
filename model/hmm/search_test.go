@@ -9,7 +9,7 @@ import (
 func TestViterbi(t *testing.T) {
 	flag.Parse()
 	hmm := MakeHMM(t)
-	bt, logProbViterbi, err := hmm.viterbi(obs0)
+	bt, logProbViterbi, err := hmm.Viterbi(obs0)
 	if err != nil {
 		t.Fatal(err)
 	}

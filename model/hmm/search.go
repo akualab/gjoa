@@ -7,6 +7,7 @@ package hmm
 
 import (
 	"github.com/akualab/gjoa/floatx"
+        //"github.com/golang/glog"
 )
 
 // The viterbi algorithm computes the probable sequence of states for an HMM.

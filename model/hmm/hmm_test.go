@@ -164,7 +164,10 @@ func TestWriteReadHMM(t *testing.T) {
 		m1 := hmm1.ObsModels[i].(*gaussian.Gaussian)
 		CompareGaussians(t, m, m1, 0.01)
 	}
-
+        for i := 0; i < hmm1.NStates; i++ {
+            b := hmm1.ObsModels[i].LogProb(obs0[0])
+            t.Logf("LogProb: %f", b)
+        }
 }
 
 var (
