@@ -74,20 +74,20 @@ func viterbier(ds *gjoa.DataSet, hmm0 *hmm.HMM) {
 			break
 		}
 		gjoa.Fatal(e)
-                // Aggregating the observations
-                all := make([][]float64, 0)
-                labels := make([]int,0)
+		// Aggregating the observations
+		all := make([][]float64, 0)
+		labels := make([]int, 0)
 		for _, obs := range features {
-                        all = append(all, obs.Values)
-                        labels = append(labels, obs.ClassID)
+			all = append(all, obs.Values)
+			labels = append(labels, obs.ClassID)
 		}
-                // Running viterbi and metric for one
-                // sequence of observations
-                bt, _, err := hmm0.Viterbi(all)
-                if err != nil {
-                        gjoa.Fatal(err)
-                }
-                glog.Infof("labels: %+v", labels)
-                glog.Infof("viterb: %+v", bt)
+		// Running viterbi and metric for one
+		// sequence of observations
+		bt, _, err := hmm0.Viterbi(all)
+		if err != nil {
+			gjoa.Fatal(err)
+		}
+		glog.Infof("labels: %+v", labels)
+		glog.Infof("viterb: %+v", bt)
 	}
 }

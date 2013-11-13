@@ -660,7 +660,7 @@ func (os *ObsSlice) UnmarshalJSON(b []byte) error {
 		}
 
 		for k, v := range gslice {
-                        v.Initialize()
+			v.Initialize()
 			modelers[k] = model.Modeler(v)
 		}
 
@@ -672,7 +672,7 @@ func (os *ObsSlice) UnmarshalJSON(b []byte) error {
 		}
 
 		for k, v := range gmmslice {
-                        v.Initialize()
+			v.Initialize()
 			modelers[k] = model.Modeler(v)
 		}
 
