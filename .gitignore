@@ -12,6 +12,7 @@ gjoa
 _obj
 _test
 tmp
+old
 
 # Architecture specific extensions/prefixes
 *.[568vq]

@@ -20,32 +20,26 @@ The data is stored in files using the following format:
 ]
 ```
 
-where `f` is the frema id, `c` is the class name, and `f0, f1` are the features
+where `f` is the frame id, `c` is the class name, and `f0, f1` are the features
 ## Topology
 
-The topology of the house is provided in the file topology-southcourt.yaml. Here is a sample:
+The topology of the house is provided in the file `data/24001/topology-24001.json`. Here are the first few lines:
 
 ```YAML
 name: southcourt
 edges:
-  - {from: BACKYARD, to: DINING, weight: 2.0}
-  - {from: BACKYARD, to: LIVING, weight: 1.0}
-  - {from: BACKYARD, to: KITCHEN, weight: 1.0}
-  - {from: BATH1, to: BED1, weight: 3.0}
-  - {from: BATH1, to: BED2, weight: 2.0}
-  - {from: BATH2, to: BED4, weight: 2.0}
-  - {from: BATH2, to: BED2, weight: 2.0}
-  - {from: BATH3, to: BED5, weight: 2.0}
-  - {from: BATH3, to: DINING, weight: 3.0}
-  - {from: BED1, to: BED4, weight: 2.0}
-  - {from: BED1, to: BATH1, weight: 2.0}
+ - {from: BACKYARD, to: DINING, weight: 2.0}
+ - {from: BACKYARD, to: LIVING, weight: 1.0}
+ - {from: BACKYARD, to: KITCHEN, weight: 1.0}
+ - {from: BATH1, to: BED1, weight: 3.0}
+ - {from: BATH1, to: BED4, weight: 2.0}
 ```
 
 The name of the house is "southcourt". Each posible transition is indicated in a row. For example,
-there is a transition from `BATH1` to `BED2` with a weight of 2.0. The weight indicates how often the
+there is a transition from `BATH1` to `BED1` with a weight of 3.0. The weight indicates how often the
 transition is used. These are estimates provided by the home dwellers.
 
-**Gjøa** provides a Graph object to create, read, and write grahs as follows:
+We use a **Gjøa** object of type Graph to create, read, and write grahs as follows:
 
 ```Go
     // Read graph.
@@ -57,17 +51,34 @@ transition is used. These are estimates provided by the home dwellers.
 
 ## Modeling
 
-We have a sequence of feature vectors sampled every 4 seconds. The simplest approach is to train a
-multivariate Gaussian model for each room using the labeled data. In the next section we will show how to
-search the optimal room sequence using a Markov model.
 
-### Train Gaussians
+### The WiFi Corpus
 
-   Remember that if you change the call you need to run `go install` in project main under `ROOT/gjoa`.
+The data is organized by sessions. Each session corresponds to a user (eg. 24001) that collects data using
+an Android device in a house. Data from sensors is collected using a fixed sampling period of 4 seconds.
+In this case we are collecting the Received Signal Strength Indication (RSSI) from various wireless stationary
+base stations located around the home. Each sample is a vector of RSSI measurements in dbm units. Missing
+values due to weak signal strength are filled with -100 dbm. In some cases we used heuristics to interpolate
+missing values. We also normalized the data to have an exact period of 4 sec. We refer to each sample as a *frame*.
+
+The data is labeled with the name of the room in which the data was collected. The labels were entered manually
+in real-time using a simple user-interface on the Android device. Therefore the accuracy of the labels near the
+transitions between rooms is not precise. Subjects were asked to set the label at the time they were entering a
+room.
+
+### Train One Gaussian per Room
+
+We model the RSSI distribution using a multivariate Gaussian model associated with each room. We name each model with
+corresponding room name.
+
+Install gjoa: `go install github.com/akualab/gjoa/gjoa`
 
 Train hmm:
 
 ```
+gjoa train -use-alignments
+
+# To make it verbose:
 gjoa -logtostderr -v=3 train -use-alignments
 ```
 
