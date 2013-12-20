@@ -63,7 +63,7 @@ Install gjoa: `go install github.com/akualab/gjoa/gjoa`
 
 Type `gjoa` to see usage info.
 
-Train hmm: `gjoa train` uses teh default config file `gjoa.yaml`.
+Train hmm: `gjoa train` uses the default config file `gjoa.yaml`.
 
 You should see the model trained from Gaussians in `out/hmm0.json`.
 
