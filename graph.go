@@ -3,13 +3,15 @@ package gjoa
 import (
 	"bytes"
 	"fmt"
-	"github.com/golang/glog"
-	"github.com/gonum/floats"
 	"io"
 	"io/ioutil"
-	"launchpad.net/goyaml"
 	"os"
+	"path/filepath"
 	"sort"
+
+	"github.com/golang/glog"
+	"github.com/gonum/floats"
+	"launchpad.net/goyaml"
 )
 
 type Node struct {
@@ -85,6 +87,10 @@ func (g *Graph) WriteFile(fn string) error {
 		glog.Fatalf("Missing filename.")
 	}
 
+	e := os.MkdirAll(filepath.Dir(fn), 0755)
+	if e != nil {
+		return e
+	}
 	f, err := os.Create(fn)
 	if err != nil {
 		return err

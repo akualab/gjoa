@@ -7,23 +7,11 @@ the mobile phone.
 
 ## Data
 
-The data is stored in files using the following format:
+The data is stored in files. See the [dataframe package](https://github.com/akualab/dataframe).
 
-```JSON
-[
-    {"n":0,"c":"BED5","data":[-40.8,-41.2]},
-    {"n":1,"c":"BED5","data":[-41.8,-41.1]},
-    {"n":2,"c":"BED5","data":[-42.8,-40.34]},
-    {"n":3,"c":"DINING","data":[-42.9,-40.11]},
-    {"n":4,"c":"DINING","data":[-42.764,-39.98]},
-    {"n":5,"c":"DINING","data":[-42.209,-39.6]}
-]
-```
-
-where `f` is the frame id, `c` is the class name, and `f0, f1` are the features
 ## Topology
 
-The topology of the house is provided in the file `data/24001/topology-24001.json`. Here are the first few lines:
+The topology of the house is provided in the file `topology-24001.json`. Here are the first few lines:
 
 ```YAML
 name: southcourt
@@ -73,16 +61,14 @@ corresponding room name.
 
 Install gjoa: `go install github.com/akualab/gjoa/gjoa`
 
-Train hmm:
+Type `gjoa` to see usage info.
 
-```
-gjoa train -use-alignments
+Train hmm: `gjoa train` uses teh default config file `gjoa.yaml`.
 
-# To make it verbose:
-gjoa -logtostderr -v=3 train -use-alignments
-```
+You should see the model trained from Gaussians in `out/hmm0.json`.
 
-You should see the model trained from Gaussians in `model-out.json`.
+To decode run `gjoa -c test.yaml decode` which uses the config file `test.yaml`.
+
 
 Let's use the subcommand `graph` to expand the graph by inserting a new state between the original states.
 

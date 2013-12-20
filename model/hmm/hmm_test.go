@@ -2,12 +2,13 @@ package hmm
 
 import (
 	"flag"
+	"os"
+	"testing"
+
 	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/gjoa/model/gaussian"
-	"os"
-	"testing"
 )
 
 const epsilon = 0.001
@@ -91,6 +92,16 @@ func TestLogProb(t *testing.T) {
 	}
 	expectedLogProb := -26.4626886822436
 	gjoa.CompareFloats(t, expectedLogProb, logProb, "Error in logProb", epsilon)
+}
+
+func TestIndices(t *testing.T) {
+
+	flag.Parse()
+	hmm := MakeHMM(t)
+	m := hmm.Indices()
+	t.Logf("Indices: %+v", m)
+
+	gjoa.CompareSliceInt(t, []int{0, 1}, []int{m["g1"], m["g2"]}, "indices don't match")
 }
 
 func TestEvaluationGamma(t *testing.T) {

@@ -3,12 +3,14 @@ package model
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/golang/glog"
 	"io"
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"reflect"
+
+	"github.com/golang/glog"
 )
 
 var modelTypes = make(map[string]Modeler)
@@ -157,6 +159,10 @@ func (base *BaseModel) Write(w io.Writer) error {
 // Writes model values to a file.
 func (base *BaseModel) WriteFile(fn string) error {
 
+	e := os.MkdirAll(filepath.Dir(fn), 0755)
+	if e != nil {
+		return e
+	}
 	f, err := os.Create(fn)
 	if err != nil {
 		return err

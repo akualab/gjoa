@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
-	"os"
 
 	"github.com/akualab/dataframe"
 	"github.com/akualab/gjoa"
@@ -13,7 +11,6 @@ import (
 	"github.com/akualab/gjoa/model/hmm"
 	"github.com/codegangsta/cli"
 	"github.com/golang/glog"
-	"launchpad.net/goyaml"
 )
 
 var trainCommand = cli.Command{
@@ -60,13 +57,10 @@ func trainAction(c *cli.Context) {
 
 	initApp(c)
 
-	// Read config file.
-	fn := fmt.Sprintf("%s%c%s", dir, os.PathSeparator, configFile)
-	data, err := ioutil.ReadFile(fn)
-	gjoa.Fatal(err)
-	config := gjoa.Config{}
-	err = goyaml.Unmarshal(data, &config)
-	gjoa.Fatal(err)
+	if config == nil {
+		e := fmt.Errorf("Missing config file [%s]", c.String("config-file"))
+		gjoa.Fatal(e)
+	}
 
 	// Validate parameters. Command flags overwrite config file params.
 	requiredStringParam(c, "model", &config.Model)
@@ -126,7 +120,7 @@ func trainAction(c *cli.Context) {
 				// Puts Gaussian models in a slice in the same order as probs.
 				gaussians := sortGaussians(gs, nodes)
 
-				hmm, e := hmm.NewHMM(probs, nil, gaussians, true, "hmm", &config)
+				hmm, e := hmm.NewHMM(probs, nil, gaussians, true, "hmm", config)
 				gjoa.Fatal(e)
 				e = hmm.WriteFile(config.ModelOut)
 				gjoa.Fatal(e)
@@ -156,7 +150,6 @@ func trainGaussians(ds *dataframe.DataSet, vectors map[string][]string) (gs map[
 		gjoa.Fatal(e)
 		numFrames += df.N() // add num data instances in dataframe
 
-		//for _, v := range features {
 		for i := 0; i < df.N(); i++ {
 
 			// Get float vector for frame i.
@@ -174,6 +167,8 @@ func trainGaussians(ds *dataframe.DataSet, vectors map[string][]string) (gs map[
 				gjoa.Fatal(e)
 				gs[name] = g
 			}
+
+			// Update stats.
 			g.Update(feat, 1.0)
 		}
 	}

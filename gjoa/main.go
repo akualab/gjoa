@@ -3,9 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path"
+	"launchpad.net/goyaml"
 
+	"github.com/akualab/gjoa"
 	"github.com/codegangsta/cli"
 	"github.com/golang/glog"
 )
@@ -20,16 +23,18 @@ var (
 	configFile string
 	eid        string
 	dir        string
+	config     *gjoa.Config
 )
 
 func main() {
 
-	// Set a default directory and id for the experiment.
+	// Set a defaults.
 	defaultDir, err := os.Getwd()
 	if err != nil {
 		defaultDir = os.TempDir()
 	}
 	defaultEid := path.Base(defaultDir)
+	defaultLogDir := defaultDir + string(os.PathSeparator) + "logs"
 
 	app := cli.NewApp()
 	app.Name = "gjoa"
@@ -45,6 +50,7 @@ func main() {
 		cli.StringFlag{"eid, e", defaultEid, "experiment id"},
 		cli.StringFlag{"config-file, c", DEFAULT_CONFIG_FILE, "configuration file"},
 		cli.IntFlag{"debug, g", 0, "verbose level"},
+		cli.StringFlag{"log-dir, l", defaultLogDir, "log directory"},
 	}
 
 	app.Commands = []cli.Command{
@@ -67,13 +73,33 @@ func initApp(c *cli.Context) {
 
 	debugLevel := c.GlobalInt("debug")
 
-	// Log to std error.
-	flag.Set("logtostderr", "true")
+	// Also log to std error.
+	flag.Set("alsologtostderr", "true")
 
 	// Set glog debug level
 	flag.Set("v", fmt.Sprintf("%d", debugLevel))
 
-	// TODO add options to log to dir, etc.
+	// Set logs dir.
+	logsDir := c.GlobalString("log-dir")
+	flag.Set("log_dir", logsDir)
+	if e := os.MkdirAll(logsDir, 0755); e != nil {
+		gjoa.Fatal(e)
+	}
+
+	// Read config file.
+	fn := fmt.Sprintf("%s%c%s", dir, os.PathSeparator, configFile)
+
+	// If config file exists, read it.
+	// Commands must check if a config is needed.
+	exist, e := exists(fn)
+	gjoa.Fatal(e)
+	if exist {
+		data, err := ioutil.ReadFile(fn)
+		gjoa.Fatal(err)
+		config = &gjoa.Config{}
+		err = goyaml.Unmarshal(data, config)
+		gjoa.Fatal(err)
+	}
 }
 
 // Uses command line flag if present. Otherwise uses config file param.
@@ -98,4 +124,16 @@ func requiredStringParam(c *cli.Context, flag string, configParam *string) {
 		// Value missing.
 		glog.Fatalf("missing parameter: [%s]", flag)
 	}
+}
+
+// exists returns whether the given file or directory exists or not
+func exists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }

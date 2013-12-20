@@ -11,14 +11,15 @@ package hmm
 import (
 	"encoding/json"
 	"fmt"
+	"math"
+	"math/rand"
+
 	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/gjoa/model/gaussian"
 	"github.com/golang/glog"
 	"github.com/gonum/floats"
-	"math"
-	"math/rand"
 )
 
 const (
@@ -526,6 +527,15 @@ func (hmm *HMM) NumElements() int {
 }
 func (hmm *HMM) Name() string    { return hmm.ModelName }
 func (hmm *HMM) Trainable() bool { return hmm.IsTrainable }
+
+func (hmm *HMM) Indices() (m map[string]int) {
+
+	m = make(map[string]int)
+	for k, v := range hmm.ObsModels {
+		m[v.Name()] = k
+	}
+	return
+}
 
 // Compute α and β.
 func (hmm *HMM) alphaBeta(observations [][]float64) (α, β [][]float64, logProb float64, e error) {

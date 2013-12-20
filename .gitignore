@@ -13,6 +13,7 @@ _obj
 _test
 tmp
 old
+log*
 
 # Architecture specific extensions/prefixes
 *.[568vq]
