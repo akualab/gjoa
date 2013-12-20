@@ -1,26 +1,26 @@
 package main
 
 import (
-	"flag"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"os"
+
+	"github.com/akualab/dataframe"
 	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/gjoa/model/gaussian"
 	"github.com/akualab/gjoa/model/hmm"
+	"github.com/codegangsta/cli"
 	"github.com/golang/glog"
-	"io"
-	"io/ioutil"
 	"launchpad.net/goyaml"
-	"os"
-	"path"
 )
 
-var cmdTrainer = &Command{
-	Run:       trainer,
-	UsageLine: "train [options]",
-	Short:     "runs trainer",
-	Long: `
-runs trainer.
+var trainCommand = cli.Command{
+	Name:      "train",
+	ShortName: "t",
+	Usage:     "Estimates model parameters using data.",
+	Description: `runs trainer.
 
 You must provide a config file. The default name is "config.yaml".
 A sample config file will look like this:
@@ -34,122 +34,60 @@ hmm:
 ex:
  $ gjoa train
 `,
-	Flag: *flag.NewFlagSet("gjoa-trainer", flag.ExitOnError),
+	Action: trainAction,
+	Flags: []cli.Flag{
+		cli.StringFlag{"data-set, d", "", "the file with the list of data files"},
+		cli.StringFlag{"model-out, o", "", "output model filename"},
+		cli.StringFlag{"model-in, i", "", "input model filename"},
+
+		// Selects a model.
+		cli.StringFlag{"model", "", "select a model to train {gaussian, gmm, hmm}"},
+
+		// Single Gaussian flags.
+
+		// Gaussian mixture flags.
+
+		// HMM flags.
+		cli.BoolFlag{"update-tp", "update HMM transition probabilities, overwrites config file when set"},
+		cli.BoolFlag{"update-ip", "update HMM initial probabilities, overwrites config file when set"},
+		cli.StringFlag{"output-distribution", "", "HMM state output distribution {gaussian, gmm}"},
+		cli.BoolFlag{"use-alignments", "train output model using alignments"},
+		cli.StringFlag{"tp-graph", "", "HMM state transition probabilities graph"},
+	},
 }
 
-func init() {
-	addTrainerFlags(cmdTrainer)
-}
+func trainAction(c *cli.Context) {
 
-const (
-	DEFAULT_CONFIG_FILE = "gjoa.yaml"
-	DEFAULT_DATA_SET    = "train.yaml"
-	DEFAULT_OUT_MODEL   = "gaussian"
-	DEFAULT_MODEL       = "gaussian"
-	DEFAULT_TP_FILE     = "tp.yaml"
-)
-
-var tpFilename string
-var modelType string
-var updateTP bool
-var updateIP bool
-var useAlignments bool
-var outputDistribution string
-var configFilename string
-var dataSet string
-var modelOutFilename string
-var modelInFilename string
-
-func addTrainerFlags(cmd *Command) {
-
-	defaultDir, err := os.Getwd()
-	if err != nil {
-		defaultDir = os.TempDir()
-	}
-	defaultEID := path.Base(defaultDir)
-
-	// Common.
-	cmd.Flag.StringVar(&dir, "dir", defaultDir, "the project dir")
-	cmd.Flag.StringVar(&eid, "eid", defaultEID, "the experiment id")
-	cmd.Flag.StringVar(&configFilename, "config-file", DEFAULT_CONFIG_FILE, "the trainer config file")
-	cmd.Flag.StringVar(&dataSet, "data-set", DEFAULT_DATA_SET, "the file with the list of data files")
-	cmd.Flag.StringVar(&modelOutFilename, "model-out", "model-out.json", "output model filename")
-	cmd.Flag.StringVar(&modelInFilename, "model-in", "model-in.json", "input model filename")
-
-	// Selects a model.
-	cmd.Flag.StringVar(&modelType, "model", DEFAULT_MODEL, "select a model to train {gaussian, gmm, hmm}")
-
-	// Single Gaussian flags.
-
-	// Gaussian mixture flags.
-
-	// HMM flags.
-	cmd.Flag.BoolVar(&updateTP, "hmm-update-tp", false, "update HMM transition probabilities, overwrites config file when set")
-	cmd.Flag.BoolVar(&updateIP, "hmm-update-ip", false, "update HMM initial probabilities, overwrites config file when set")
-	cmd.Flag.StringVar(&outputDistribution, "hmm-output-distribution", DEFAULT_OUT_MODEL, "HMM state output distribution {gaussian, gmm}")
-	cmd.Flag.BoolVar(&useAlignments, "use-alignments", false, "train output model using alignments")
-	cmd.Flag.StringVar(&tpFilename, "hmm-tp-graph", DEFAULT_TP_FILE, "HMM state transition probabilities graph")
-}
-
-func trainer(cmd *Command, args []string) {
+	initApp(c)
 
 	// Read config file.
-	fn := fmt.Sprintf("%s%c%s", dir, os.PathSeparator, configFilename)
+	fn := fmt.Sprintf("%s%c%s", dir, os.PathSeparator, configFile)
 	data, err := ioutil.ReadFile(fn)
 	gjoa.Fatal(err)
 	config := gjoa.Config{}
 	err = goyaml.Unmarshal(data, &config)
 	gjoa.Fatal(err)
 
-	// Default config values.
-	if len(config.HMM.OutputDist) == 0 {
-		config.HMM.OutputDist = DEFAULT_OUT_MODEL
-	}
-	if len(config.DataSet) == 0 {
-		config.DataSet = DEFAULT_DATA_SET
-	}
-	if len(config.Model) == 0 {
-		config.Model = DEFAULT_MODEL
-	}
-	if len(config.HMM.TPGraphFilename) == 0 {
-		config.HMM.TPGraphFilename = DEFAULT_TP_FILE
-	}
+	// Validate parameters. Command flags overwrite config file params.
+	requiredStringParam(c, "model", &config.Model)
+	requiredStringParam(c, "output-distribution", &config.HMM.OutputDist)
+	requiredStringParam(c, "data-set", &config.DataSet)
+	requiredStringParam(c, "tp-graph", &config.HMM.TPGraphFilename)
+	requiredStringParam(c, "model-out", &config.ModelOut)
 
-	// Overide config when a flag is set.
-	// TODO: Is this the best way to do this?
-	// I included this to show how it can be done. We probably want to have most
-	// params in config and a few in command line to run experiments.
-	cmd.Flag.Visit(func(f *flag.Flag) {
-
-		switch f.Name {
-		case "model":
-			config.Model = modelType
-		case "hmm-tp-graph":
-			config.HMM.TPGraphFilename = tpFilename
-		case "hmm-update-tp":
-			config.HMM.UpdateTP = updateTP
-		case "hmm-update-ip":
-			config.HMM.UpdateIP = updateIP
-		case "use-alignments":
-			config.HMM.UseAlignments = useAlignments
-		case "data-set":
-			config.DataSet = dataSet
-		case "hmm-output-distribution":
-			config.HMM.OutputDist = outputDistribution
-		default:
-			goto DONE
-		}
-		glog.Infof("Overwriting config using flag [%s] with value [%v]", f.Name, f.Value)
-	DONE:
-	})
-
-	// Validations.
-	if len(config.DataSet) == 0 {
-		glog.Fatalf("DataSet is empty.")
+	// If bool flag exists, set param to true. Ignores config value.
+	if c.Bool("update-tp") {
+		config.HMM.UpdateTP = true
+	}
+	if c.Bool("update-ip") {
+		config.HMM.UpdateIP = true
+	}
+	if c.Bool("use-alignments") {
+		config.HMM.UseAlignments = true
 	}
 
 	// Read data set.
-	ds, e := gjoa.ReadDataSet(config.DataSet, nil)
+	ds, e := dataframe.ReadDataSet(config.DataSet)
 	gjoa.Fatal(e)
 
 	// Print config.
@@ -162,7 +100,7 @@ func trainer(cmd *Command, args []string) {
 	var gs map[string]*gaussian.Gaussian
 	switch config.Model {
 	case "gaussian":
-		gs = trainGaussians(ds)
+		gs = trainGaussians(ds, config.Vectors)
 
 		if glog.V(1) {
 			for k, v := range gs {
@@ -183,50 +121,60 @@ func trainer(cmd *Command, args []string) {
 			if config.HMM.UseAlignments {
 
 				// Trains one Gaussian model per class. Returns a map.
-				gs = trainGaussians(ds)
+				gs = trainGaussians(ds, config.Vectors)
 
 				// Puts Gaussian models in a slice in the same order as probs.
 				gaussians := sortGaussians(gs, nodes)
 
 				hmm, e := hmm.NewHMM(probs, nil, gaussians, true, "hmm", &config)
 				gjoa.Fatal(e)
-				e = hmm.WriteFile(modelOutFilename)
+				e = hmm.WriteFile(config.ModelOut)
 				gjoa.Fatal(e)
 			} else {
-				glog.Fatalf("Not implemented: %s.", "train fb")
+				glog.Fatalf("Not implemented: %s.", "train forward-backward")
 			}
 
 		case "gmm":
 			glog.Fatalf("Not implemented: %s.", "output dist gmm")
 		default:
-			glog.Fatalf("Unknown output distribution: %s.", outputDistribution)
+			glog.Fatalf("Unknown output distribution: %s.", config.HMM.OutputDist)
 		}
 	default:
 		glog.Fatalf("Unknown model: %s.", config.Model)
 	}
 }
 
-func trainGaussians(ds *gjoa.DataSet) (gs map[string]*gaussian.Gaussian) {
+func trainGaussians(ds *dataframe.DataSet, vectors map[string][]string) (gs map[string]*gaussian.Gaussian) {
 
 	gs = make(map[string]*gaussian.Gaussian)
 	var numFrames int
 	for {
-		features, e := ds.Next()
+		df, e := ds.Next() // get next dataframe
 		if e == io.EOF {
 			break
 		}
 		gjoa.Fatal(e)
-		numFrames += len(features)
+		numFrames += df.N() // add num data instances in dataframe
 
-		for _, v := range features {
-			name := v.ClassName
-			g, ok := gs[name]
-			if !ok {
-				g, e = gaussian.NewGaussian(len(v.Values), nil, nil, true, true, v.ClassName)
+		//for _, v := range features {
+		for i := 0; i < df.N(); i++ {
+
+			// Get float vector for frame i.
+			feat, e := df.Float64Slice(i, vectors["features"]...)
+
+			// Get class name using convention.
+			// Look up vector named "class".
+			name, en := df.String(i, vectors["class"][0])
+			gjoa.Fatal(en)
+
+			// Lookup model for class. Create a new one if not found.
+			g, exist := gs[name]
+			if !exist {
+				g, e = gaussian.NewGaussian(len(feat), nil, nil, true, true, name)
 				gjoa.Fatal(e)
 				gs[name] = g
 			}
-			g.Update(v.Values, 1.0)
+			g.Update(feat, 1.0)
 		}
 	}
 

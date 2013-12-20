@@ -1,58 +1,41 @@
 package main
 
 import (
-	"flag"
 	"github.com/akualab/gjoa"
+	"github.com/codegangsta/cli"
 	"github.com/golang/glog"
-	"os"
-	"path"
 )
 
-var cmdGraph = &Command{
-	Run:       graph,
-	UsageLine: "graph [options]",
-	Short:     "runs graph",
-	Long: `
-runs graph.
+var graphCommand = cli.Command{
+	Name:      "graph",
+	ShortName: "g",
+	Usage:     "Modifies search graph.",
+	Description: `runs graph.
 
 ex:
- $ gjoa graph -in in-graph.json -out out-graph.json
+$ gjoa graph -in in-graph.json -out out-graph.json
 `,
-	Flag: *flag.NewFlagSet("gjoa-graph", flag.ExitOnError),
+	Action: graphAction,
+	Flags: []cli.Flag{
+
+		cli.StringFlag{"in", "", "the input graph"},
+		cli.StringFlag{"out", "", "the output graph"},
+		cli.BoolFlag{"cd-state", "inserts context dependent state for each edge - example: A <=> B becomes A => A-B => B and B => B-A => A"},
+	},
 }
 
-var contextDependant bool
-var inFilename, outFilename string
+func graphAction(c *cli.Context) {
 
-func init() {
-	addGraphFlags(cmdGraph)
-}
+	initApp(c)
 
-func addGraphFlags(cmd *Command) {
-
-	defaultDir, err := os.Getwd()
-	if err != nil {
-		defaultDir = os.TempDir()
-	}
-	defaultEID := path.Base(defaultDir)
-
-	cmd.Flag.StringVar(&dir, "dir", defaultDir, "the project dir")
-	cmd.Flag.StringVar(&eid, "eid", defaultEID, "the experiment id")
-	cmd.Flag.StringVar(&inFilename, "in", "graph-in.yaml", "the input graph")
-	cmd.Flag.StringVar(&outFilename, "out", "graph-out.yaml", "the output graph")
-	cmd.Flag.BoolVar(&contextDependant, "cd-state", false, "inserts context dependent state for each edge - example: A <=> B becomes A => A-B => B and B => B-A => A")
-
-}
-
-func graph(cmd *Command, args []string) {
-
+	contextDependant := c.Bool("cd-state")
 	if !contextDependant {
 		// For now there is nothig else to do.
 		glog.Fatalf("Nothing to do.")
 	}
 
 	if contextDependant {
-		g, tpe := gjoa.ReadFile(inFilename)
+		g, tpe := gjoa.ReadFile(c.String("in"))
 		gjoa.Fatal(tpe)
 		nodes, probs := g.NodesAndProbs()
 
@@ -66,6 +49,6 @@ func graph(cmd *Command, args []string) {
 		for k, v := range cdNodes {
 			glog.Infof("CD Node: [%s] %v", k, v)
 		}
-		ng.WriteFile(outFilename)
+		ng.WriteFile(c.String("out"))
 	}
 }

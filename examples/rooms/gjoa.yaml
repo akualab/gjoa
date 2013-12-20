@@ -1,4 +1,9 @@
 model: hmm
-data_set: train-random.yaml
+data_set: train-24001.yaml
+model_out: out/hmm0.json
+vectors: {features: [wifi], class: [room]}
 hmm:
-  tp_graph: topology.yaml
+  tp_graph: topology-24001.json
+  output_distribution: gaussian
+  tp_graph: topology-24001.json
+  use_alignments: true

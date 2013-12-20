@@ -1,49 +1,38 @@
-// Code to decode an hmm model
+// Searches optimal result given the model.
 package main
 
 import (
-	"flag"
 	"fmt"
-	"github.com/akualab/gjoa"
-	"github.com/akualab/gjoa/model/hmm"
-	"github.com/golang/glog"
 	"io"
 	"io/ioutil"
-	"launchpad.net/goyaml"
 	"os"
-	"path"
+
+	"github.com/akualab/gjoa"
+	"github.com/akualab/gjoa/model/hmm"
+	"github.com/codegangsta/cli"
+	"github.com/golang/glog"
+	"launchpad.net/goyaml"
 )
 
-var cmdDecoder = &Command{
-	Run:       decoder,
-	UsageLine: "decoder [options]",
-	Short:     "runs decoder",
-	Long: `
+var decodeCommand = cli.Command{
+	Name:      "decode",
+	ShortName: "d",
+	Usage:     "Searches optimal result given the model.",
+	Description: `
 runs decoder.
 
 ex:
- $ gjoa decoder -hmm hmm.json -obs obs.json -out decoding.json
+$ gjoa decode
 `,
-	Flag: *flag.NewFlagSet("gjoa-decoder", flag.ExitOnError),
+	Action: decodeAction,
+	Flags:  []cli.Flag{},
 }
 
-func init() {
-	addDecoderFlags(cmdRecognizer)
-}
+func decodeAction(c *cli.Context) {
 
-func addDecoderFlags(cmd *Command) {
-	defaultDir, err := os.Getwd()
-	if err != nil {
-		defaultDir = os.TempDir()
-	}
-	defaultEID := path.Base(defaultDir)
-	cmd.Flag.StringVar(&dir, "dir", defaultDir, "the project dir")
-	cmd.Flag.StringVar(&eid, "eid", defaultEID, "the experiment id")
-}
+	initApp(c)
 
-func decoder(cmd *Command, args []string) {
-
-	fn := fmt.Sprintf("%s%c%s", dir, os.PathSeparator, configFilename)
+	fn := fmt.Sprintf("%s%c%s", dir, os.PathSeparator, configFile)
 	data, err := ioutil.ReadFile(fn)
 	gjoa.Fatal(err)
 	config := gjoa.Config{}
