@@ -40,19 +40,23 @@ We use a **Gjøa** object of type Graph to create, read, and write grahs as foll
 ## Modeling
 
 
-### The WiFi Corpus
+### The Corpus
 
 The data is organized by sessions. Each session corresponds to a user (eg. 24001) that collects data using
-an Android device in a house. Data from sensors is collected using a fixed sampling period of 4 seconds.
-In this case we are collecting the Received Signal Strength Indication (RSSI) from various wireless stationary
-base stations located around the home. Each sample is a vector of RSSI measurements in dbm units. Missing
-values due to weak signal strength are filled with -100 dbm. In some cases we used heuristics to interpolate
-missing values. We also normalized the data to have an exact period of 4 sec. We refer to each sample as a *frame*.
+an Android device in a house. We collected data from various sensors using a fixed sampling period of 4 seconds.
+The measurements include:
+
+* Accelerometer (x,y,z)
+* Gyroscope (x,y,z)
+* Magnetometer (x,y,z)
+*  Received Signal Strength Indication (RSSI) from various wireless stationary base stations located around the home.
+
+The length of the wifi RSSI vector depends on how many access points were available at eash site. The RSSI measurements ar in dbm units. Missing values due to weak signal strength are filled with -100 dbm. In some cases we used heuristics to interpolate missing values.
+
+The original data was sampled with an approximate period of 4 seconds. We processed the data to have an exact period of 4 secs by repeating or dropping some of the samples. We refer to each sample as a *frame*.
 
 The data is labeled with the name of the room in which the data was collected. The labels were entered manually
-in real-time using a simple user-interface on the Android device. Therefore the accuracy of the labels near the
-transitions between rooms is not precise. Subjects were asked to set the label at the time they were entering a
-room.
+by a person in real-time using a simple user-interface on the Android device. Therefore the accuracy of the labels near the transitions between rooms is not precise. Subjects were asked to set the label at the time they were entering a room.
 
 ### Train One Gaussian per Room
 

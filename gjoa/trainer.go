@@ -49,7 +49,7 @@ ex:
 		cli.BoolFlag{"update-ip", "update HMM initial probabilities, overwrites config file when set"},
 		cli.StringFlag{"output-distribution", "", "HMM state output distribution {gaussian, gmm}"},
 		cli.BoolFlag{"use-alignments", "train output model using alignments"},
-		cli.StringFlag{"tp-graph", "", "HMM state transition probabilities graph"},
+		cli.StringFlag{"graph-in", "", "HMM state transition probabilities graph"},
 	},
 }
 
@@ -66,7 +66,7 @@ func trainAction(c *cli.Context) {
 	requiredStringParam(c, "model", &config.Model)
 	requiredStringParam(c, "output-distribution", &config.HMM.OutputDist)
 	requiredStringParam(c, "data-set", &config.DataSet)
-	requiredStringParam(c, "tp-graph", &config.HMM.TPGraphFilename)
+	requiredStringParam(c, "graph-in", &config.HMM.GraphIn)
 	requiredStringParam(c, "model-out", &config.ModelOut)
 
 	// If bool flag exists, set param to true. Ignores config value.
@@ -105,7 +105,7 @@ func trainAction(c *cli.Context) {
 		glog.Fatalf("Not implemented: %s.", "train gmm")
 	case "hmm":
 		glog.Infof("Output distribution: %s.", config.HMM.OutputDist)
-		graph, tpe := gjoa.ReadFile(config.HMM.TPGraphFilename)
+		graph, tpe := gjoa.ReadFile(config.HMM.GraphIn)
 		gjoa.Fatal(tpe)
 		nodes, probs := graph.NodesAndProbs()
 		glog.V(1).Info(graph.String())

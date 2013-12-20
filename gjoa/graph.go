@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/akualab/gjoa"
 	"github.com/codegangsta/cli"
 	"github.com/golang/glog"
@@ -18,8 +20,8 @@ $ gjoa graph -in in-graph.json -out out-graph.json
 	Action: graphAction,
 	Flags: []cli.Flag{
 
-		cli.StringFlag{"in", "", "the input graph"},
-		cli.StringFlag{"out", "", "the output graph"},
+		cli.StringFlag{"graph-in", "", "the input graph"},
+		cli.StringFlag{"graph-out", "", "the output graph"},
 		cli.BoolFlag{"cd-state", "inserts context dependent state for each edge - example: A <=> B becomes A => A-B => B and B => B-A => A"},
 	},
 }
@@ -28,14 +30,26 @@ func graphAction(c *cli.Context) {
 
 	initApp(c)
 
-	contextDependant := c.Bool("cd-state")
-	if !contextDependant {
-		// For now there is nothig else to do.
-		glog.Fatalf("Nothing to do.")
+	if config == nil {
+		e := fmt.Errorf("Missing config file [%s]", c.String("config-file"))
+		gjoa.Fatal(e)
 	}
 
-	if contextDependant {
-		g, tpe := gjoa.ReadFile(c.String("in"))
+	// Validate parameters. Command flags overwrite config file params.
+	requiredStringParam(c, "graph-in", &config.HMM.GraphIn)
+	requiredStringParam(c, "graph-out", &config.HMM.GraphOut)
+
+	if c.Bool("cd-state") {
+		config.HMM.CDState = true
+	}
+	if !config.HMM.CDState {
+		// For now there is nothig else to do.
+		glog.Fatalf("For now, only cd-state=true is supported.")
+	}
+
+	if config.HMM.CDState {
+		g, tpe := gjoa.ReadFile(config.HMM.GraphIn)
+		glog.Errorf("error trying to open graph file [%s]", config.HMM.GraphIn)
 		gjoa.Fatal(tpe)
 		nodes, probs := g.NodesAndProbs()
 
@@ -49,6 +63,6 @@ func graphAction(c *cli.Context) {
 		for k, v := range cdNodes {
 			glog.Infof("CD Node: [%s] %v", k, v)
 		}
-		ng.WriteFile(c.String("out"))
+		ng.WriteFile(config.HMM.GraphOut)
 	}
 }

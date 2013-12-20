@@ -17,7 +17,9 @@ type Config struct {
 }
 
 type HMM struct {
-	TPGraphFilename string `yaml:"tp_graph,omitempty" json:"tp_graph,omitempty"`
+	GraphIn         string `yaml:"graph_in,omitempty" json:"graph_in,omitempty"`
+	GraphOut        string `yaml:"graph_out,omitempty" json:"graph_out,omitempty"`
+	CDState         bool   `yaml:"cd_state,omitempty" json:"cd_state,omitempty"`
 	UpdateTP        bool   `yaml:"update_tp,omitempty" json:"update_tp,omitempty"`
 	UpdateIP        bool   `yaml:"update_ip,omitempty" json:"update_ip,omitempty"`
 	UseAlignments   bool   `yaml:"use_alignments,omitempty" json:"use_alignments,omitempty"`

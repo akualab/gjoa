@@ -84,7 +84,7 @@ func (g *Graph) Write(w io.Writer) error {
 func (g *Graph) WriteFile(fn string) error {
 
 	if len(fn) == 0 {
-		glog.Fatalf("Missing filename.")
+		glog.Fatalln("Graph filename not specified.")
 	}
 
 	e := os.MkdirAll(filepath.Dir(fn), 0755)
