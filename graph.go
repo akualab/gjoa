@@ -147,7 +147,7 @@ func (g *Graph) NodesAndProbs() (nodes []*Node, probs [][]float64) {
 		}
 		sum := floats.Sum(probs[i])
 		if sum == 0.0 {
-			glog.Infof("WARNING: sum of graph weights for row %d is zero. (Hint: use floats in yaml file.)", i)
+			glog.Warningf("sum of graph weights for row %d is zero.", i)
 			continue
 		}
 		for j, _ := range v {
@@ -181,7 +181,7 @@ func (g *Graph) createNodes() error {
 	return nil
 }
 
-func (g *Graph) appendEdge(from, to string, w float64) {
+func (g *Graph) addEdge(from, to string, w float64) {
 	g.Edges = append(g.Edges, &Edge{FromName: from, ToName: to, Weight: w})
 }
 
@@ -203,18 +203,18 @@ func (g *Graph) InsertContextDependentStates() (ng *Graph, cdNodes map[string]bo
 
 		// Skip after adding self transitions.
 		if v.From == v.To {
-			ng.appendEdge(v.FromName, v.FromName, v.Weight)
+			ng.addEdge(v.FromName, v.FromName, v.Weight)
 			continue
 		}
 
 		// Insert edge to and from new context-dependent state.
 		cdName := v.FromName + "-" + v.ToName
 		cdNodes[cdName] = true
-		ng.appendEdge(v.FromName, cdName, v.Weight)
-		ng.appendEdge(cdName, v.ToName, 1.0)
+		ng.addEdge(v.FromName, cdName, v.Weight)
+		ng.addEdge(cdName, v.ToName, 1.0)
 
 		// Self transition for new state.
-		ng.appendEdge(cdName, cdName, 1.0)
+		ng.addEdge(cdName, cdName, 1.0)
 	}
 	ng.createNodes()
 

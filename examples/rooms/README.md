@@ -77,7 +77,7 @@ To decode run `gjoa -c test.yaml decode` which uses the config file `test.yaml`.
 Let's use the subcommand `graph` to expand the graph by inserting a new state between the original states.
 
 ```
-gjoa -logtostderr -v=3 graph -cd-state -in topology.yaml
+gjoa -g=3 -c=graph.yaml graph
 ```
 
 Original:
