@@ -43,7 +43,7 @@ func decodeAction(c *cli.Context) {
 	requiredStringParam(c, "hmm-file", &config.HMM.HMMFile)
 
 	// Read data set files
-	ds, e := dataframe.ReadDataSet(config.DataSet)
+	ds, e := dataframe.ReadDataSetFile(config.DataSet)
 	gjoa.Fatal(e)
 
 	// Read hmm from file.

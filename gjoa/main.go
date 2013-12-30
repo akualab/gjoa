@@ -3,10 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
-	"launchpad.net/goyaml"
 
 	"github.com/akualab/gjoa"
 	"github.com/codegangsta/cli"
@@ -94,11 +92,8 @@ func initApp(c *cli.Context) {
 	exist, e := exists(fn)
 	gjoa.Fatal(e)
 	if exist {
-		data, err := ioutil.ReadFile(fn)
-		gjoa.Fatal(err)
-		config = &gjoa.Config{}
-		err = goyaml.Unmarshal(data, config)
-		gjoa.Fatal(err)
+		config, e = gjoa.ReadConfig(fn)
+		gjoa.Fatal(e)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/gjoa/model/gaussian"
 	"github.com/akualab/gjoa/model/hmm"
+	"github.com/akualab/graph"
 	"github.com/codegangsta/cli"
 	"github.com/golang/glog"
 )
@@ -50,6 +51,7 @@ ex:
 		cli.StringFlag{"output-distribution", "", "HMM state output distribution {gaussian, gmm}"},
 		cli.BoolFlag{"use-alignments", "train output model using alignments"},
 		cli.StringFlag{"graph-in", "", "HMM state transition probabilities graph"},
+		cli.BoolFlag{"expanded-graph", "train using alignments for the expanded graph"},
 	},
 }
 
@@ -79,9 +81,12 @@ func trainAction(c *cli.Context) {
 	if c.Bool("use-alignments") {
 		config.HMM.UseAlignments = true
 	}
+	if c.Bool("expanded-graph") {
+		config.HMM.ExpandedGraph = true
+	}
 
 	// Read data set.
-	ds, e := dataframe.ReadDataSet(config.DataSet)
+	ds, e := dataframe.ReadDataSetFile(config.DataSet)
 	gjoa.Fatal(e)
 
 	// Print config.
@@ -94,6 +99,7 @@ func trainAction(c *cli.Context) {
 	var gs map[string]*gaussian.Gaussian
 	switch config.Model {
 	case "gaussian":
+
 		gs = trainGaussians(ds, config.Vectors)
 
 		if glog.V(1) {
@@ -105,28 +111,28 @@ func trainAction(c *cli.Context) {
 		glog.Fatalf("Not implemented: %s.", "train gmm")
 	case "hmm":
 		glog.Infof("Output distribution: %s.", config.HMM.OutputDist)
-		graph, tpe := gjoa.ReadFile(config.HMM.GraphIn)
+		graph, tpe := graph.ReadJSONGraph(config.HMM.GraphIn)
+		graph.Normalize(false) // convert weights to probs.
 		gjoa.Fatal(tpe)
-		nodes, probs := graph.NodesAndProbs()
-		glog.V(1).Info(graph.String())
+		nodeNames, probs := graph.TransitionMatrix(false)
+		glog.V(1).Infof("Graph read:\n%v\n", graph)
 
 		switch config.HMM.OutputDist {
 		case "gaussian":
 			if config.HMM.UseAlignments {
-
-				// Trains one Gaussian model per class. Returns a map.
 				gs = trainGaussians(ds, config.Vectors)
-
-				// Puts Gaussian models in a slice in the same order as probs.
-				gaussians := sortGaussians(gs, nodes)
-
-				hmm, e := hmm.NewHMM(probs, nil, gaussians, true, "hmm", config)
-				gjoa.Fatal(e)
-				e = hmm.WriteFile(config.ModelOut)
-				gjoa.Fatal(e)
+			} else if config.HMM.ExpandedGraph {
+				gs = trainExpandedGraph(ds, config.Vectors)
 			} else {
 				glog.Fatalf("Not implemented: %s.", "train forward-backward")
 			}
+			// Puts Gaussian models in a slice in the same order as probs.
+			gaussians := sortGaussians(gs, nodeNames)
+
+			hmm, e := hmm.NewHMM(probs, nil, gaussians, true, "hmm", config)
+			gjoa.Fatal(e)
+			e = hmm.WriteFile(config.ModelOut)
+			gjoa.Fatal(e)
 
 		case "gmm":
 			glog.Fatalf("Not implemented: %s.", "output dist gmm")
@@ -181,13 +187,97 @@ func trainGaussians(ds *dataframe.DataSet, vectors map[string][]string) (gs map[
 	return
 }
 
-func sortGaussians(gs map[string]*gaussian.Gaussian, nodes []*gjoa.Node) (gaussians []model.Modeler) {
+func trainExpandedGraph(ds *dataframe.DataSet, vectors map[string][]string) (gs map[string]*gaussian.Gaussian) {
+
+	var X = 2
+	var da []string // for debugging
+	gs = make(map[string]*gaussian.Gaussian)
+	var numFrames int
+	for {
+		df, e := ds.Next() // get next dataframe
+		if e == io.EOF {
+			break
+		}
+		gjoa.Fatal(e)
+		numFrames += df.N() // add num data instances in dataframe
+
+		// First pass: Need to modify alignments as follows. Assign the last X frames
+		// of a segment to the inserted node. If segment has fewer than 2X frames don't
+		// assign any frames to the new node.
+		newAlignments := make([]string, df.N(), df.N())
+		if glog.V(3) {
+			da = make([]string, df.N(), df.N())
+		}
+		var nseg int
+		lastName := ""
+		for i := 0; i < df.N(); i++ {
+
+			// Get class name using convention.
+			// Look up vector named "class".
+			name, en := df.String(i, vectors["class"][0])
+			gjoa.Fatal(en)
+
+			// Modify alignment when we reach the end of a segment.
+			if name != lastName {
+
+				if nseg >= 2*X {
+					lab := lastName + "-" + name
+					for j := 0; j < X; j++ {
+						newAlignments[i-j-1] = lab
+					}
+				}
+				lastName = name
+				nseg = 0
+			}
+			newAlignments[i] = name
+			nseg += 1
+			if glog.V(3) {
+				da[i] = name
+			}
+		}
+
+		if glog.V(3) {
+			glog.Infof("Original alignemnt:\n%v\n", da)
+			glog.Infof("Modified alignemnt:\n%v\n", newAlignments)
+		}
+
+		// Now let's train the gaussians using the new alignments.
+		for i := 0; i < df.N(); i++ {
+
+			// Get float vector for frame i.
+			feat, e := df.Float64Slice(i, vectors["features"]...)
+
+			// Get class name using the new alignments.
+			name := newAlignments[i]
+
+			// Lookup model for class. Create a new one if not found.
+			g, exist := gs[name]
+			if !exist {
+				g, e = gaussian.NewGaussian(len(feat), nil, nil, true, true, name)
+				gjoa.Fatal(e)
+				gs[name] = g
+			}
+
+			// Update stats.
+			g.Update(feat, 1.0)
+		}
+	}
+
+	// Estimate params.
+	for _, g := range gs {
+		g.Estimate()
+	}
+
+	return
+}
+
+func sortGaussians(gs map[string]*gaussian.Gaussian, nodes []string) (gaussians []model.Modeler) {
 
 	gaussians = make([]model.Modeler, len(nodes))
-	for k, v := range nodes {
-		g, found := gs[v.Name]
+	for k, name := range nodes {
+		g, found := gs[name]
 		if !found {
-			glog.Fatalf("There is no model for Node [%s].", v.Name)
+			glog.Warningf("There is no model for Node [%s].", name)
 		}
 		gaussians[k] = g
 	}

@@ -15,7 +15,7 @@ The topology of the house is provided in the file `topology-24001.json`. Here ar
 
 ```YAML
 name: southcourt
-edges:
+arcs:
  - {from: BACKYARD, to: DINING, weight: 2.0}
  - {from: BACKYARD, to: LIVING, weight: 1.0}
  - {from: BACKYARD, to: KITCHEN, weight: 1.0}
@@ -67,43 +67,71 @@ Install gjoa: `go install github.com/akualab/gjoa/gjoa`
 
 Type `gjoa` to see usage info.
 
+Let's add a self transition to all the nodes.
+```
+gjoa -g=3 -c=graph0.yaml graph
+```
+
+Take a look at the new graph: `out/topology-24001-self.json`
+
 Train hmm: `gjoa train` uses the default config file `gjoa.yaml`.
 
 You should see the model trained from Gaussians in `out/hmm0.json`.
 
 To decode run `gjoa -c test.yaml decode` which uses the config file `test.yaml`.
 
+### Expand graph to model transitions.
 
-Let's use the subcommand `graph` to expand the graph by inserting a new state between the original states.
+In the previous experiment we use the same model inside the room and during room transitions. Clearly the features will be quite different when the person is moving from room to room compared to when he is static inside the room. To improve teh model, we insert a new node between each room transition. Once we expand teh graph we will need to create an initial alignment to map teh original labels to the new labels. For example, if we had a transition A->B, we will now have A->AB->B. To train the initial model we will use alignments that  assign the last X frames of A to AB. Once we have the models trained with alignments we will run forward-backward training to improve the models.
+
+Let's use the subcommand `graph` to expand the graph by inserting a new node between the original nodes.
 
 ```
-gjoa -g=3 -c=graph.yaml graph
+gjoa -g=3 -c=graph1.yaml graph
 ```
+
+Now compare the original and expanded graphs:
 
 Original:
 
-```YAML
-name: random
-edges:
-  - {from: A, to: A, weight: 1.0}
-  - {from: A, to: B, weight: 2.0}
-  - {from: A, to: C, weight: 1.0}
-  - {from: B, to: B, weight: 1.0}
-  - {from: B, to: C, weight: 1.0}
-  - {from: C, to: C, weight: 1.0}
-  - {from: C, to: A, weight: 3.0}
+```JSON
+{
+  "arcs": {
+    "LIVING": {
+      "KITCHEN": 3,
+      "BACKYARD": 1
+    },
+    "KITCHEN": {
+      "LIVING": 3,
+      "DINING": 3
+    },
+...
 ```
 
 Expanded:
 
-```YAML
-name: random CD
-edges: [{from: A, to: A, weight: 1}, {from: A, to: A-B, weight: 2}, {from: A-B, to: B,
-    weight: 1}, {from: A-B, to: A-B, weight: 1}, {from: A, to: A-C, weight: 1}, {
-    from: A-C, to: C, weight: 1}, {from: A-C, to: A-C, weight: 1}, {from: B, to: B,
-    weight: 1}, {from: B, to: B-C, weight: 1}, {from: B-C, to: C, weight: 1}, {from: B-C,
-    to: B-C, weight: 1}, {from: C, to: C, weight: 1}, {from: C, to: C-A, weight: 3},
-  {from: C-A, to: A, weight: 1}, {from: C-A, to: C-A, weight: 1}]
+```JSON
+{
+  "arcs": {
+    "LIVING-KITCHEN": {
+      "LIVING-KITCHEN": 0.5,
+      "KITCHEN": 0.5
+    },
+    "LIVING-BACKYARD": {
+      "LIVING-BACKYARD": 0.5,
+      "BACKYARD": 0.5
+    },
+    "LIVING": {
+      "LIVING-KITCHEN": 0.75,
+      "LIVING-BACKYARD": 0.25
+    },
+    "KITCHEN-LIVING": {
+      "LIVING": 0.5,
+      "KITCHEN-LIVING": 0.5
+    },
+    "KITCHEN-DINING": {
+      "KITCHEN-DINING": 0.5,
+...
 ```
 
 ## Search

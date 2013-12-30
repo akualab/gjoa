@@ -1,0 +1,6 @@
+hmm:
+  graph_in: out/topology-24001-self.json
+  graph_out: out/topology-24001-cd.json
+  cd_state: true
+  self_transition: 0.8
+  normalize_weights: true

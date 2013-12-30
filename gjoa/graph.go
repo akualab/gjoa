@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/akualab/gjoa"
+	"github.com/akualab/graph"
 	"github.com/codegangsta/cli"
 	"github.com/golang/glog"
 )
@@ -23,6 +24,9 @@ $ gjoa graph -in in-graph.json -out out-graph.json
 		cli.StringFlag{"graph-in", "", "the input graph"},
 		cli.StringFlag{"graph-out", "", "the output graph"},
 		cli.BoolFlag{"cd-state", "inserts context dependent state for each edge - example: A <=> B becomes A => A-B => B and B => B-A => A"},
+		cli.Float64Flag{"self-transition", 0, "inserts a self transition arc to each node with the specified weight"},
+		cli.BoolFlag{"normalize-weights", "converts weights to probabilities before doing any other transformation"},
+		cli.BoolFlag{"log-weights", "uses log values for arc weights"},
 	},
 }
 
@@ -42,27 +46,59 @@ func graphAction(c *cli.Context) {
 	if c.Bool("cd-state") {
 		config.HMM.CDState = true
 	}
-	if !config.HMM.CDState {
-		// For now there is nothig else to do.
-		glog.Fatalf("For now, only cd-state=true is supported.")
+	if c.Bool("normalize-weights") {
+		config.HMM.NormalizeWeights = true
+	}
+	if c.Bool("log-weights") {
+		config.HMM.LogWeights = true
+		glog.Fatalf("log weights not implemented yet")
 	}
 
+	if c.Int("self-transition") > 0 {
+		config.HMM.SelfTransition = c.Float64("self-transition")
+	}
+
+	if config.HMM.LogWeights {
+		glog.Fatalf("log weights not implemented yet")
+	}
+
+	if !config.HMM.CDState && config.HMM.SelfTransition <= 0.0 {
+		glog.Fatalf("No action specified. Exiting.")
+	}
+
+	glog.Infof("Output distribution: %s.", config.HMM.OutputDist)
+	g, tpe := graph.ReadJSONGraph(config.HMM.GraphIn)
+
+	var ng *graph.Graph
+	var err error
+
+	// inserts nodes and self arcs.
 	if config.HMM.CDState {
-		g, tpe := gjoa.ReadFile(config.HMM.GraphIn)
-		glog.Errorf("error trying to open graph file [%s]", config.HMM.GraphIn)
-		gjoa.Fatal(tpe)
-		nodes, probs := g.NodesAndProbs()
-
-		glog.V(1).Info("Input Graph:\n")
-		glog.V(1).Info(g.String())
-
-		glog.Infof("probs: \n%v\n%v\n", probs, nodes)
-
-		ng, cdNodes := g.InsertContextDependentStates()
-
-		for k, v := range cdNodes {
-			glog.Infof("CD Node: [%s] %v", k, v)
+		ng, err = gjoa.InsertNodes(g, config.HMM.SelfTransition)
+		if err != nil {
+			gjoa.Fatal(err)
 		}
-		ng.WriteFile(config.HMM.GraphOut)
 	}
+
+	// inserts self arcs.
+	if !config.HMM.CDState && config.HMM.SelfTransition > 0.0 {
+		ng, err = gjoa.InsertSelfArcs(g, config.HMM.SelfTransition)
+		if err != nil {
+			gjoa.Fatal(err)
+		}
+	}
+
+	if config.HMM.NormalizeWeights {
+		ng.Normalize(false) // convert weights to probs.
+		gjoa.Fatal(tpe)
+	}
+	nodeNames, probs := ng.TransitionMatrix(false)
+	glog.V(1).Infof("Graph read:\n%v\n", ng)
+	glog.V(1).Infof("probs: \n%v\n%v\n", probs, nodeNames)
+
+	err = ng.WriteJSONGraph(config.HMM.GraphOut)
+	if err != nil {
+		gjoa.Fatal(err)
+	}
+
 }

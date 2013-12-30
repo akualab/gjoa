@@ -33,12 +33,12 @@ func TestConfig(t *testing.T) {
 		t.Fatalf("DataSet is [%s]. Expected \"random.yaml\".", config.DataSet)
 	}
 
-	if config.HMM.TPGraphFilename != "topology.yaml" {
-		t.Fatalf("TPGraphFilename is [%s]. Expected \"topology.yaml\".", config.HMM.TPGraphFilename)
+	if config.HMM.GraphIn != "topology.yaml" {
+		t.Fatalf("GraphIn is [%s]. Expected \"topology.yaml\".", config.HMM.GraphIn)
 	}
 
-	if config.Vectors[0][1] != "b" {
-		t.Fatalf(" config.Vectors[0][1] is [%s]. Expected \"b\".", config.Vectors[0][1])
+	if config.Vectors["features"][1] != "b" {
+		t.Fatalf(" config.Vectors[\"features\"][1] is [%s]. Expected \"b\".", config.Vectors["features"][1])
 	}
 
 }
@@ -46,11 +46,7 @@ func TestConfig(t *testing.T) {
 const config string = `
 model: hmm
 data_set: random.yaml
+vectors: {features: [a,b,c], class: [room]}
 hmm:
-  tp_graph: topology.yaml
-
-vectors:
-  - [a,b,c]
-  - [the_truth]
-  - [outlook day]
+  graph_in: topology.yaml
 `

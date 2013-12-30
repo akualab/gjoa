@@ -1,4 +1,0 @@
-hmm:
-  graph_in: topology-24001.json
-  graph_out: out/topology-24001-cd.json
-  cd_state: true
