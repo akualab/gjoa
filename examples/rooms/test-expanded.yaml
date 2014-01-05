@@ -1,0 +1,6 @@
+model: hmm
+data_set: test-24001.yaml
+vectors: {features: [wifi], class: [room]}
+hmm:
+  hmm_file: out/hmm2.json
+  results_file: out/results-expanded.json

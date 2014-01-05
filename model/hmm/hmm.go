@@ -659,7 +659,8 @@ func (os *ObsSlice) UnmarshalJSON(b []byte) error {
 
 	// Couldn't get this to work using reflection so for now I'm using a switch.
 	// TODO: investigate if we can implement a generic solution using reflection.
-	modelers := make([]model.Modeler, len(part))
+	//modelers := make([]model.Modeler, len(part))
+	modelers := make([]model.Modeler, 0)
 
 	switch part[0].ModelType {
 	case "Gaussian":
@@ -669,9 +670,14 @@ func (os *ObsSlice) UnmarshalJSON(b []byte) error {
 			return e
 		}
 
-		for k, v := range gslice {
+		for _, v := range gslice {
+			if v == nil {
+				glog.Warningf("found null in JSON file for Gaussian - ignoring")
+				continue
+			}
 			v.Initialize()
-			modelers[k] = model.Modeler(v)
+			//modelers[k] = model.Modeler(v)
+			modelers = append(modelers, model.Modeler(v)) // append non-null Gaussians.
 		}
 
 	case "GMM":

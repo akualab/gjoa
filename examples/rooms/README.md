@@ -134,7 +134,31 @@ Expanded:
 ...
 ```
 
+Now let's train again using the expanded graph.
+
+```
+gjoa -g=3 -c=train-expanded.yaml train
+```
+
+the new model file is out/hmm2.json which has 51 states.
+
 ## Search
+
+```
+gjoa -g=3 -c test-expanded.yaml decode
+```
+
+This will write a results file in `out/results-expanded.json` which includes a list of result objects:
+
+```JSON
+{"batchid":"test-24001-010","ref":["BED1","BED1","BED1","BED1","BED1","BED1","BED4","BED4","BED2","BED2","BED2","BED2","BED4","BED4","BED4","BED4","BED4","BED4","DINING","DINING","DINING","DINING","BACKYARD","BACKYARD","BACKYARD","BACKYARD","BACKYARD","DINING","DINING","DINING","DINING","DINING","DINING","DINING","DINING","DINING","DINING","DINING","DINING","DINING","DINING","DINING","DINING","DINING","DINING","DINING","DINING","KITCHEN","KITCHEN","KITCHEN","KITCHEN","KITCHEN","KITCHEN","KITCHEN","KITCHEN","KITCHEN","KITCHEN","KITCHEN","DINING","DINING","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5"],"hyp":["BED1","BED1","BED1","BED1-BATH1","BED1-BATH1","BATH1","BATH1-BED4","BED4","BED4-BED2","BED2","BED2","BED2","BED2-BED4","BED4","BED4-DINING","DINING","DINING-BED4","BED4","BED4-DINING","DINING","DINING","DINING-BACKYARD","BACKYARD","BACKYARD-DINING","BACKYARD-DINING","BACKYARD-DINING","BACKYARD-DINING","BACKYARD-DINING","DINING","DINING-BED4","BED4","BED4-DINING","DINING","DINING","DINING","DINING","DINING","DINING-BED4","BED4","BED4-DINING","DINING","DINING","DINING-BED4","DINING-BED4","BED4","BED4-DINING","DINING","DINING-KITCHEN","KITCHEN","KITCHEN-LIVING","KITCHEN-LIVING","KITCHEN-LIVING","KITCHEN-LIVING","KITCHEN-LIVING","LIVING","LIVING-KITCHEN","KITCHEN","KITCHEN-DINING","DINING","DINING-BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5","BED5"]}
+```
+
+The label `batchid` identifies the session, `ref` is an array of the original labels entered by a person (one label per frame), `hyp` is an array of the labels hypothesized by the algorithm (one per frame).
+
+This raw file can now be processed to extract mertics at the session and data set levels. We use the `gjoa tally` command to compute the metrics.
+
+**TIP:** If the results file is not specified, the results wil be written to stdout without formatting makign it easy to grep.
 
 
 ## Results

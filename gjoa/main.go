@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 
 	"github.com/akualab/gjoa"
 	"github.com/codegangsta/cli"
@@ -84,8 +86,18 @@ func initApp(c *cli.Context) {
 		gjoa.Fatal(e)
 	}
 
+	// Change working directory.
+	if e := os.Chdir(dir); e != nil {
+		gjoa.Fatal(e)
+	}
+	glog.Infof("working dir: %s", dir)
+
 	// Read config file.
-	fn := fmt.Sprintf("%s%c%s", dir, os.PathSeparator, configFile)
+	fn, e := filepath.Abs(configFile)
+	if e != nil {
+		gjoa.Fatal(e)
+	}
+	glog.Infof("config file: %s", fn)
 
 	// If config file exists, read it.
 	// Commands must check if a config is needed.
@@ -119,6 +131,35 @@ func requiredStringParam(c *cli.Context, flag string, configParam *string) {
 		// Value missing.
 		glog.Fatalf("missing parameter: [%s]", flag)
 	}
+}
+
+// Missing config value.
+var NoConfigValueError = errors.New("config value not found")
+
+// Uses command line flag if present. Otherwise uses config file param.
+// Returns NoConfigValueError if no value is specified.
+func stringParam(c *cli.Context, flag string, configParam *string) error {
+
+	flagValue := c.String(flag)
+
+	// Validate parameter. Command flags overwrite config file params.
+	if len(flagValue) > 0 {
+
+		glog.Infof("Overwriting config using flag [%s] with value [%v]", flag, flagValue)
+
+		// Use command flag, ignore config file.
+		*configParam = flagValue
+		return nil
+
+	}
+
+	if len(*configParam) == 0 {
+
+		// Value missing.
+		return NoConfigValueError
+	}
+
+	return nil
 }
 
 // exists returns whether the given file or directory exists or not

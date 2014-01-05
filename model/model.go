@@ -124,13 +124,13 @@ func (base *BaseModel) Read(r io.Reader) (Modeler, error) {
 	value := reflect.Indirect(reflect.ValueOf(model))
 	o := reflect.New(value.Type()).Interface().(Modeler)
 	e := json.Unmarshal(b, &o)
-	o.Initialize()
 
 	if e != nil {
 		return nil, e
 	}
+	o.Initialize()
 
-	return o, e
+	return o, nil
 }
 
 // Reads model data from file. See Read().

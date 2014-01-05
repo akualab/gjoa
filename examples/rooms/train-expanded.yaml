@@ -1,8 +1,8 @@
 model: hmm
 data_set: train-24001.yaml
-model_out: out/hmm1.json
+model_out: out/hmm2.json
 vectors: {features: [wifi], class: [room]}
 hmm:
   graph_in: out/topology-24001-cd.json
   output_distribution: gaussian
-  expanded-graph: true
+  expanded_graph: true

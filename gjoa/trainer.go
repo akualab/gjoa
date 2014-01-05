@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/akualab/dataframe"
 	"github.com/akualab/gjoa"
@@ -123,11 +124,11 @@ func trainAction(c *cli.Context) {
 				gs = trainGaussians(ds, config.Vectors)
 			} else if config.HMM.ExpandedGraph {
 				gs = trainExpandedGraph(ds, config.Vectors)
-			} else {
+			} else if !config.HMM.UseAlignments && !config.HMM.ExpandedGraph {
 				glog.Fatalf("Not implemented: %s.", "train forward-backward")
 			}
 			// Puts Gaussian models in a slice in the same order as probs.
-			gaussians := sortGaussians(gs, nodeNames)
+			gaussians := assignGaussians(gs, nodeNames)
 
 			hmm, e := hmm.NewHMM(probs, nil, gaussians, true, "hmm", config)
 			gjoa.Fatal(e)
@@ -271,13 +272,31 @@ func trainExpandedGraph(ds *dataframe.DataSet, vectors map[string][]string) (gs 
 	return
 }
 
-func sortGaussians(gs map[string]*gaussian.Gaussian, nodes []string) (gaussians []model.Modeler) {
+// Some models may be missing when there are no observatiosn for that model. This function will attempt
+// to find the model associated with the previous state and assign a copy.
+func assignGaussians(gs map[string]*gaussian.Gaussian, nodes []string) (gaussians []model.Modeler) {
 
 	gaussians = make([]model.Modeler, len(nodes))
 	for k, name := range nodes {
 		g, found := gs[name]
 		if !found {
-			glog.Warningf("There is no model for Node [%s].", name)
+			glog.Warningf("there is no model for Node [%s]", name)
+
+			// Get predecesor name.
+			pName := strings.Split(name, "-")[0]
+			pg, found := gs[pName]
+			if !found {
+				glog.Fatalf("Unable to find predecesor model [%s].", pName)
+			}
+			glog.Warningf("using predecesior model [%s]", pName)
+
+			// copy model.
+			var e error
+			g, e = pg.Clone()
+			if e != nil {
+				glog.Fatal(e)
+			}
+			g.SetName(name)
 		}
 		gaussians[k] = g
 	}

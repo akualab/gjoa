@@ -2,8 +2,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 
 	"github.com/akualab/dataframe"
 	"github.com/akualab/gjoa"
@@ -26,6 +29,7 @@ $ gjoa decode
 	Flags: []cli.Flag{
 		cli.StringFlag{"data-set, d", "", "the file with the list of data files"},
 		cli.StringFlag{"hmm-file, f", "", "input hmm file"},
+		cli.StringFlag{"results-file, r", "", "results file"},
 	},
 }
 
@@ -42,6 +46,19 @@ func decodeAction(c *cli.Context) {
 	requiredStringParam(c, "data-set", &config.DataSet)
 	requiredStringParam(c, "hmm-file", &config.HMM.HMMFile)
 
+	var resultsFile *os.File
+	if e := stringParam(c, "results-file", &config.HMM.ResultsFile); e == NoConfigValueError {
+		glog.Infof("no results file specified, writing to stdout")
+		resultsFile = os.Stdout
+	} else {
+
+		// Open results file.
+		var err error
+		resultsFile, err = os.Create(config.HMM.ResultsFile)
+		gjoa.Fatal(err)
+		defer resultsFile.Close()
+	}
+
 	// Read data set files
 	ds, e := dataframe.ReadDataSetFile(config.DataSet)
 	gjoa.Fatal(e)
@@ -54,10 +71,26 @@ func decodeAction(c *cli.Context) {
 		gjoa.Fatal(e1)
 	}
 	hmm1 := x.(*hmm.HMM)
-	viterbier(ds, config.Vectors, hmm1)
+	viterbier(ds, config.Vectors, hmm1, resultsFile)
 }
 
-func viterbier(ds *dataframe.DataSet, vectors map[string][]string, hmm0 *hmm.HMM) {
+func viterbier(ds *dataframe.DataSet, vectors map[string][]string, hmm0 *hmm.HMM, w io.Writer) {
+
+	// Prepare JSON decoder.
+	enc := json.NewEncoder(w)
+
+	features := make([][]float64, 0)
+	labels := make([]int, 0)
+	refs := make([]string, 0)
+	hyps := make([]string, 0)
+	nameToIndex := hmm0.Indices()
+	invIndex := make([]string, len(nameToIndex))
+	//results := make([]gjoa.Result,0)
+
+	// Get inverse index to recover hyp model names int -> string
+	for k, v := range nameToIndex {
+		invIndex[v] = k
+	}
 
 	for {
 		df, e := ds.Next()
@@ -66,10 +99,13 @@ func viterbier(ds *dataframe.DataSet, vectors map[string][]string, hmm0 *hmm.HMM
 		}
 		gjoa.Fatal(e)
 
-		// Aggregating the observations
-		all := make([][]float64, 0)
-		labels := make([]int, 0)
-		nameToIndex := hmm0.Indices()
+		// Reset slices.
+		features = features[:0]
+		labels = labels[:0]
+		refs = refs[:0]
+		hyps = hyps[:0]
+		id := df.BatchID
+
 		for i := 0; i < df.N(); i++ {
 
 			// Get float vector for frame i.
@@ -81,17 +117,35 @@ func viterbier(ds *dataframe.DataSet, vectors map[string][]string, hmm0 *hmm.HMM
 			name, en := df.String(i, vectors["class"][0])
 			gjoa.Fatal(en)
 			idx := nameToIndex[name]
-			all = append(all, feat)
+			features = append(features, feat)
 			labels = append(labels, idx)
+			refs = append(refs, name)
 		}
 
 		// Running viterbi and metric for one
 		// sequence of observations
-		bt, _, err := hmm0.Viterbi(all)
+		bt, _, err := hmm0.Viterbi(features)
 		if err != nil {
 			gjoa.Fatal(err)
 		}
-		glog.Infof("labels: %+v", labels)
-		glog.Infof("viterb: %+v", bt)
+		// glog.Infof("ref: %+v", labels)
+		// glog.Infof("hyp: %+v", bt)
+
+		// convert bt indices to names
+		for _, v := range bt {
+			hyps = append(hyps, invIndex[v])
+		}
+
+		f, ok := w.(*os.File)
+		if ok && f.Name() == "/dev/stdout" {
+			// Write without encoding.
+			glog.Infof("id: %s, ref: %v", id, strings.Join(refs, " "))
+			glog.Infof("id: %s, hyp: %v", id, strings.Join(hyps, " "))
+		} else {
+			// Use json encoding.
+			result := gjoa.Result{BatchID: id, Ref: refs, Hyp: hyps}
+			enc.Encode(result)
+		}
 	}
+
 }

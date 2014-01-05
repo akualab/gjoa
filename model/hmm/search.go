@@ -12,19 +12,19 @@ import (
 
 // The viterbi algorithm computes the probable sequence of states for an HMM.
 // These are the equations in log scale:
-
+//
 // delta(j, t) = max_{z_1,... z_{t-1}} log P(z_1,..,z_{t-1}, z_t=j | x_1,...,x_t )
-
+//
 // Recursion in log scale   delta(j, t) [nstates x T]
 // delta(j, 0) = π(j) + b(j, 0)    for j in [0, N-1]
 // delta(j, t) = max_k [ delta(k, t-1) + a(k, j) + b(j, t) ]   j in [0, N-1], t in [1, T-1]
 // index(j, t) = argmax_k [ delta(k, t-1) + a(k,j) + b(j, t) ] j in [0, N-1], t in [1, T-1]
-
+//
 // Decoding z* is the output sequence [Tx1]
 // z*(T-1) = argmax_j delta(j, T-1)
 // z*(t) = index(z*(t+1), t+1)  t in [0, T-2]
 // logProb = max_j delta(j, T-1)
-
+//
 func (hmm *HMM) Viterbi(observations [][]float64) (bt []int, logViterbiProb float64, e error) {
 
 	// Num states
