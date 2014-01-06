@@ -1,0 +1,5 @@
+model: hmm
+results_file: out/results-expanded.json
+score_file: out/score-expanded.json
+hmm:
+  split_dash: true

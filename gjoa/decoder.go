@@ -47,14 +47,14 @@ func decodeAction(c *cli.Context) {
 	requiredStringParam(c, "hmm-file", &config.HMM.HMMFile)
 
 	var resultsFile *os.File
-	if e := stringParam(c, "results-file", &config.HMM.ResultsFile); e == NoConfigValueError {
+	if e := stringParam(c, "results-file", &config.ResultsFile); e == NoConfigValueError {
 		glog.Infof("no results file specified, writing to stdout")
 		resultsFile = os.Stdout
 	} else {
 
 		// Open results file.
 		var err error
-		resultsFile, err = os.Create(config.HMM.ResultsFile)
+		resultsFile, err = os.Create(config.ResultsFile)
 		gjoa.Fatal(err)
 		defer resultsFile.Close()
 	}

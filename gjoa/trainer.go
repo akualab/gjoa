@@ -72,7 +72,7 @@ func trainAction(c *cli.Context) {
 	requiredStringParam(c, "graph-in", &config.HMM.GraphIn)
 	requiredStringParam(c, "model-out", &config.ModelOut)
 
-	// If bool flag exists, set param to true. Ignores config value.
+	// If bool flag exists, set param to true overriding config value.
 	if c.Bool("update-tp") {
 		config.HMM.UpdateTP = true
 	}

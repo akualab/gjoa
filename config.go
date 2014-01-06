@@ -15,6 +15,9 @@ type Config struct {
 	HMM      HMM                 `yaml:"hmm" json:"hmm"`
 	GMM      GMM                 `yaml:"gmm" json:"gmm"`
 	Gaussian Gaussian            `yaml:"gaussian" json:"gaussian"`
+
+	ResultsFile string `yaml:"results_file,omitempty" json:"results_file,omitempty"`
+	ScoreFile   string `yaml:"score_file,omitempty" json:"score_file,omitempty"`
 }
 
 type HMM struct {
@@ -32,7 +35,7 @@ type HMM struct {
 	GeneratorSeed    int64   `yaml:"generator_seed,omitempty" json:"generator_seed,omitempty"`
 	GeneratorMaxLen  int     `yaml:"generator_max_length,omitempty" json:"generator_max_length,omitempty"`
 	HMMFile          string  `yaml:"hmm_file,omitempty" json:"hmm_file,omitempty"`
-	ResultsFile      string  `yaml:"results_file,omitempty" json:"results_file,omitempty"`
+	SplitDash        bool    `yaml:"split_dash,omitempty" json:"split_dash,omitempty"`
 }
 
 type GMM struct{}

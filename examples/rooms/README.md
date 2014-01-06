@@ -80,6 +80,8 @@ You should see the model trained from Gaussians in `out/hmm0.json`.
 
 To decode run `gjoa -c test.yaml decode` which uses the config file `test.yaml`.
 
+Finally, we can score the results using: `gjoa -g=3 -c score.yaml score`
+
 ### Expand graph to model transitions.
 
 In the previous experiment we use the same model inside the room and during room transitions. Clearly the features will be quite different when the person is moving from room to room compared to when he is static inside the room. To improve teh model, we insert a new node between each room transition. Once we expand teh graph we will need to create an initial alignment to map teh original labels to the new labels. For example, if we had a transition A->B, we will now have A->AB->B. To train the initial model we will use alignments that  assign the last X frames of A to AB. Once we have the models trained with alignments we will run forward-backward training to improve the models.
@@ -162,3 +164,15 @@ This raw file can now be processed to extract mertics at the session and data se
 
 
 ## Results
+
+Let's compare the results:
+
+```
+BASELINE is the old graph, one gaussian per room:
+AVG:, acc: Tokens: 8703, Errors: 1611 ( 18.51%)
+
+EXPANDED GRAPH:
+AVG:, acc: Tokens: 8703, Errors:  858 (  9.86%)
+```
+
+Looks like it is getting half as many errors but need to do more work. Also need to optimize the self-trans in the baseline to make it fair.

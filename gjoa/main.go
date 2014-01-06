@@ -57,6 +57,7 @@ func main() {
 		trainCommand,
 		graphCommand,
 		decodeCommand,
+		scoreCommand,
 	}
 
 	app.Run(os.Args)
