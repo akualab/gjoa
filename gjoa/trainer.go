@@ -50,7 +50,8 @@ ex:
 		cli.BoolFlag{"update-tp", "update HMM transition probabilities, overwrites config file when set"},
 		cli.BoolFlag{"update-ip", "update HMM initial probabilities, overwrites config file when set"},
 		cli.StringFlag{"output-distribution", "", "HMM state output distribution {gaussian, gmm}"},
-		cli.BoolFlag{"use-alignments", "train output model using alignments"},
+		cli.StringFlag{"align-in", "", "alignment file in"},
+		cli.StringFlag{"align-out", "", "alignment file out"},
 		cli.StringFlag{"graph-in", "", "HMM state transition probabilities graph"},
 		cli.BoolFlag{"expanded-graph", "train using alignments for the expanded graph"},
 	},
@@ -70,6 +71,8 @@ func trainAction(c *cli.Context) {
 	requiredStringParam(c, "output-distribution", &config.HMM.OutputDist)
 	requiredStringParam(c, "data-set", &config.DataSet)
 	requiredStringParam(c, "graph-in", &config.HMM.GraphIn)
+	stringParam(c, "align-in", &config.HMM.AlignIn)
+	stringParam(c, "align-out", &config.HMM.AlignOut)
 	requiredStringParam(c, "model-out", &config.ModelOut)
 
 	// If bool flag exists, set param to true overriding config value.
@@ -79,11 +82,13 @@ func trainAction(c *cli.Context) {
 	if c.Bool("update-ip") {
 		config.HMM.UpdateIP = true
 	}
-	if c.Bool("use-alignments") {
-		config.HMM.UseAlignments = true
-	}
 	if c.Bool("expanded-graph") {
 		config.HMM.ExpandedGraph = true
+	}
+
+	// Check vectors
+	if len(config.Vectors) == 0 {
+		glog.Fatalf("vector specification missing")
 	}
 
 	// Read data set.
@@ -101,7 +106,7 @@ func trainAction(c *cli.Context) {
 	switch config.Model {
 	case "gaussian":
 
-		gs = trainGaussians(ds, config.Vectors)
+		gs = trainGaussians(ds, config.Vectors, nil)
 
 		if glog.V(1) {
 			for k, v := range gs {
@@ -120,18 +125,31 @@ func trainAction(c *cli.Context) {
 
 		switch config.HMM.OutputDist {
 		case "gaussian":
-			if config.HMM.UseAlignments {
-				gs = trainGaussians(ds, config.Vectors)
-			} else if config.HMM.ExpandedGraph {
-				gs = trainExpandedGraph(ds, config.Vectors)
-			} else if !config.HMM.UseAlignments && !config.HMM.ExpandedGraph {
-				glog.Fatalf("Not implemented: %s.", "train forward-backward")
+
+			if config.HMM.ExpandedGraph {
+				var alignments map[string]*gjoa.Result
+				gs, alignments = trainExpandedGraph(ds, config.Vectors)
+				if len(config.HMM.AlignOut) > 0 {
+					gjoa.WriteResults(alignments, config.HMM.AlignOut)
+				}
+				goto HMM
 			}
+
+			if len(config.HMM.AlignIn) > 0 {
+				// Get alignments from file.
+				alignments, e := gjoa.ReadResults(config.HMM.AlignIn)
+				gjoa.Fatal(e)
+				gs = trainGaussians(ds, config.Vectors, alignments)
+			} else {
+				// Get alignments from labels.
+				gs = trainGaussians(ds, config.Vectors, nil)
+			}
+		HMM:
 			// Puts Gaussian models in a slice in the same order as probs.
 			gaussians := assignGaussians(gs, nodeNames)
-
 			hmm, e := hmm.NewHMM(probs, nil, gaussians, true, "hmm", config)
 			gjoa.Fatal(e)
+
 			e = hmm.WriteFile(config.ModelOut)
 			gjoa.Fatal(e)
 
@@ -145,7 +163,7 @@ func trainAction(c *cli.Context) {
 	}
 }
 
-func trainGaussians(ds *dataframe.DataSet, vectors map[string][]string) (gs map[string]*gaussian.Gaussian) {
+func trainGaussians(ds *dataframe.DataSet, vectors map[string][]string, alignments map[string]*gjoa.Result) (gs map[string]*gaussian.Gaussian) {
 
 	gs = make(map[string]*gaussian.Gaussian)
 	var numFrames int
@@ -162,17 +180,28 @@ func trainGaussians(ds *dataframe.DataSet, vectors map[string][]string) (gs map[
 			// Get float vector for frame i.
 			feat, e := df.Float64Slice(i, vectors["features"]...)
 
-			// Get class name using convention.
-			// Look up vector named "class".
-			name, en := df.String(i, vectors["class"][0])
-			gjoa.Fatal(en)
+			var name string
+			if len(alignments) == 0 {
+				// Get class name using convention.
+				// Look up vector named "class".
+				name, e = df.String(i, vectors["class"][0])
+				gjoa.Fatal(e)
+			} else {
+				// get alignment from collection.
 
+				r, found := alignments[df.BatchID]
+				if !found {
+					glog.Fatalf("Can't find alignment for id [%s]. You must provide alignments for the data set.", df.BatchID)
+				}
+				name = r.Hyp[i]
+			}
 			// Lookup model for class. Create a new one if not found.
 			g, exist := gs[name]
 			if !exist {
 				g, e = gaussian.NewGaussian(len(feat), nil, nil, true, true, name)
 				gjoa.Fatal(e)
 				gs[name] = g
+				glog.V(1).Infof("Created Gaussian with name %s.", name)
 			}
 
 			// Update stats.
@@ -188,8 +217,9 @@ func trainGaussians(ds *dataframe.DataSet, vectors map[string][]string) (gs map[
 	return
 }
 
-func trainExpandedGraph(ds *dataframe.DataSet, vectors map[string][]string) (gs map[string]*gaussian.Gaussian) {
+func trainExpandedGraph(ds *dataframe.DataSet, vectors map[string][]string) (gs map[string]*gaussian.Gaussian, alignments map[string]*gjoa.Result) {
 
+	alignments = make(map[string]*gjoa.Result)
 	var X = 2
 	var da []string // for debugging
 	gs = make(map[string]*gaussian.Gaussian)
@@ -242,6 +272,8 @@ func trainExpandedGraph(ds *dataframe.DataSet, vectors map[string][]string) (gs 
 			glog.Infof("Modified alignemnt:\n%v\n", newAlignments)
 		}
 
+		alignments[df.BatchID] = &gjoa.Result{BatchID: df.BatchID, Hyp: newAlignments}
+
 		// Now let's train the gaussians using the new alignments.
 		for i := 0; i < df.N(); i++ {
 
@@ -257,6 +289,7 @@ func trainExpandedGraph(ds *dataframe.DataSet, vectors map[string][]string) (gs 
 				g, e = gaussian.NewGaussian(len(feat), nil, nil, true, true, name)
 				gjoa.Fatal(e)
 				gs[name] = g
+				glog.V(1).Infof("Created Gaussian with name %s.", name)
 			}
 
 			// Update stats.

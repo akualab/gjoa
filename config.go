@@ -23,6 +23,8 @@ type Config struct {
 type HMM struct {
 	GraphIn          string  `yaml:"graph_in,omitempty" json:"graph_in,omitempty"`
 	GraphOut         string  `yaml:"graph_out,omitempty" json:"graph_out,omitempty"`
+	AlignIn          string  `yaml:"align_in,omitempty" json:"align_in,omitempty"`
+	AlignOut         string  `yaml:"align_out,omitempty" json:"align_out,omitempty"`
 	CDState          bool    `yaml:"cd_state,omitempty" json:"cd_state,omitempty"`
 	NormalizeWeights bool    `yaml:"normalize_weights,omitempty" json:"normalize_weights,omitempty"`
 	LogWeights       bool    `yaml:"log_weights,omitempty" json:"log_weights,omitempty"`

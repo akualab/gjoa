@@ -85,7 +85,6 @@ func viterbier(ds *dataframe.DataSet, vectors map[string][]string, hmm0 *hmm.HMM
 	hyps := make([]string, 0)
 	nameToIndex := hmm0.Indices()
 	invIndex := make([]string, len(nameToIndex))
-	//results := make([]gjoa.Result,0)
 
 	// Get inverse index to recover hyp model names int -> string
 	for k, v := range nameToIndex {

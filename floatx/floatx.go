@@ -82,6 +82,17 @@ func MakeFloat2D(n1, n2 int) [][]float64 {
 	return s
 }
 
+func CopyFloat2D(s [][]float64) [][]float64 {
+
+	n1, n2 := Check2D(s)
+	out := MakeFloat2D(n1, n2)
+	for i := 0; i < n1; i++ {
+		copy(out[i], s[i])
+	}
+
+	return out
+}
+
 func Check2D(s [][]float64) (n1, n2 int) {
 
 	n1 = len(s)
