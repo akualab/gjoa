@@ -25,7 +25,10 @@ func WriteResults(results map[string]*Result, fn string) error {
 	defer f.Close()
 	enc := json.NewEncoder(f)
 	for _, v := range results {
-		enc.Encode(v)
+		e := enc.Encode(v)
+		if e != nil {
+			return e
+		}
 	}
 	return nil
 }

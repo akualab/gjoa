@@ -21,7 +21,6 @@ var trainCommand = cli.Command{
 	Usage:     "Estimates model parameters using data.",
 	Description: `runs trainer.
 
-You must provide a config file. The default name is "config.yaml".
 A sample config file will look like this:
 
 model: hmm
@@ -38,6 +37,7 @@ ex:
 		cli.StringFlag{"data-set, d", "", "the file with the list of data files"},
 		cli.StringFlag{"model-out, o", "", "output model filename"},
 		cli.StringFlag{"model-in, i", "", "input model filename"},
+		cli.IntFlag{"num-iterations, n", 0, "number of training iterations"},
 
 		// Selects a model.
 		cli.StringFlag{"model", "", "select a model to train {gaussian, gmm, hmm}"},
@@ -54,6 +54,7 @@ ex:
 		cli.StringFlag{"align-out", "", "alignment file out"},
 		cli.StringFlag{"graph-in", "", "HMM state transition probabilities graph"},
 		cli.BoolFlag{"expanded-graph", "train using alignments for the expanded graph"},
+		cli.BoolFlag{"two-state-collection", "train collection of 2-state hmms. State0: central model, state1: boundary"},
 	},
 }
 
@@ -74,6 +75,7 @@ func trainAction(c *cli.Context) {
 	stringParam(c, "align-in", &config.HMM.AlignIn)
 	stringParam(c, "align-out", &config.HMM.AlignOut)
 	requiredStringParam(c, "model-out", &config.ModelOut)
+	stringParam(c, "model-in", &config.ModelIn)
 
 	// If bool flag exists, set param to true overriding config value.
 	if c.Bool("update-tp") {
@@ -85,6 +87,10 @@ func trainAction(c *cli.Context) {
 	if c.Bool("expanded-graph") {
 		config.HMM.ExpandedGraph = true
 	}
+	if c.Bool("two-state-collection") {
+		config.HMM.TwoStateCollection = true
+	}
+	intParam(c, "num-iterations", &config.NumIterations)
 
 	// Check vectors
 	if len(config.Vectors) == 0 {
@@ -103,6 +109,7 @@ func trainAction(c *cli.Context) {
 
 	// Select the models, here do validation, bookkeeping, etc
 	var gs map[string]*gaussian.Gaussian
+	var models []model.Modeler
 	switch config.Model {
 	case "gaussian":
 
@@ -122,36 +129,55 @@ func trainAction(c *cli.Context) {
 		gjoa.Fatal(tpe)
 		nodeNames, probs := graph.TransitionMatrix(false)
 		glog.V(1).Infof("Graph read:\n%v\n", graph)
+		var alignIn map[string]*gjoa.Result
+		var alignOut map[string]*gjoa.Result
 
 		switch config.HMM.OutputDist {
 		case "gaussian":
-
-			if config.HMM.ExpandedGraph {
-				var alignments map[string]*gjoa.Result
-				gs, alignments = trainExpandedGraph(ds, config.Vectors)
-				if len(config.HMM.AlignOut) > 0 {
-					gjoa.WriteResults(alignments, config.HMM.AlignOut)
-				}
-				goto HMM
-			}
-
 			if len(config.HMM.AlignIn) > 0 {
 				// Get alignments from file.
-				alignments, e := gjoa.ReadResults(config.HMM.AlignIn)
+				alignIn, e = gjoa.ReadResults(config.HMM.AlignIn)
 				gjoa.Fatal(e)
-				gs = trainGaussians(ds, config.Vectors, alignments)
-			} else {
-				// Get alignments from labels.
-				gs = trainGaussians(ds, config.Vectors, nil)
 			}
-		HMM:
-			// Puts Gaussian models in a slice in the same order as probs.
-			gaussians := assignGaussians(gs, nodeNames)
-			hmm, e := hmm.NewHMM(probs, nil, gaussians, true, "hmm", config)
-			gjoa.Fatal(e)
 
-			e = hmm.WriteFile(config.ModelOut)
-			gjoa.Fatal(e)
+			if config.HMM.TwoStateCollection {
+				hmm0 := hmm.EmptyHMM()
+				hmm1, e1 := hmm0.ReadFile(config.ModelIn) // read hmm file with expanded graph
+				gjoa.Fatal(e1)
+				hmmColl := initHMMCollection(hmm1.(*hmm.HMM), graph)
+				trainHMM(ds, config.Vectors, hmmColl, alignIn)
+				fmt.Printf("hmmcoll: \n%+v", hmmColl)
+				if e := hmm.WriteHMMCollection(hmmColl, config.ModelOut); e != nil {
+					gjoa.Fatal(e)
+				}
+				goto ALIGN_OUT
+			}
+
+			if config.HMM.ExpandedGraph {
+
+				gs, alignOut = trainExpandedGraph(ds, config.Vectors)
+			} else {
+
+				gs = trainGaussians(ds, config.Vectors, alignIn)
+			}
+
+			// Assigns models to nodes in the graph.
+			models = assignGaussians(gs, nodeNames)
+			{
+				hmm, e := hmm.NewHMM(probs, nil, models, true, "hmm", config)
+				gjoa.Fatal(e)
+
+				e = hmm.WriteFile(config.ModelOut)
+				gjoa.Fatal(e)
+			}
+
+		ALIGN_OUT:
+			if len(config.HMM.AlignOut) > 0 {
+				if alignOut == nil {
+					glog.Warningf("there are no alignments to write")
+				}
+				gjoa.WriteResults(alignOut, config.HMM.AlignOut)
+			}
 
 		case "gmm":
 			glog.Fatalf("Not implemented: %s.", "output dist gmm")
@@ -305,6 +331,69 @@ func trainExpandedGraph(ds *dataframe.DataSet, vectors map[string][]string) (gs 
 	return
 }
 
+func trainHMM(ds *dataframe.DataSet, vectors map[string][]string, hmms map[string]*hmm.HMM, alignments map[string]*gjoa.Result) {
+
+	var numFrames int
+	seq := make([][]float64, 0)
+	for {
+		df, e := ds.Next() // get next dataframe
+		if e == io.EOF {
+			break
+		}
+		gjoa.Fatal(e)
+		numFrames += df.N() // add num data instances in dataframe
+
+		last := ""
+		for i := 0; i < df.N(); i++ {
+
+			// Get float vector for frame i.
+			feat, e := df.Float64Slice(i, vectors["features"]...)
+
+			// Get the label from the data frame or from an alignment file if it exists.
+			var name string
+			if len(alignments) == 0 {
+				// Get class name using convention.
+				// Look up vector named "class".
+				name, e = df.String(i, vectors["class"][0])
+				gjoa.Fatal(e)
+			} else {
+				// get alignment from collection.
+
+				r, found := alignments[df.BatchID]
+				if !found {
+					glog.Fatalf("Can't find alignment for id [%s]. You must provide alignments for the data set.", df.BatchID)
+				}
+				name = r.Hyp[i]
+			}
+
+			if len(last) > 0 && last != name {
+				// update last segment
+				h, exist := hmms[last]
+				if !exist {
+					e = fmt.Errorf("Can't find model [%s]", last)
+					gjoa.Fatal(e)
+				}
+				if len(seq) < 2 {
+					glog.Warningf("A training sequence for model %s is too short. Length is %d, skipping.", name, len(seq))
+				} else {
+					h.Update(seq, 1.0)
+				}
+				last = name
+				seq = seq[:0] // resets slice
+			}
+			last = name
+			seq = append(seq, feat)
+		}
+	}
+
+	// Estimate params.
+	for _, h := range hmms {
+		h.Estimate()
+	}
+
+	return
+}
+
 // Some models may be missing when there are no observatiosn for that model. This function will attempt
 // to find the model associated with the previous state and assign a copy.
 func assignGaussians(gs map[string]*gaussian.Gaussian, nodes []string) (gaussians []model.Modeler) {
@@ -332,6 +421,67 @@ func assignGaussians(gs map[string]*gaussian.Gaussian, nodes []string) (gaussian
 			g.SetName(name)
 		}
 		gaussians[k] = g
+	}
+	return
+}
+
+// For each node in the graph, create a 2-state HMM with topology:
+// -> A -> AB ->
+// Where A is a node in the graph for segment A, B is a succesor node, AB is the boundary state
+// for transitions from A to B. All states have self transitions.
+func initHMMCollection(hmmIn *hmm.HMM, graph *graph.Graph) (hmms map[string]*hmm.HMM) {
+
+	gs := hmmIn.ModelMap()
+	config := &gjoa.Config{
+		HMM: gjoa.HMM{
+			UpdateIP:        false,
+			UpdateTP:        false,
+			GeneratorSeed:   0,
+			GeneratorMaxLen: 100,
+		},
+	}
+
+	hmms = make(map[string]*hmm.HMM)
+	// Iterate over the non-inserted nodes.
+	for _, node := range graph.GetAll() {
+		isInserted := node.Value().(map[string]interface{})["inserted"].(bool)
+		if isInserted {
+			continue
+		}
+		nodeKey := node.Key()
+
+		for succ, p := range node.GetSuccesors() {
+			succKey := succ.Key()
+			if succKey == nodeKey {
+				continue // skip self transitions.
+			}
+
+			// Gaussians for this HMM
+			gaussians := make([]model.Modeler, 1, 2)
+			firstG, found1 := gs[nodeKey]
+			if !found1 {
+				glog.Fatalf("Missing model for node [%s].", nodeKey)
+			}
+			gaussians[0] = firstG
+			secondG, found2 := gs[succKey]
+			var probs [][]float64
+			var initProbs []float64
+			if found1 && found2 {
+				glog.Infof("Creating 2-state HMM for nodes [%s] and [%s]. ", nodeKey, succKey)
+				// 2-state HMM
+				gaussians = append(gaussians, secondG)
+				probs = [][]float64{{1 - p, p}, {hmm.SMALL_NUMBER, 1 - hmm.SMALL_NUMBER}}
+				initProbs = []float64{1 - hmm.SMALL_NUMBER, hmm.SMALL_NUMBER}
+
+			} else {
+				glog.Warningf("Missing model for node [%s]. Using single-state HMM.", succKey)
+				// 1-state HMM
+				probs = [][]float64{{1}}
+			}
+			hmm, e := hmm.NewHMM(probs, initProbs, gaussians, true, nodeKey, config)
+			gjoa.Fatal(e)
+			hmms[nodeKey] = hmm
+		}
 	}
 	return
 }

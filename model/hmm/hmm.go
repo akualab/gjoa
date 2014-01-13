@@ -9,10 +9,13 @@ Hidden Markov model.
 package hmm
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
+	"os"
 
 	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/floatx"
@@ -528,6 +531,7 @@ func (hmm *HMM) NumElements() int {
 func (hmm *HMM) Name() string    { return hmm.ModelName }
 func (hmm *HMM) Trainable() bool { return hmm.IsTrainable }
 
+// Returns a map from state model name to state model index.
 func (hmm *HMM) Indices() (m map[string]int) {
 
 	m = make(map[string]int)
@@ -535,6 +539,16 @@ func (hmm *HMM) Indices() (m map[string]int) {
 		m[v.Name()] = k
 	}
 	return
+}
+
+// Returns a map from state model name to state model.
+func (hmm *HMM) ModelMap() map[string]model.Modeler {
+
+	m := make(map[string]model.Modeler)
+	for name, i := range hmm.Indices() {
+		m[name] = hmm.ObsModels[i]
+	}
+	return m
 }
 
 // Compute α and β.
@@ -700,4 +714,57 @@ func (os *ObsSlice) UnmarshalJSON(b []byte) error {
 	*os = (ObsSlice)(modelers)
 
 	return nil
+}
+
+// Write a collection of HMMs to a file.
+func WriteHMMCollection(hmms map[string]*HMM, fn string) error {
+
+	f, e := os.Create(fn)
+	if e != nil {
+		return e
+	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	for _, v := range hmms {
+		glog.V(4).Infof("write hmm %+v", v)
+		e := enc.Encode(v)
+		if e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
+// Read a collection of HMMs from a file.
+func ReadHMMCollection(fn string) (hmms map[string]*HMM, e error) {
+
+	var f *os.File
+	f, e = os.Open(fn)
+	if e != nil {
+		return
+	}
+	defer f.Close()
+	reader := bufio.NewReader(f)
+
+	hmms = make(map[string]*HMM)
+
+	for {
+		var b []byte
+		b, e = reader.ReadBytes('\n')
+		if e == io.EOF {
+			e = nil
+			return
+		}
+		if e != nil {
+			return
+		}
+
+		hmm := new(HMM)
+		e = json.Unmarshal(b, hmm)
+		if e != nil {
+			return
+		}
+		hmms[hmm.ModelName] = hmm
+	}
+	return
 }

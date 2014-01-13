@@ -181,6 +181,42 @@ func TestWriteReadHMM(t *testing.T) {
 	}
 }
 
+func TestWriteReadHMMCollection(t *testing.T) {
+
+	hmm1 := MakeHMM(t)
+	hmm2 := MakeHMM(t)
+	hmm3 := MakeHMM(t)
+
+	hmm1.ModelName = "H1"
+	hmm2.ModelName = "H2"
+	hmm3.ModelName = "H3"
+
+	hmms := make(map[string]*HMM)
+	hmms["H1"] = hmm1
+	hmms["H2"] = hmm2
+	hmms["H3"] = hmm3
+
+	fn := os.TempDir() + "hmmcoll.json"
+	t.Logf("Write hmm collection to: %s", fn)
+	e := WriteHMMCollection(hmms, fn)
+	if e != nil {
+		t.Fatal(e)
+	}
+
+	hmmsx, e2 := ReadHMMCollection(fn)
+	if e2 != nil {
+		t.Fatal(e2)
+	}
+	t.Logf("read hmm collection:")
+	for _, name := range []string{"H1", "H2", "H3"} {
+		if hmms[name].ModelName != hmmsx[name].ModelName {
+			t.Fatalf("model names don't match [%s] vs. [%s]", hmms[name].ModelName, hmmsx[name].ModelName)
+		}
+		t.Logf("\n%s\n:", name)
+		t.Logf("\n%+v\n:", hmmsx[name])
+	}
+}
+
 var (
 	obs0 = [][]float64{{0.1}, {0.3}, {1.1}, {1.2},
 		{0.7}, {0.7}, {5.5}, {7.8},

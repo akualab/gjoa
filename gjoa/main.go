@@ -134,6 +134,22 @@ func requiredStringParam(c *cli.Context, flag string, configParam *string) {
 	}
 }
 
+// Uses command line flag if present. Otherwise uses config file param.
+// Fatal error if config file param is also missing.
+func intParam(c *cli.Context, flag string, configParam *int) {
+
+	flagValue := c.Int(flag)
+
+	// Validate parameter. Command flags overwrite config file params.
+	if flagValue > 0 {
+
+		glog.Infof("Overwriting config using flag [%s] with value [%d]", flag, flagValue)
+
+		// Use command flag, ignore config file.
+		*configParam = flagValue
+	}
+}
+
 // Missing config value.
 var NoConfigValueError = errors.New("config value not found")
 
@@ -157,6 +173,7 @@ func stringParam(c *cli.Context, flag string, configParam *string) error {
 	if len(*configParam) == 0 {
 
 		// Value missing.
+		glog.Errorf("no value found for flag %s", flag)
 		return NoConfigValueError
 	}
 
