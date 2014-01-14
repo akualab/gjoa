@@ -21,6 +21,7 @@ import (
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/gjoa/model/gaussian"
+	"github.com/akualab/graph"
 	"github.com/golang/glog"
 	"github.com/gonum/floats"
 )
@@ -727,6 +728,7 @@ func WriteHMMCollection(hmms map[string]*HMM, fn string) error {
 	enc := json.NewEncoder(f)
 	for _, v := range hmms {
 		glog.V(4).Infof("write hmm %+v", v)
+		removeInf(v)
 		e := enc.Encode(v)
 		if e != nil {
 			return e
@@ -766,5 +768,101 @@ func ReadHMMCollection(fn string) (hmms map[string]*HMM, e error) {
 		}
 		hmms[hmm.ModelName] = hmm
 	}
+	return
+}
+
+func removeInf(hmm *HMM) {
+
+	for i, v := range hmm.InitProbs {
+
+		if math.IsInf(v, -1) {
+			hmm.InitProbs[i] = -math.MaxFloat64
+		}
+
+		for j, w := range hmm.TransProbs[i] {
+			if math.IsInf(w, -1) {
+				hmm.TransProbs[i][j] = -math.MaxFloat64
+			}
+		}
+	}
+}
+
+/* Joins a collection of 2-state HMMs into a single HMM.
+
+   Say we have 2 2-state models: A and B with states A0,A1,B0,B1
+   The transition probabilities at the node level are:
+     pA00: p     =>    pH00: p
+     pA01: 1-p   =>    pH01: 1-p
+     pA10: 0     =>    pH10: 0
+     pA11: 1     =>    pH11: x
+                       pH12: y
+                       pH14: z
+                       ...
+
+   where x,y,z are transition probabilities in the node graph.
+   we find that probability as follows.
+
+   example: src=1, dst=4 (arc from node #1 (second) to node #4 (fifth))
+   pH (2 x 1 + 1) (2 x 4) => pH(3,8)
+
+                    +--------------+
+   node:   0  0  1  1  2  2  3  3  4  4  5  5  6  6  7  7
+   state:  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+                    ^              ^
+*/
+func JoinHMMCollection(g *graph.Graph, hmmColl map[string]*HMM, name string) (hmmOut *HMM) {
+
+	numNodes := len(hmmColl)
+	var numStates, index int
+	for _, h := range hmmColl {
+		numStates += len(h.ObsModels)
+	}
+	glog.Infof("joining HMM collection with %d models and % states", numNodes, numStates)
+	obsModels := make([]model.Modeler, numStates)
+	initProbs := make([]float64, numStates)
+	probs := floatx.MakeFloat2D(numStates, numStates)
+	iProb := 1.0 / float64(numNodes)
+	name2Index := make(map[string]int)
+
+	for _, node := range g.GetAll() {
+
+		// Build index.
+		name2Index[node.Key()] = index
+		// Get model for key.
+		m, found := hmmColl[node.Key()]
+		if !found {
+			glog.Warningf("didn't find model for key %s", node.Key())
+			continue
+		}
+
+		// Prepare joined data.
+		for _, c := range m.ObsModels {
+			glog.V(1).Infof("Adding state #%d name: %s", index, c.Name())
+			obsModels[index] = c
+			probs[index][index] = m.TransProbs[0][0]
+			probs[index][index+1] = m.TransProbs[0][1]
+			probs[index+1][index] = m.TransProbs[1][0]
+			initProbs[index] = iProb
+			index += 2
+		}
+	}
+
+	// The node to node transition probs are done in a second pass because
+	// we need the indices of the models in the joined trans prob matrix.
+	var sum float64
+	for _, node := range g.GetAll() {
+		sum = 0
+		i := name2Index[node.Key()]
+		for succ, p := range node.GetSuccesors() {
+			j := name2Index[succ.Key()]
+			probs[i+1][j] = p
+			sum += p
+		}
+		if sum > 1 {
+			glog.Fatalf("sum greater than 1: [%f]", sum)
+		}
+		probs[i+1][i+1] = 1 - sum
+	}
+
 	return
 }

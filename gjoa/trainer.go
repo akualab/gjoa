@@ -145,8 +145,14 @@ func trainAction(c *cli.Context) {
 				hmm1, e1 := hmm0.ReadFile(config.ModelIn) // read hmm file with expanded graph
 				gjoa.Fatal(e1)
 				hmmColl := initHMMCollection(hmm1.(*hmm.HMM), graph)
-				trainHMM(ds, config.Vectors, hmmColl, alignIn)
-				fmt.Printf("hmmcoll: \n%+v", hmmColl)
+				for i := 0; i < config.NumIterations; i++ {
+					glog.Infof("start iteration %d", i)
+					for _, h := range hmmColl {
+						h.Clear() // Reset stats before training.
+					}
+					trainHMM(ds, config.Vectors, hmmColl, alignIn)
+					glog.V(4).Infof("hmmcoll: \n%+v", hmmColl)
+				}
 				if e := hmm.WriteHMMCollection(hmmColl, config.ModelOut); e != nil {
 					gjoa.Fatal(e)
 				}
@@ -457,27 +463,25 @@ func initHMMCollection(hmmIn *hmm.HMM, graph *graph.Graph) (hmms map[string]*hmm
 			}
 
 			// Gaussians for this HMM
-			gaussians := make([]model.Modeler, 1, 2)
+			gaussians := make([]model.Modeler, 2, 2)
 			firstG, found1 := gs[nodeKey]
 			if !found1 {
 				glog.Fatalf("Missing model for node [%s].", nodeKey)
 			}
 			gaussians[0] = firstG
 			secondG, found2 := gs[succKey]
+			if !found2 {
+				glog.Fatalf("Missing model for node [%s].", succKey)
+			}
+			gaussians[1] = secondG
 			var probs [][]float64
 			var initProbs []float64
-			if found1 && found2 {
-				glog.Infof("Creating 2-state HMM for nodes [%s] and [%s]. ", nodeKey, succKey)
-				// 2-state HMM
-				gaussians = append(gaussians, secondG)
-				probs = [][]float64{{1 - p, p}, {hmm.SMALL_NUMBER, 1 - hmm.SMALL_NUMBER}}
-				initProbs = []float64{1 - hmm.SMALL_NUMBER, hmm.SMALL_NUMBER}
 
-			} else {
-				glog.Warningf("Missing model for node [%s]. Using single-state HMM.", succKey)
-				// 1-state HMM
-				probs = [][]float64{{1}}
-			}
+			glog.Infof("Creating 2-state HMM for nodes [%s] and [%s]. ", nodeKey, succKey)
+			gaussians = append(gaussians, secondG)
+			probs = [][]float64{{1 - p, p}, {hmm.SMALL_NUMBER, 1 - hmm.SMALL_NUMBER}}
+			initProbs = []float64{1 - hmm.SMALL_NUMBER, hmm.SMALL_NUMBER}
+
 			hmm, e := hmm.NewHMM(probs, initProbs, gaussians, true, nodeKey, config)
 			gjoa.Fatal(e)
 			hmms[nodeKey] = hmm
