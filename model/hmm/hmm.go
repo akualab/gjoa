@@ -864,5 +864,15 @@ func JoinHMMCollection(g *graph.Graph, hmmColl map[string]*HMM, name string) (hm
 		probs[i+1][i+1] = 1 - sum
 	}
 
+	config := &gjoa.Config{
+		HMM: gjoa.HMM{
+			UpdateIP:        false,
+			UpdateTP:        false,
+			GeneratorSeed:   0,
+			GeneratorMaxLen: 100,
+		},
+	}
+	hmmOut, e := NewHMM(probs, initProbs, obsModels, true, name, config)
+	gjoa.Fatal(e)
 	return
 }
