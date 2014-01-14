@@ -1,5 +1,6 @@
 # make sure we don't push the executable.
 gjoa
+!gjoa/
 
 # Compiled Object files, Static and Dynamic libs (Shared Objects)
 *.o
