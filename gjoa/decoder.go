@@ -71,6 +71,7 @@ func decodeAction(c *cli.Context) {
 		gjoa.Fatal(e1)
 	}
 	hmm1 := x.(*hmm.HMM)
+	glog.V(4).Infof("HMM passed to viterbier:\n%+v", hmm1)
 	viterbier(ds, config.Vectors, hmm1, resultsFile)
 }
 
@@ -85,7 +86,7 @@ func viterbier(ds *dataframe.DataSet, vectors map[string][]string, hmm0 *hmm.HMM
 	hyps := make([]string, 0)
 	nameToIndex := hmm0.Indices()
 	invIndex := make([]string, len(nameToIndex))
-
+	glog.Infof("Starting decoder with %d models.", len(nameToIndex))
 	// Get inverse index to recover hyp model names int -> string
 	for k, v := range nameToIndex {
 		invIndex[v] = k

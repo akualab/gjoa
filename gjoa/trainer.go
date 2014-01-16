@@ -55,6 +55,7 @@ ex:
 		cli.StringFlag{"graph-in", "", "HMM state transition probabilities graph"},
 		cli.BoolFlag{"expanded-graph", "train using alignments for the expanded graph"},
 		cli.BoolFlag{"two-state-collection", "train collection of 2-state hmms. State0: central model, state1: boundary"},
+		cli.BoolFlag{"join-collection", "joins a collection of 2-state hmms into a single hmm"},
 	},
 }
 
@@ -70,7 +71,7 @@ func trainAction(c *cli.Context) {
 	// Validate parameters. Command flags overwrite config file params.
 	requiredStringParam(c, "model", &config.Model)
 	requiredStringParam(c, "output-distribution", &config.HMM.OutputDist)
-	requiredStringParam(c, "data-set", &config.DataSet)
+	stringParam(c, "data-set", &config.DataSet)
 	requiredStringParam(c, "graph-in", &config.HMM.GraphIn)
 	stringParam(c, "align-in", &config.HMM.AlignIn)
 	stringParam(c, "align-out", &config.HMM.AlignOut)
@@ -90,6 +91,9 @@ func trainAction(c *cli.Context) {
 	if c.Bool("two-state-collection") {
 		config.HMM.TwoStateCollection = true
 	}
+	if c.Bool("join-collection") {
+		config.HMM.JoinCollection = true
+	}
 	intParam(c, "num-iterations", &config.NumIterations)
 
 	// Check vectors
@@ -98,8 +102,12 @@ func trainAction(c *cli.Context) {
 	}
 
 	// Read data set.
-	ds, e := dataframe.ReadDataSetFile(config.DataSet)
-	gjoa.Fatal(e)
+	var ds *dataframe.DataSet
+	var e error
+	if len(config.DataSet) > 0 {
+		ds, e = dataframe.ReadDataSetFile(config.DataSet)
+		gjoa.Fatal(e)
+	}
 
 	// Print config.
 	glog.Infof("Read configuration:\n%+v", config)
@@ -140,11 +148,22 @@ func trainAction(c *cli.Context) {
 				gjoa.Fatal(e)
 			}
 
+			if config.HMM.JoinCollection {
+				hmmColl, e := hmm.ReadHMMCollection(config.ModelIn)
+				gjoa.Fatal(e)
+				hmmj := hmm.JoinHMMCollection(graph, hmmColl, "joined-hmm")
+				e = hmmj.WriteFile(config.ModelOut)
+				gjoa.Fatal(e)
+				break
+			}
+
 			if config.HMM.TwoStateCollection {
 				hmm0 := hmm.EmptyHMM()
 				hmm1, e1 := hmm0.ReadFile(config.ModelIn) // read hmm file with expanded graph
+
 				gjoa.Fatal(e1)
-				hmmColl := initHMMCollection(hmm1.(*hmm.HMM), graph)
+				hmmColl := initHMMCollection(hmm1.(*hmm.HMM), graph) // original graph
+
 				for i := 0; i < config.NumIterations; i++ {
 					glog.Infof("start iteration %d", i)
 					for _, h := range hmmColl {
@@ -372,19 +391,24 @@ func trainHMM(ds *dataframe.DataSet, vectors map[string][]string, hmms map[strin
 				name = r.Hyp[i]
 			}
 
+			// Starting a new session
+			if len(last) == 0 {
+				glog.Warningf("For now we ignore last segment in session. (Improve this later.) len=%d", len(seq))
+				seq = seq[:0] // resets slice
+			}
+
 			if len(last) > 0 && last != name {
 				// update last segment
-				h, exist := hmms[last]
+				key := last + "-" + name
+				h, exist := hmms[key]
 				if !exist {
-					e = fmt.Errorf("Can't find model [%s]", last)
-					gjoa.Fatal(e)
+					glog.Warningf("Can't find model [%s], possibly bug in training labels, transition not allowed in graph. Skip segment. index: [%d], frame len: [%d], id: [%s]", key, i, df.N(), df.BatchID)
 				}
 				if len(seq) < 2 {
 					glog.Warningf("A training sequence for model %s is too short. Length is %d, skipping.", name, len(seq))
-				} else {
+				} else if exist {
 					h.Update(seq, 1.0)
 				}
-				last = name
 				seq = seq[:0] // resets slice
 			}
 			last = name
@@ -455,11 +479,17 @@ func initHMMCollection(hmmIn *hmm.HMM, graph *graph.Graph) (hmms map[string]*hmm
 			continue
 		}
 		nodeKey := node.Key()
-
+		glog.V(4).Infof("Starting loop node [%s]. ", nodeKey)
 		for succ, p := range node.GetSuccesors() {
 			succKey := succ.Key()
 			if succKey == nodeKey {
+				glog.V(4).Infof("Skip transition [%s] -> [%s]. ", nodeKey, succKey)
 				continue // skip self transitions.
+			}
+
+			isInserted := succ.Value().(map[string]interface{})["inserted"].(bool)
+			if !isInserted {
+				glog.Fatalf("Succesor is not an inserted node. This shouldn't happen. [%s].", succKey)
 			}
 
 			// Gaussians for this HMM
@@ -478,13 +508,12 @@ func initHMMCollection(hmmIn *hmm.HMM, graph *graph.Graph) (hmms map[string]*hmm
 			var initProbs []float64
 
 			glog.Infof("Creating 2-state HMM for nodes [%s] and [%s]. ", nodeKey, succKey)
-			gaussians = append(gaussians, secondG)
 			probs = [][]float64{{1 - p, p}, {hmm.SMALL_NUMBER, 1 - hmm.SMALL_NUMBER}}
 			initProbs = []float64{1 - hmm.SMALL_NUMBER, hmm.SMALL_NUMBER}
 
-			hmm, e := hmm.NewHMM(probs, initProbs, gaussians, true, nodeKey, config)
+			hmm, e := hmm.NewHMM(probs, initProbs, gaussians, true, succKey, config)
 			gjoa.Fatal(e)
-			hmms[nodeKey] = hmm
+			hmms[succKey] = hmm
 		}
 	}
 	return

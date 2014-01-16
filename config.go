@@ -41,6 +41,7 @@ type HMM struct {
 	HMMFile            string  `yaml:"hmm_file,omitempty" json:"hmm_file,omitempty"`
 	SplitDash          bool    `yaml:"split_dash,omitempty" json:"split_dash,omitempty"`
 	TwoStateCollection bool    `yaml:"two_state_collection,omitempty" json:"two_state_collection,omitempty"`
+	JoinCollection     bool    `yaml:"join_collection,omitempty" json:"join_collection,omitempty"`
 }
 
 type GMM struct{}

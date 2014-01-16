@@ -468,7 +468,7 @@ func (hmm *HMM) Estimate() error {
 	// Initial state probabilities.
 	s := floats.Sum(hmm.SumInitProbs)
 	if hmm.Config.HMM.UpdateIP {
-		glog.Infof("Sum Init. Probs:    %v.", hmm.SumInitProbs)
+		glog.V(4).Infof("Sum Init. Probs:    %v.", hmm.SumInitProbs)
 		floatx.Apply(floatx.ScaleFunc(1.0/s), hmm.SumInitProbs, hmm.InitProbs)
 		floatx.Apply(floatx.Log, hmm.InitProbs, nil)
 	}
@@ -728,7 +728,10 @@ func WriteHMMCollection(hmms map[string]*HMM, fn string) error {
 	enc := json.NewEncoder(f)
 	for _, v := range hmms {
 		glog.V(4).Infof("write hmm %+v", v)
-		removeInf(v)
+		if filterModels(v) {
+			glog.Warningf("model %s has NaN, removing.", v.ModelName)
+			continue
+		}
 		e := enc.Encode(v)
 		if e != nil {
 			return e
@@ -771,7 +774,10 @@ func ReadHMMCollection(fn string) (hmms map[string]*HMM, e error) {
 	return
 }
 
-func removeInf(hmm *HMM) {
+// Make models json compatible.
+// Replaces -Inf with -MaxFloat
+// Removes models with NaN
+func filterModels(hmm *HMM) bool {
 
 	for i, v := range hmm.InitProbs {
 
@@ -779,12 +785,21 @@ func removeInf(hmm *HMM) {
 			hmm.InitProbs[i] = -math.MaxFloat64
 		}
 
+		if math.IsNaN(v) {
+			return true
+		}
+
 		for j, w := range hmm.TransProbs[i] {
 			if math.IsInf(w, -1) {
 				hmm.TransProbs[i][j] = -math.MaxFloat64
 			}
+			if math.IsNaN(w) {
+				return true
+			}
+
 		}
 	}
+	return false
 }
 
 /* Joins a collection of 2-state HMMs into a single HMM.
@@ -813,55 +828,86 @@ func removeInf(hmm *HMM) {
 func JoinHMMCollection(g *graph.Graph, hmmColl map[string]*HMM, name string) (hmmOut *HMM) {
 
 	numNodes := len(hmmColl)
-	var numStates, index int
+	var numStates, stateIndex int
 	for _, h := range hmmColl {
 		numStates += len(h.ObsModels)
 	}
-	glog.Infof("joining HMM collection with %d models and % states", numNodes, numStates)
+	glog.Infof("joining HMM collection with %d models and %d states", numNodes, numStates)
 	obsModels := make([]model.Modeler, numStates)
 	initProbs := make([]float64, numStates)
 	probs := floatx.MakeFloat2D(numStates, numStates)
 	iProb := 1.0 / float64(numNodes)
 	name2Index := make(map[string]int)
 
-	for _, node := range g.GetAll() {
+	for name, m := range hmmColl {
 
 		// Build index.
-		name2Index[node.Key()] = index
-		// Get model for key.
-		m, found := hmmColl[node.Key()]
-		if !found {
-			glog.Warningf("didn't find model for key %s", node.Key())
-			continue
-		}
+		name2Index[name] = stateIndex
 
-		// Prepare joined data.
-		for _, c := range m.ObsModels {
-			glog.V(1).Infof("Adding state #%d name: %s", index, c.Name())
-			obsModels[index] = c
-			probs[index][index] = m.TransProbs[0][0]
-			probs[index][index+1] = m.TransProbs[0][1]
-			probs[index+1][index] = m.TransProbs[1][0]
-			initProbs[index] = iProb
-			index += 2
-		}
+		// Prepare joined data. Loop through state (expect 2 states exactly)
+		glog.V(1).Infof("Adding state #%d name: %s", stateIndex, m.ObsModels[0].Name())
+		glog.V(1).Infof("Adding state #%d name: %s", stateIndex+1, m.ObsModels[1].Name())
+		obsModels[stateIndex] = m.ObsModels[0]
+		obsModels[stateIndex+1] = m.ObsModels[1]
+		probs[stateIndex][stateIndex] = math.Exp(m.TransProbs[0][0])
+		probs[stateIndex][stateIndex+1] = math.Exp(m.TransProbs[0][1])
+		probs[stateIndex+1][stateIndex] = math.Exp(m.TransProbs[1][0])
+		initProbs[stateIndex] = iProb
+		glog.V(4).Infof("p[%d][%d]=%f, p[%d][%d]=%f, p[%d][%d]=%f", stateIndex, stateIndex, probs[stateIndex][stateIndex], stateIndex, stateIndex+1, probs[stateIndex][stateIndex+1], stateIndex+1, stateIndex, probs[stateIndex+1][stateIndex])
+		stateIndex += 2
 	}
 
 	// The node to node transition probs are done in a second pass because
 	// we need the indices of the models in the joined trans prob matrix.
+	// Say we have original graph with arcs:
+	// B -> A, A -> B, A -> C
+	// after expansion, we have:
+	// B -> BA -> A, A -> AB -> B, A -> AC -> C
+	// let's call p = prob("A" -> "A-B")
+	// We extract p from graph when node is "A" and succ is "A-B"
+	// In the join matrix we use indices i,j that correspond to models
+	// FROM MODEL|TO MODEL|TRANS PROB
+	// "B-A"      "A-C"    p(A,C) <=> p("A","A-C")
+	// "B-A"      "A-B"    p(A,B) <=> p("A","A-B")
+	// "A-C"      "C-B"    p(C,B) <=> p("C","C-B") <<< example in comments
+	// "D-B"      "B-A"    p(B,A) <=> p("B","B-A")
+	// ...
 	var sum float64
-	for _, node := range g.GetAll() {
-		sum = 0
-		i := name2Index[node.Key()]
-		for succ, p := range node.GetSuccesors() {
-			j := name2Index[succ.Key()]
-			probs[i+1][j] = p
-			sum += p
+	for _, node := range g.GetAll() { // ex. "A"
+		for succ, _ := range node.GetSuccesors() { // get succesors to "A" ex. "C", ...
+			if succ == node {
+				continue // skip self transition.
+			}
+			sum = 0
+			left := node.Key() + "-" + succ.Key() // "A-C"
+			i, ok := name2Index[left]
+			if !ok {
+				glog.Warningf("can't find model %s", left)
+				continue
+			}
+			for succ2, p := range succ.GetSuccesors() { // get succesors to "C" ex. "B", ...
+				if succ2 == succ {
+					continue // skip self transition.
+				}
+				right := succ.Key() + "-" + succ2.Key()
+				j, ok := name2Index[right] // "C-B"
+				if !ok {
+					glog.Warningf("can't find model %s", right)
+					continue
+				}
+
+				probs[i+1][j] = p
+				sum += p
+				if glog.V(4) {
+					glog.Infof("from: %4s, to: %4s, p: %3.2f, sum: %4.2f", left, right, p, sum)
+				}
+			}
+			if sum > 1 {
+				glog.Fatalf("sum greater than 1: [%f]", sum)
+			}
+			glog.V(4).Infof("final sum: [%f]", sum)
+			probs[i+1][i+1] = 1 - sum
 		}
-		if sum > 1 {
-			glog.Fatalf("sum greater than 1: [%f]", sum)
-		}
-		probs[i+1][i+1] = 1 - sum
 	}
 
 	config := &gjoa.Config{
