@@ -7,6 +7,7 @@ import (
 
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
+	"github.com/golang/glog"
 	"github.com/gonum/floats"
 )
 
@@ -232,13 +233,13 @@ func (g *Gaussian) NumElements() int    { return g.NE }
 func (g *Gaussian) Trainable() bool     { return g.IsTrainable }
 func (g *Gaussian) SetName(name string) { g.ModelName = name }
 
-func (g *Gaussian) Clone() (ng *Gaussian, e error) {
+func (g *Gaussian) Clone() (ng *Gaussian) {
 
 	//	ng = &Gaussian{}
 
-	ng, e = NewGaussian(g.NE, nil, nil, g.IsTrainable, g.Diag, g.ModelName)
+	ng, e := NewGaussian(g.NE, nil, nil, g.IsTrainable, g.Diag, g.ModelName)
 	if e != nil {
-		return
+		glog.Fatal(e)
 	}
 
 	ng.Initialize()
@@ -262,6 +263,5 @@ func (g *Gaussian) Clone() (ng *Gaussian, e error) {
 	ng.const1 = g.const1
 	ng.const2 = g.const2
 	// ng.fpool = g.fpool TODO
-
 	return
 }

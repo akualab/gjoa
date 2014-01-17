@@ -537,6 +537,9 @@ func (hmm *HMM) Indices() (m map[string]int) {
 
 	m = make(map[string]int)
 	for k, v := range hmm.ObsModels {
+		if _, ok := m[v.Name()]; ok {
+			glog.Fatalf("found models with same name: [%s]", v.Name())
+		}
 		m[v.Name()] = k
 	}
 	return
@@ -845,8 +848,8 @@ func JoinHMMCollection(g *graph.Graph, hmmColl map[string]*HMM, name string) (hm
 		name2Index[name] = stateIndex
 
 		// Prepare joined data. Loop through state (expect 2 states exactly)
-		glog.V(1).Infof("Adding state #%d name: %s", stateIndex, m.ObsModels[0].Name())
-		glog.V(1).Infof("Adding state #%d name: %s", stateIndex+1, m.ObsModels[1].Name())
+		glog.V(1).Infof("hmm: %s, adding state #%d name: %s", m.Name(), stateIndex, m.ObsModels[0].Name())
+		glog.V(1).Infof("hmm: %s, adding state #%d name: %s", m.Name(), stateIndex+1, m.ObsModels[1].Name())
 		obsModels[stateIndex] = m.ObsModels[0]
 		obsModels[stateIndex+1] = m.ObsModels[1]
 		probs[stateIndex][stateIndex] = math.Exp(m.TransProbs[0][0])

@@ -170,7 +170,7 @@ func trainAction(c *cli.Context) {
 						h.Clear() // Reset stats before training.
 					}
 					trainHMM(ds, config.Vectors, hmmColl, alignIn)
-					glog.V(4).Infof("hmmcoll: \n%+v", hmmColl)
+					//					glog.V(4).Infof("hmmcoll: \n%+v", hmmColl)
 				}
 				if e := hmm.WriteHMMCollection(hmmColl, config.ModelOut); e != nil {
 					gjoa.Fatal(e)
@@ -443,11 +443,7 @@ func assignGaussians(gs map[string]*gaussian.Gaussian, nodes []string) (gaussian
 			glog.Warningf("using predecesior model [%s]", pName)
 
 			// copy model.
-			var e error
-			g, e = pg.Clone()
-			if e != nil {
-				glog.Fatal(e)
-			}
+			g = pg.Clone()
 			g.SetName(name)
 		}
 		gaussians[k] = g
@@ -472,6 +468,7 @@ func initHMMCollection(hmmIn *hmm.HMM, graph *graph.Graph) (hmms map[string]*hmm
 	}
 
 	hmms = make(map[string]*hmm.HMM)
+	count := 0
 	// Iterate over the non-inserted nodes.
 	for _, node := range graph.GetAll() {
 		isInserted := node.Value().(map[string]interface{})["inserted"].(bool)
@@ -492,29 +489,50 @@ func initHMMCollection(hmmIn *hmm.HMM, graph *graph.Graph) (hmms map[string]*hmm
 				glog.Fatalf("Succesor is not an inserted node. This shouldn't happen. [%s].", succKey)
 			}
 
+			glog.V(4).Infof("initHMM Loop: nodeKey: %s, succKey: %s", nodeKey, succKey)
+
 			// Gaussians for this HMM
 			gaussians := make([]model.Modeler, 2, 2)
-			firstG, found1 := gs[nodeKey]
+			firstG, found1 := gs[nodeKey] // TODO: SHOULD COPY HERE!
 			if !found1 {
 				glog.Fatalf("Missing model for node [%s].", nodeKey)
 			}
-			gaussians[0] = firstG
-			secondG, found2 := gs[succKey]
+			fg := firstG.(*gaussian.Gaussian).Clone()
+			fg.ModelName = succKey + "_" + nodeKey // change name to avoid conflicts when we merge
+			gaussians[0] = fg
+			secondG, found2 := gs[succKey] // TODO: SHOULD COPY HERE!
 			if !found2 {
 				glog.Fatalf("Missing model for node [%s].", succKey)
 			}
-			gaussians[1] = secondG
+			sg := secondG.(*gaussian.Gaussian).Clone()
+			sg.ModelName = succKey + "_" + succKey // change name to avoid conflicts when we merge
+			gaussians[1] = sg
 			var probs [][]float64
 			var initProbs []float64
 
-			glog.Infof("Creating 2-state HMM for nodes [%s] and [%s]. ", nodeKey, succKey)
+			glog.Infof("Creating 2-state HMM for nodes [%s] and [%s]. Gaussian names: [%s] and [%s].", nodeKey, succKey, gaussians[0].Name(), gaussians[1].Name())
 			probs = [][]float64{{1 - p, p}, {hmm.SMALL_NUMBER, 1 - hmm.SMALL_NUMBER}}
 			initProbs = []float64{1 - hmm.SMALL_NUMBER, hmm.SMALL_NUMBER}
 
 			hmm, e := hmm.NewHMM(probs, initProbs, gaussians, true, succKey, config)
 			gjoa.Fatal(e)
 			hmms[succKey] = hmm
+			count++
+
+			glog.V(4).Infof("initHMM end loop: nodeKey: %s, succKey: %s, hmm: %s, hmm: %s, g0: %s, g1: %s", nodeKey, succKey, hmm.Name(), hmms[succKey].Name(), hmms[succKey].ObsModels[0].Name(), hmms[succKey].ObsModels[1].Name())
 		}
 	}
+	if count != len(hmms) {
+		glog.Fatalf("num models mismatch: %d vs. %d", len(hmms), count)
+	}
+	glog.Infof("initialized %d 2-state HMMs.", count)
+
+	if glog.V(4) {
+		glog.Infof("\n\nPrint hmm collection:")
+		for _, hmm := range hmms {
+			glog.Infof("hmm: %s, g0: %s, g1: %s", hmm.Name(), hmm.ObsModels[0].Name(), hmm.ObsModels[1].Name())
+		}
+	}
+
 	return
 }
