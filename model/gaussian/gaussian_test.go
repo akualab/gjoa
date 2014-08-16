@@ -128,7 +128,7 @@ func TestCloneGaussian(t *testing.T) {
 	}
 	g.Estimate()
 
-	ng, e := g.Clone()
+	ng := g.Clone()
 	if e != nil {
 		t.Fatal(e)
 	}

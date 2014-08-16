@@ -2,11 +2,12 @@ package gaussian
 
 import (
 	"flag"
-	"github.com/akualab/gjoa"
-	"github.com/akualab/gjoa/model"
 	"math/rand"
 	"os"
 	"testing"
+
+	"github.com/akualab/gjoa"
+	"github.com/akualab/gjoa/model"
 )
 
 func init() {
@@ -32,7 +33,7 @@ func TestGMMName(t *testing.T) {
 }
 
 // Trains a GMM as follows:
-// 1 - Estimate a Gaussian model params for the trainign set.
+// 1 - Estimate a Gaussian model params for the training set.
 // 2 - Use the mean and sd of the training set to generate
 //     a random GMM to be used as seed.
 // 3 - Run several iterations of the GMM max likelihood training algorithm
@@ -88,7 +89,7 @@ func TestTrainGMM(t *testing.T) {
 	}
 
 	for iter := 0; iter < numIter; iter++ {
-		t.Logf("Starting GMM trainign iteration %d.", iter)
+		t.Logf("Starting GMM training iteration %d.", iter)
 
 		// Reset the same random number generator to make sure we use the
 		// same observations in each iterations.
@@ -209,7 +210,7 @@ func TestTrainGMM2(t *testing.T) {
 		t.Fatal(e)
 	}
 	for iter := 0; iter < numIter; iter++ {
-		t.Logf("Starting GMM trainign iteration %d.", iter)
+		t.Logf("Starting GMM training iteration %d.", iter)
 
 		// Reset all counters..
 		gmm.Clear()
@@ -268,7 +269,7 @@ func TestWriteReadGMM(t *testing.T) {
 		t.Fatal(e)
 	}
 	for iter := 0; iter < numIter; iter++ {
-		t.Logf("Starting GMM trainign iteration %d.", iter)
+		t.Logf("Starting GMM training iteration %d.", iter)
 		gmm.Clear()
 
 		r := rand.New(rand.NewSource(seed))
