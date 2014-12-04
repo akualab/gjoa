@@ -43,10 +43,6 @@ func ConvertInfSlice2D(values [][]float64) [][]float64 {
 	return values
 }
 
-var Log = func(r int, v float64) float64 { return math.Log(v) }
-var Exp = func(r int, v float64) float64 { return math.Exp(v) }
-var Sq = func(r int, v float64) float64 { return v * v }
-var Sqrt = func(r int, v float64) float64 { return math.Sqrt(v) }
 var Inv = func(r int, v float64) float64 { return 1.0 / v }
 
 func AddScalarFunc(f float64) ApplyFunc {
@@ -257,5 +253,60 @@ func (pool *Pool) Put(p []float64) {
 	select {
 	case pool.buf <- p:
 	default:
+	}
+}
+
+// Log returns the natural logarithm, element-wise, of the elements of s, and stores in dst.
+// Panics if the lengths of dst and s do not match.
+func Log(dst, s []float64) {
+	if len(dst) != len(s) {
+		panic("floats: length of the slices do not match")
+	}
+	for i, val := range s {
+		dst[i] = math.Log(val)
+	}
+}
+
+// Exp returns the exponential base-e, element-wise, of the elements of s, and stores in dst.
+// Panics if the lengths of dst and s do not match.
+func Exp(dst, s []float64) {
+	if len(dst) != len(s) {
+		panic("floats: length of the slices do not match")
+	}
+	for i, val := range s {
+		dst[i] = math.Exp(val)
+	}
+}
+
+// Sq returns the square, element-wise, of the elements of s, and stores in dst.
+// Panics if the lengths of dst and s do not match.
+func Sq(dst, s []float64) {
+	if len(dst) != len(s) {
+		panic("floats: length of the slices do not match")
+	}
+	for i, val := range s {
+		dst[i] = val * val
+	}
+}
+
+// Sqrt returns the square root, element-wise, of the elements of s, and stores in dst.
+// Panics if the lengths of dst and s do not match.
+func Sqrt(dst, s []float64) {
+	if len(dst) != len(s) {
+		panic("floats: length of the slices do not match")
+	}
+	for i, val := range s {
+		dst[i] = math.Sqrt(val)
+	}
+}
+
+// Abs returns the absolute value, element-wise, of the elements of s, and stores in dst.
+// Panics if the lengths of dst and s do not match.
+func Abs(dst, s []float64) {
+	if len(dst) != len(s) {
+		panic("floats: length of the slices do not match")
+	}
+	for i, val := range s {
+		dst[i] = math.Abs(val)
 	}
 }

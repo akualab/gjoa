@@ -13,6 +13,134 @@ import (
 	"github.com/golang/glog"
 )
 
+// A sample label.
+type Labeler interface {
+
+	// Human-readable name.
+	Name() string
+
+	// Unique id.
+	Id() int
+
+	// Compare labels.
+	IsEqual(label Labeler) bool
+}
+
+// An observations.
+type Obs interface {
+
+	// The observation's value.
+	Value() interface{}
+
+	// The observation's label.
+	Label() Labeler
+}
+
+// Data is represented as a sequence of objects that
+// implement the Obs interface.
+type Sampler interface {
+
+	// Returns channel of observations. The sequence end when the
+	// channel closes.
+	Chan() (<-chan Obs, error)
+}
+
+// Model trainer.
+type Trainer2 interface {
+
+	// Updates model using weighted samples: x[i] * w(x[i]).
+	Update(x Sampler, w func(Obs) float64) error
+
+	// Estimates model parameters.
+	Estimate() error
+
+	// Clears all model parameters.
+	Clear()
+}
+
+var NoWeight = func(o Obs) float64 { return 1.0 }
+
+// Returns predicted label for data.
+type Predictor interface {
+	Predict(x Sampler) ([]Labeler, error)
+}
+
+// Returns score for data.
+type Scorer interface {
+	Score(x Sampler) ([]float64, error)
+}
+
+// A floating point slice observation that implements the Obs interface.
+type FloatObs struct {
+	value []float64
+	label SimpleLabel
+}
+
+// Returns observation value.
+func (fo FloatObs) Value() interface{} { return interface{}(fo.value) }
+
+// Returns observation label.
+func (fo FloatObs) Label() Labeler { return Labeler(fo.label) }
+
+// Implements Labeler interface.
+type SimpleLabel struct {
+	name string
+	val  int
+}
+
+// Returnes unique id.
+func (lab SimpleLabel) Id() int {
+	return lab.val
+}
+
+// Returns label name.
+func (lab SimpleLabel) Name() string {
+	return lab.name
+}
+
+// Returns true if labels are equal.
+func (lab SimpleLabel) IsEqual(lab2 Labeler) bool {
+	if lab.Id() == lab2.Id() {
+		return true
+	}
+	return false
+}
+
+// Simple sampler for floating-point values.
+// Not safe to use with multiple goroutines.
+type FloatSampler struct {
+	Values [][]float64
+	Labels []SimpleLabel
+	length int
+}
+
+func NewFloatSampler(v [][]float64, lab []SimpleLabel) (*FloatSampler, error) {
+	if len(v) != len(lab) {
+		return nil, fmt.Errorf("length of v [%d] and length of lab [%d] don't match.", len(v), len(lab))
+	}
+	return &FloatSampler{
+		Values: v,
+		Labels: lab,
+		length: len(v),
+	}, nil
+}
+
+// Returns channel of FloatObs as type Obs.
+func (fs FloatSampler) Chan() (<-chan Obs, error) {
+
+	obsChan := make(chan Obs, 1000)
+	go func() {
+		for i := 0; i < fs.length; i++ {
+			obsChan <- Obs(FloatObs{fs.Values[i], fs.Labels[i]})
+		}
+		close(obsChan)
+	}()
+
+	return obsChan, nil
+}
+
+////////////////
+
 var modelTypes = make(map[string]Modeler)
 
 // All model types must register during initialization:
