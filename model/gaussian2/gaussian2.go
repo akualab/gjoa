@@ -54,40 +54,51 @@ func scaleFunc(f float64) floatx.ApplyFunc {
 	return func(r int, v float64) float64 { return v * f }
 }
 
-func NewGaussian(numElements int, mean, sd []float64,
-	diagonal bool, name string) *Gaussian {
+// Gaussian parameters.
+type GaussianParam struct {
+	NumElements int
+	Mean        []float64
+	StdDev      []float64
+	IsFullCov   bool
+	Name        string
+}
 
-	if !diagonal {
+//func NewGaussian(numElements int, mean, sd []float64,
+//	diagonal bool, name string) *Gaussian {
+func NewGaussian(p GaussianParam) *Gaussian {
+
+	if p.IsFullCov {
 		glog.Fatal("Full covariance matrix is not supported yet.")
 	}
 
-	g := &Gaussian{}
-	g.Mean = mean
-	g.StdDev = sd
-	g.Diag = true
-	g.NE = numElements
-	g.ModelName = name
-	g.rand = rand.New(rand.NewSource(seed))
-
-	if g.Mean == nil {
-		g.Mean = make([]float64, g.NE)
+	if p.Mean == nil {
+		p.Mean = make([]float64, p.NumElements)
 	}
 
-	g.variance = make([]float64, g.NE)
-	g.varianceInv = make([]float64, g.NE)
-	if g.StdDev == nil {
-		g.StdDev = make([]float64, g.NE)
-		floatx.Apply(setValueFunc(SMALL_SD), g.StdDev, nil)
+	if p.StdDev == nil {
+		p.StdDev = make([]float64, p.NumElements)
+		floatx.Apply(setValueFunc(SMALL_SD), p.StdDev, nil)
 	}
+
+	g := &Gaussian{
+		Mean:        p.Mean,
+		StdDev:      p.StdDev,
+		Diag:        true,
+		NE:          p.NumElements,
+		ModelName:   p.Name,
+		rand:        rand.New(rand.NewSource(seed)),
+		variance:    make([]float64, p.NumElements),
+		varianceInv: make([]float64, p.NumElements),
+		Sumx:        make([]float64, p.NumElements),
+		Sumxsq:      make([]float64, p.NumElements),
+		tmpArray:    make([]float64, p.NumElements),
+	}
+
 	floatx.Sq(g.variance, g.StdDev)
 
 	// Initializes variance, varianceInv, and StdDev.
 	g.setVariance(g.variance)
 
-	g.Sumx = make([]float64, g.NE)
-	g.Sumxsq = make([]float64, g.NE)
-
-	g.tmpArray = make([]float64, g.NE)
 	floatx.Log(g.tmpArray, g.variance)
 	g.const1 = -float64(g.NE) * math.Log(2.0*math.Pi) / 2.0
 	g.const2 = g.const1 - floats.Sum(g.tmpArray)/2.0
@@ -252,9 +263,11 @@ func (g *Gaussian) SetName(name string) { g.ModelName = name }
 
 func (g *Gaussian) Clone() *Gaussian {
 
-	//	ng = &Gaussian{}
-
-	ng := NewGaussian(g.NE, nil, nil, g.Diag, g.ModelName)
+	ng := NewGaussian(GaussianParam{
+		NumElements: g.NE,
+		Name:        g.ModelName,
+		IsFullCov:   !g.Diag,
+	})
 
 	//	fmt.Printf("xxx ng sumx: %+v\n\n", ng)
 	//	fmt.Printf("xxx g  sumx: %+v\n\n", g)

@@ -16,7 +16,11 @@ func init() {
 
 func TestGMMName(t *testing.T) {
 
-	gmm := NewGaussianMixture(4, 123, true, "mygmm")
+	gmm := NewGMM(GMMParam{
+		NumElements:   4,
+		NumComponents: 123,
+		Name:          "mygmm",
+	})
 
 	// for i, c := range gmm.Components() {
 	// 	t.Logf("Name for comp #%4d: %s", i, c.Name())
@@ -47,11 +51,20 @@ func TestTrainGMM(t *testing.T) {
 	std1 := []float64{1, 1}
 	dim := len(mean0)
 
-	gmm := NewGaussianMixture(dim, numComp, true, "mygmm")
+	gmm := NewGMM(GMMParam{
+		NumElements:   dim,
+		NumComponents: numComp,
+		Name:          "mygmm",
+	})
+
 	t.Logf("Initial Weights: \n%+v", gmm.Weights)
 
 	// Estimate mean variance of the data.
-	g := NewGaussian(dim, nil, nil, true, "test training")
+	g := NewGaussian(GaussianParam{
+		NumElements: dim,
+		Name:        "test training",
+	})
+
 	r := rand.New(rand.NewSource(seed))
 	for i := 0; i < numObs; i++ {
 		rv, err := model.RandNormalVector(mean0, std0, r)
@@ -157,10 +170,24 @@ func MakeGMM(t *testing.T) *GMM {
 	weights := []float64{0.6, 0.4}
 	dim := len(mean0)
 
-	g0 := NewGaussian(2, mean0, sd0, true, "g0")
-	g1 := NewGaussian(2, mean1, sd1, true, "g1")
+	g0 := NewGaussian(GaussianParam{
+		NumElements: 2,
+		Name:        "g0",
+		Mean:        mean0,
+		StdDev:      sd0,
+	})
+	g1 := NewGaussian(GaussianParam{
+		NumElements: 2,
+		Name:        "g1",
+		Mean:        mean1,
+		StdDev:      sd1,
+	})
 	components := []*Gaussian{g0, g1}
-	gmm := NewGaussianMixture(dim, 2, true, "mygmm")
+	gmm := NewGMM(GMMParam{
+		NumElements:   dim,
+		NumComponents: 2,
+		Name:          "mygmm",
+	})
 
 	// this should probably be done in NewGaussianMixture
 	gmm.Components = components
@@ -175,7 +202,11 @@ func TestTrainGMM2(t *testing.T) {
 	numIter := 10
 	numObs := 2000000
 	gmm0 := MakeGMM(t)
-	gmm := NewGaussianMixture(dim, numComp, true, "mygmm")
+	gmm := NewGMM(GMMParam{
+		NumElements:   dim,
+		NumComponents: numComp,
+		Name:          "mygmm",
+	})
 
 	t.Logf("Initial Weights: \n%+v", gmm.Weights)
 	mean01 := []float64{2.5, 3}

@@ -11,9 +11,6 @@ import (
 	"github.com/gonum/floats"
 )
 
-type GMMConfig struct {
-}
-
 type GMM struct {
 	ModelName    string      `json:"name"`
 	NE           int         `json:"num_elements"`
@@ -30,28 +27,43 @@ type GMM struct {
 	rand         *rand.Rand
 }
 
-// A multivariate Gaussian mixture model.
-func NewGaussianMixture(numElements, numComponents int,
-	diagonal bool, name string) (gmm *GMM) {
+// GMM parameters.
+type GMMParam struct {
+	NumElements   int
+	NumComponents int
+	IsFullCov     bool
+	Name          string
+}
 
-	if !diagonal {
+// A multivariate Gaussian mixture model.
+//func NewGaussianMixture(numElements, numComponents int,
+//	diagonal bool, name string) (gmm *GMM) {
+func NewGMM(p GMMParam) *GMM {
+
+	if p.IsFullCov {
 		glog.Fatalf("Full covariance matrix is not supported yet.")
 	}
 
-	gmm = &GMM{
-		NComponents:  numComponents,
-		Components:   make([]*Gaussian, numComponents, numComponents),
-		PosteriorSum: make([]float64, numComponents),
-		LogWeights:   make([]float64, numComponents),
+	gmm := &GMM{
+		NComponents:  p.NumComponents,
+		Components:   make([]*Gaussian, p.NumComponents, p.NumComponents),
+		PosteriorSum: make([]float64, p.NumComponents),
+		LogWeights:   make([]float64, p.NumComponents),
 		Diag:         true,
-		NE:           numElements,
-		ModelName:    name,
+		NE:           p.NumElements,
+		ModelName:    p.Name,
 		rand:         rand.New(rand.NewSource(seed)),
 	}
 
 	for i, _ := range gmm.Components {
 		cname := componentName(gmm.ModelName, i, gmm.NComponents)
-		gmm.Components[i] = NewGaussian(gmm.NE, nil, nil, gmm.Diag, cname)
+		//gmm.Components[i] = NewGaussian(gmm.NE, nil, nil, gmm.Diag, cname)
+		gmm.Components[i] = NewGaussian(GaussianParam{
+			NumElements: gmm.NE,
+			Name:        cname,
+			IsFullCov:   !gmm.Diag,
+		})
+
 	}
 
 	// Initialize weights.
@@ -221,7 +233,11 @@ func RandomGMM(mean, sd []float64, numComponents int,
 		panic(floatx.ErrLength)
 	}
 
-	gmm := NewGaussianMixture(nrows, numComponents, true, name)
+	gmm := NewGMM(GMMParam{
+		NumElements:   nrows,
+		NumComponents: numComponents,
+		Name:          name,
+	})
 
 	r := rand.New(rand.NewSource(seed))
 	for _, c := range gmm.Components {

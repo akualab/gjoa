@@ -14,11 +14,21 @@ const epsilon = 0.004
 
 func TestGaussian(t *testing.T) {
 
-	g := NewGaussian(10, nil, nil, true, "testing")
+	g := NewGaussian(GaussianParam{
+		NumElements: 10,
+		Name:        "testing",
+	})
+
 	mean := []float64{0.5, 1, 2}
 	sd := []float64{1, 1, 1}
 
-	g = NewGaussian(3, mean, sd, true, "testing")
+	g = NewGaussian(GaussianParam{
+		NumElements: 3,
+		Mean:        mean,
+		StdDev:      sd,
+		Name:        "testing",
+	})
+
 	obs := []float64{1, 1, 1}
 
 	p := g.LogProb(obs)
@@ -39,7 +49,11 @@ func TestTrainGaussian(t *testing.T) {
 	dim := 8
 	mean := []float64{0.1, 0.2, 0.3, 0.4, 1, 1, 1, 1}
 	std := []float64{0.5, 0.5, 0.5, 0.5, 0.1, 0.2, 0.3, 0.4}
-	g := NewGaussian(dim, nil, nil, true, "test training")
+	g := NewGaussian(GaussianParam{
+		NumElements: dim,
+		Name:        "test training",
+	})
+
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < 2000000; i++ {
 		rv, err := model.RandNormalVector(mean, std, r)
@@ -77,7 +91,11 @@ func TestTrainGaussian2(t *testing.T) {
 	labels := make([]model.SimpleLabel, numSamp, numSamp)
 	mean := []float64{0.1, 0.2, 0.3, 0.4, 1, 1, 1, 1}
 	std := []float64{0.5, 0.5, 0.5, 0.5, 0.1, 0.2, 0.3, 0.4}
-	g := NewGaussian(dim, nil, nil, true, "test training")
+	g := NewGaussian(GaussianParam{
+		NumElements: dim,
+		Name:        "test training",
+	})
+
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < numSamp; i++ {
 		rv, err := model.RandNormalVector(mean, std, r)
@@ -114,7 +132,11 @@ func TestCloneGaussian(t *testing.T) {
 	dim := 8
 	mean := []float64{0.1, 0.2, 0.3, 0.4, 1, 1, 1, 1}
 	std := []float64{0.5, 0.5, 0.5, 0.5, 0.1, 0.2, 0.3, 0.4}
-	g := NewGaussian(dim, nil, nil, true, "test cloning")
+	g := NewGaussian(GaussianParam{
+		NumElements: dim,
+		Name:        "test cloning",
+	})
+
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < 2000; i++ {
 		rv, err := model.RandNormalVector(mean, std, r)
@@ -163,7 +185,11 @@ func BenchmarkTrain(b *testing.B) {
 	dim := 8
 	mean := []float64{0.1, 0.2, 0.3, 0.4, 1, 1, 1, 1}
 	std := []float64{0.5, 0.5, 0.5, 0.5, 0.1, 0.2, 0.3, 0.4}
-	g := NewGaussian(dim, nil, nil, true, "test training")
+	g := NewGaussian(GaussianParam{
+		NumElements: dim,
+		Name:        "test training",
+	})
+
 	r := rand.New(rand.NewSource(33))
 	buf := make([][]float64, 2000000, 2000000)
 	for i := 0; i < 2000000; i++ {
@@ -197,7 +223,11 @@ func BenchmarkTrain2(b *testing.B) {
 	}
 	mean := []float64{0.1, 0.2, 0.3, 0.4, 1, 1, 1, 1}
 	std := []float64{0.5, 0.5, 0.5, 0.5, 0.1, 0.2, 0.3, 0.4}
-	g := NewGaussian(dim, nil, nil, true, "test training")
+	g := NewGaussian(GaussianParam{
+		NumElements: dim,
+		Name:        "test training",
+	})
+
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < numSamp; i++ {
 		rv, err := model.RandNormalVector(mean, std, r)
