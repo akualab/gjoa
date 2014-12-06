@@ -72,12 +72,9 @@ func TestTrainGaussian2(t *testing.T) {
 	dim := 8
 	numSamp := 2000000
 
-	// Use a FloatSampler.
-	fs, err := model.NewFloatSampler(make([][]float64, numSamp, numSamp),
-		make([]model.SimpleLabel, numSamp, numSamp))
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Use a FloatObserver.
+	values := make([][]float64, numSamp, numSamp)
+	labels := make([]model.SimpleLabel, numSamp, numSamp)
 	mean := []float64{0.1, 0.2, 0.3, 0.4, 1, 1, 1, 1}
 	std := []float64{0.5, 0.5, 0.5, 0.5, 0.1, 0.2, 0.3, 0.4}
 	g := NewGaussian(dim, nil, nil, true, "test training")
@@ -87,10 +84,15 @@ func TestTrainGaussian2(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		fs.Values[i] = rv
-		//		g.UpdateOne(rv, 1.0)
+		values[i] = rv
 	}
-	g.Update(fs, model.NoWeight)
+
+	fo, err := model.NewFloatObserver(values, labels)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	g.Update(fo, model.NoWeight)
 	g.Estimate()
 	t.Logf("Mean: \n%+v", g.Mean)
 	t.Logf("STD: \n%+v", g.StdDev)
@@ -187,8 +189,8 @@ func BenchmarkTrain2(b *testing.B) {
 	dim := 8
 	numSamp := 2000000
 
-	// Use a FloatSampler.
-	fs, err := model.NewFloatSampler(make([][]float64, numSamp, numSamp),
+	// Use a FloatObserver.
+	fs, err := model.NewFloatObserver(make([][]float64, numSamp, numSamp),
 		make([]model.SimpleLabel, numSamp, numSamp))
 	if err != nil {
 		b.Fatal(err)

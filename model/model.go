@@ -13,6 +13,16 @@ import (
 	"github.com/golang/glog"
 )
 
+// A statistical model.
+type Modeler2 interface {
+
+	// The model name.
+	Name() string
+
+	// Dimensionality of the observation vector.
+	NumElements() int
+}
+
 // A sample label.
 type Labeler interface {
 
@@ -26,7 +36,7 @@ type Labeler interface {
 	IsEqual(label Labeler) bool
 }
 
-// An observations.
+// An observation.
 type Obs interface {
 
 	// The observation's value.
@@ -38,18 +48,18 @@ type Obs interface {
 
 // Data is represented as a sequence of objects that
 // implement the Obs interface.
-type Sampler interface {
+type Observer interface {
 
-	// Returns channel of observations. The sequence end when the
-	// channel closes.
-	Chan() (<-chan Obs, error)
+	// Returns channel of observations.
+	// The sequence ends when the channel closes.
+	ObsChan() (<-chan Obs, error)
 }
 
 // Model trainer.
 type Trainer2 interface {
 
 	// Updates model using weighted samples: x[i] * w(x[i]).
-	Update(x Sampler, w func(Obs) float64) error
+	Update(x Observer, w func(Obs) float64) error
 
 	// Estimates model parameters.
 	Estimate() error
@@ -62,18 +72,34 @@ var NoWeight = func(o Obs) float64 { return 1.0 }
 
 // Returns predicted label for data.
 type Predictor interface {
-	Predict(x Sampler) ([]Labeler, error)
+	Predict(x Observer) ([]Labeler, error)
 }
 
 // Returns score for data.
 type Scorer interface {
-	Score(x Sampler) ([]float64, error)
+	Score(x Observer) ([]float64, error)
 }
 
-// A floating point slice observation that implements the Obs interface.
+type Sampler interface {
+	// Returns a sample drawn from the underlying distribution.
+	Sample() Obs
+
+	// Returns a sample of size "size" drawn from the underlying distribution.
+	// The sequence ends when the channel closes.
+	SampleChan(size int) <-chan Obs
+}
+
+// Implements an Observer whose values are slices of float64.
 type FloatObs struct {
 	value []float64
 	label SimpleLabel
+}
+
+func NewFloatObs(val []float64, lab SimpleLabel) Obs {
+	return FloatObs{
+		value: val,
+		label: lab,
+	}
 }
 
 // Returns observation value.
@@ -85,12 +111,12 @@ func (fo FloatObs) Label() Labeler { return Labeler(fo.label) }
 // Implements Labeler interface.
 type SimpleLabel struct {
 	name string
-	val  int
+	id   int
 }
 
 // Returnes unique id.
 func (lab SimpleLabel) Id() int {
-	return lab.val
+	return lab.id
 }
 
 // Returns label name.
@@ -108,17 +134,17 @@ func (lab SimpleLabel) IsEqual(lab2 Labeler) bool {
 
 // Simple sampler for floating-point values.
 // Not safe to use with multiple goroutines.
-type FloatSampler struct {
+type FloatObserver struct {
 	Values [][]float64
 	Labels []SimpleLabel
 	length int
 }
 
-func NewFloatSampler(v [][]float64, lab []SimpleLabel) (*FloatSampler, error) {
+func NewFloatObserver(v [][]float64, lab []SimpleLabel) (*FloatObserver, error) {
 	if len(v) != len(lab) {
 		return nil, fmt.Errorf("length of v [%d] and length of lab [%d] don't match.", len(v), len(lab))
 	}
-	return &FloatSampler{
+	return &FloatObserver{
 		Values: v,
 		Labels: lab,
 		length: len(v),
@@ -126,12 +152,12 @@ func NewFloatSampler(v [][]float64, lab []SimpleLabel) (*FloatSampler, error) {
 }
 
 // Returns channel of FloatObs as type Obs.
-func (fs FloatSampler) Chan() (<-chan Obs, error) {
+func (fo FloatObserver) ObsChan() (<-chan Obs, error) {
 
 	obsChan := make(chan Obs, 1000)
 	go func() {
-		for i := 0; i < fs.length; i++ {
-			obsChan <- Obs(FloatObs{fs.Values[i], fs.Labels[i]})
+		for i := 0; i < fo.length; i++ {
+			obsChan <- NewFloatObs(fo.Values[i], fo.Labels[i])
 		}
 		close(obsChan)
 	}()

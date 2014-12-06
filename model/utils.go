@@ -2,16 +2,17 @@ package model
 
 import (
 	"fmt"
-	"github.com/akualab/gjoa"
-	"github.com/gonum/floats"
 	"math"
 	"math/rand"
+
+	"github.com/akualab/gjoa"
+	"github.com/gonum/floats"
 )
 
 func RandNormalVector(mean, std []float64, r *rand.Rand) ([]float64, error) {
 
 	if !floats.EqualLengths(mean, std) {
-		return nil, fmt.Errorf("Cannot generate random vectors length of mean [%d] and std [%d] don't match.",
+		return nil, fmt.Errorf("Cannot generate random vectors because length of mean [%d] and std [%d] don't match.",
 			len(mean), len(std))
 	}
 	vector := make([]float64, len(mean))

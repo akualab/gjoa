@@ -14,6 +14,7 @@ const (
 	SMALL_SD        = 0.01
 	SMALL_VARIANCE  = SMALL_SD * SMALL_SD
 	MIN_NUM_SAMPLES = 0.01
+	seed            = 33
 )
 
 // Multivariate Gaussian distribution.
@@ -31,6 +32,7 @@ type Gaussian struct {
 	tmpArray    []float64
 	const1      float64 // -(N/2)log(2PI) Depends only on NE.
 	const2      float64 // const1 - sum(log sigma_i) Also depends on variance.
+	rand        *rand.Rand
 }
 
 // Define functions for elementwise transformations.
@@ -59,12 +61,13 @@ func NewGaussian(numElements int, mean, sd []float64,
 		glog.Fatal("Full covariance matrix is not supported yet.")
 	}
 
-	g := EmptyGaussian()
+	g := &Gaussian{}
 	g.Mean = mean
 	g.StdDev = sd
 	g.Diag = true
 	g.NE = numElements
 	g.ModelName = name
+	g.rand = rand.New(rand.NewSource(seed))
 
 	if g.Mean == nil {
 		g.Mean = make([]float64, g.NE)
@@ -92,18 +95,9 @@ func NewGaussian(numElements int, mean, sd []float64,
 	return g
 }
 
-// Returns an empty model with the base modeled initialized.
-// Use it reading model from Reader.
-func EmptyGaussian() *Gaussian {
-
-	g := &Gaussian{}
-	return g
-}
-
 // Implements Update() method in Trainer interface.
-func (g *Gaussian) Update(x model.Sampler, w func(model.Obs) float64) error {
-
-	c, e := x.Chan()
+func (g *Gaussian) Update(x model.Observer, w func(model.Obs) float64) error {
+	c, e := x.ObsChan()
 	if e != nil {
 		return e
 	}
@@ -117,15 +111,45 @@ func (g *Gaussian) Update(x model.Sampler, w func(model.Obs) float64) error {
 	return nil
 }
 
-func (g *Gaussian) Predict(x model.Sampler) ([]model.Labeler, error) {
+func (g *Gaussian) Predict(x model.Observer) ([]model.Labeler, error) {
 
+	glog.Fatal("Predict method not implemented.")
 	return nil, nil
 }
 
-// Returns log probabilies for samples.
-func (g *Gaussian) Score(x model.Sampler) ([]float64, error) {
+func (g *Gaussian) Sample() model.Obs {
+	obs, e := model.RandNormalVector(g.Mean, g.StdDev, g.rand)
+	if e != nil {
+		glog.Fatal(e)
+	}
+	return model.NewFloatObs(obs, model.SimpleLabel{})
+}
 
-	c, e := x.Chan()
+func (g *Gaussian) SampleChan(size int) <-chan model.Obs {
+
+	if len(g.Mean) == 0 {
+		glog.Fatal("Parameter Mean is missing.")
+	}
+	if len(g.StdDev) == 0 {
+		glog.Fatal("Parameter StdDev is missing.")
+	}
+	if g.rand == nil {
+		glog.Fatal("Random value generator is missing.")
+	}
+	c := make(chan model.Obs, 1000)
+	go func() {
+		for i := 0; i < size; i++ {
+			c <- g.Sample()
+		}
+		close(c)
+	}()
+	return c
+}
+
+// Returns log probabilies for samples.
+func (g *Gaussian) Score(x model.Observer) ([]float64, error) {
+
+	c, e := x.ObsChan()
 	if e != nil {
 		return nil, e
 	}
@@ -219,11 +243,6 @@ func (g *Gaussian) standardDeviation() (sd []float64) {
 	sd = make([]float64, g.NE)
 	floatx.Sqrt(sd, g.variance)
 	return
-}
-
-func (g *Gaussian) Random(r *rand.Rand) (interface{}, []int, error) {
-	obs, e := model.RandNormalVector(g.Mean, g.StdDev, r)
-	return obs, nil, e
 }
 
 func (g *Gaussian) Name() string        { return g.ModelName }
