@@ -2,8 +2,9 @@ package hmm
 
 import (
 	"fmt"
-	"github.com/akualab/gjoa/model"
 	"math/rand"
+
+	"github.com/akualab/gjoa/model"
 )
 
 type Generator struct {
@@ -35,8 +36,8 @@ func (gen *Generator) Next(n int) ([][]float64, []int, error) {
 	for i := 0; i < n; i++ {
 		states[i] = state0
 		g := gen.hmm.ObsModels[state0]
-		x, _, err0 := g.Random(r)
-		obs[i] = x.([]float64)
+		x := g.Sample()
+		obs[i] = x.(model.FloatObs).Value() //([]float64)
 		if err0 != nil {
 			return nil, nil, fmt.Errorf("Error generating Random model")
 		}
