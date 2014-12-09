@@ -9,13 +9,9 @@ Hidden Markov model.
 package hmm
 
 import (
-	"bufio"
-	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"math/rand"
-	"os"
 
 	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/floatx"
@@ -75,6 +71,7 @@ type HMM struct {
 	SumProb      float64     `json:"sum_probs,omitempty"`
 	SumInitProbs []float64   `json:"sum_init_probs,omitempty"`
 	generator    *Generator
+	opt          *HMMParam
 }
 
 // Define functions for elementwise transformations.
@@ -137,6 +134,7 @@ func NewHMM(p HMMParam) (hmm *HMM, e error) {
 		SumXi:        floatx.MakeFloat2D(r, r),
 		SumGamma:     make([]float64, r),
 		SumInitProbs: make([]float64, r),
+		opt:          &p,
 	}
 
 	hmm.generator = NewGenerator(hmm, p.GeneratorSeed)
@@ -421,7 +419,8 @@ func (hmm *HMM) UpdateOne(observations [][]float64, w float64) (e error) {
 
 		outputStatePDF := hmm.ObsModels[i].(model.Trainer)
 		for t := 0; t < T; t++ {
-			outputStatePDF.UpdateOne(observations[t], tmp[t]) // exp(g(t))
+			o := gaussian.F64ToObs(observations[t])
+			outputStatePDF.UpdateOne(o, tmp[t]) // exp(g(t))
 		}
 
 		hmm.SumInitProbs[i] += tmp[0] // [3]
@@ -443,18 +442,18 @@ func (hmm *HMM) Estimate() error {
 
 	// Initial state probabilities.
 	s := floats.Sum(hmm.SumInitProbs)
-	if hmm.Config.HMM.UpdateIP {
+	if hmm.opt.UpdateIP {
 		glog.V(4).Infof("Sum Init. Probs:    %v.", hmm.SumInitProbs)
 		floatx.Apply(floatx.ScaleFunc(1.0/s), hmm.SumInitProbs, hmm.InitProbs)
-		floatx.Apply(floatx.Log, hmm.InitProbs, nil)
+		floatx.Log(hmm.InitProbs, hmm.InitProbs)
 	}
 
 	// Transition probabilities.
-	if hmm.Config.HMM.UpdateTP {
+	if hmm.opt.UpdateTP {
 		for i, sxi := range hmm.SumXi {
 			sg := hmm.SumGamma[i]
 			floatx.Apply(floatx.ScaleFunc(1.0/sg), sxi, hmm.TransProbs[i])
-			floatx.Apply(floatx.Log, hmm.TransProbs[i], nil)
+			floatx.Log(hmm.TransProbs[i], hmm.TransProbs[i])
 		}
 	}
 	for _, m := range hmm.ObsModels {
@@ -493,7 +492,7 @@ func (hmm *HMM) Prob(observation interface{}) float64 {
 
 func (hmm *HMM) Random(r *rand.Rand) (interface{}, []int, error) {
 
-	return hmm.generator.Next(hmm.Config.HMM.GeneratorMaxLen)
+	return hmm.generator.Next(hmm.opt.GeneratorMaxLen)
 }
 
 func (hmm *HMM) SetName(name string) {}
@@ -505,8 +504,7 @@ func (hmm *HMM) NumElements() int {
 	}
 	return hmm.ObsModels[0].NumElements()
 }
-func (hmm *HMM) Name() string    { return hmm.ModelName }
-func (hmm *HMM) Trainable() bool { return hmm.IsTrainable }
+func (hmm *HMM) Name() string { return hmm.ModelName }
 
 // Returns a map from state model name to state model index.
 func (hmm *HMM) Indices() (m map[string]int) {
@@ -631,151 +629,151 @@ func (hmm *HMM) concurrentGammaXi(observations, α, β [][]float64) (γ [][]floa
 	return
 }
 
-func (os *ObsSlice) UnmarshalJSON(b []byte) error {
+// func (os *ObsSlice) UnmarshalJSON(b []byte) error {
 
-	// We want to peek inside the message to get the model type.
-	// We copy the bytes to get a raw message first.
-	bcopy := make([]byte, len(b))
-	copy(bcopy, b)
-	rm := json.RawMessage(bcopy)
+// 	// We want to peek inside the message to get the model type.
+// 	// We copy the bytes to get a raw message first.
+// 	bcopy := make([]byte, len(b))
+// 	copy(bcopy, b)
+// 	rm := json.RawMessage(bcopy)
 
-	// Now that we have a raw message we just want to unmarshal the
-	// json "type" attribute into the ModelType field.
-	var part []model.BaseModel
-	e := json.Unmarshal([]byte(rm), &part)
-	if e != nil {
-		return e
-	}
+// 	// Now that we have a raw message we just want to unmarshal the
+// 	// json "type" attribute into the ModelType field.
+// 	var part []model.BaseModel
+// 	e := json.Unmarshal([]byte(rm), &part)
+// 	if e != nil {
+// 		return e
+// 	}
 
-	// Couldn't get this to work using reflection so for now I'm using a switch.
-	// TODO: investigate if we can implement a generic solution using reflection.
-	//modelers := make([]model.Modeler, len(part))
-	modelers := make([]model.Modeler, 0)
+// 	// Couldn't get this to work using reflection so for now I'm using a switch.
+// 	// TODO: investigate if we can implement a generic solution using reflection.
+// 	//modelers := make([]model.Modeler, len(part))
+// 	modelers := make([]model.Modeler, 0)
 
-	switch part[0].ModelType {
-	case "Gaussian":
-		gslice := make([]*gaussian.Gaussian, len(part))
-		e = json.Unmarshal(b, &gslice)
-		if e != nil {
-			return e
-		}
+// 	switch part[0].ModelType {
+// 	case "Gaussian":
+// 		gslice := make([]*gaussian.Gaussian, len(part))
+// 		e = json.Unmarshal(b, &gslice)
+// 		if e != nil {
+// 			return e
+// 		}
 
-		for _, v := range gslice {
-			if v == nil {
-				glog.Warningf("found null in JSON file for Gaussian - ignoring")
-				continue
-			}
-			v.Initialize()
-			//modelers[k] = model.Modeler(v)
-			modelers = append(modelers, model.Modeler(v)) // append non-null Gaussians.
-		}
+// 		for _, v := range gslice {
+// 			if v == nil {
+// 				glog.Warningf("found null in JSON file for Gaussian - ignoring")
+// 				continue
+// 			}
+// 			v.Initialize()
+// 			//modelers[k] = model.Modeler(v)
+// 			modelers = append(modelers, model.Modeler(v)) // append non-null Gaussians.
+// 		}
 
-	case "GMM":
-		gmmslice := make([]*gaussian.GMM, len(part))
-		e = json.Unmarshal(b, &gmmslice)
-		if e != nil {
-			return e
-		}
+// 	case "GMM":
+// 		gmmslice := make([]*gaussian.GMM, len(part))
+// 		e = json.Unmarshal(b, &gmmslice)
+// 		if e != nil {
+// 			return e
+// 		}
 
-		for k, v := range gmmslice {
-			v.Initialize()
-			modelers[k] = model.Modeler(v)
-		}
+// 		for k, v := range gmmslice {
+// 			v.Initialize()
+// 			modelers[k] = model.Modeler(v)
+// 		}
 
-	default:
-		return fmt.Errorf("Cannot unmarshal json into unknown Modeler type %s.", part[0].ModelType)
-	}
+// 	default:
+// 		return fmt.Errorf("Cannot unmarshal json into unknown Modeler type %s.", part[0].ModelType)
+// 	}
 
-	// Assign the slice of Modeler.
-	*os = (ObsSlice)(modelers)
+// 	// Assign the slice of Modeler.
+// 	*os = (ObsSlice)(modelers)
 
-	return nil
-}
+// 	return nil
+// }
 
-// Write a collection of HMMs to a file.
-func WriteHMMCollection(hmms map[string]*HMM, fn string) error {
+// // Write a collection of HMMs to a file.
+// func WriteHMMCollection(hmms map[string]*HMM, fn string) error {
 
-	f, e := os.Create(fn)
-	if e != nil {
-		return e
-	}
-	defer f.Close()
-	enc := json.NewEncoder(f)
-	for _, v := range hmms {
-		glog.V(4).Infof("write hmm %+v", v)
-		if filterModels(v) {
-			glog.Warningf("model %s has NaN, removing.", v.ModelName)
-			continue
-		}
-		e := enc.Encode(v)
-		if e != nil {
-			return e
-		}
-	}
-	return nil
-}
+// 	f, e := os.Create(fn)
+// 	if e != nil {
+// 		return e
+// 	}
+// 	defer f.Close()
+// 	enc := json.NewEncoder(f)
+// 	for _, v := range hmms {
+// 		glog.V(4).Infof("write hmm %+v", v)
+// 		if filterModels(v) {
+// 			glog.Warningf("model %s has NaN, removing.", v.ModelName)
+// 			continue
+// 		}
+// 		e := enc.Encode(v)
+// 		if e != nil {
+// 			return e
+// 		}
+// 	}
+// 	return nil
+// }
 
-// Read a collection of HMMs from a file.
-func ReadHMMCollection(fn string) (hmms map[string]*HMM, e error) {
+// // Read a collection of HMMs from a file.
+// func ReadHMMCollection(fn string) (hmms map[string]*HMM, e error) {
 
-	var f *os.File
-	f, e = os.Open(fn)
-	if e != nil {
-		return
-	}
-	defer f.Close()
-	reader := bufio.NewReader(f)
+// 	var f *os.File
+// 	f, e = os.Open(fn)
+// 	if e != nil {
+// 		return
+// 	}
+// 	defer f.Close()
+// 	reader := bufio.NewReader(f)
 
-	hmms = make(map[string]*HMM)
+// 	hmms = make(map[string]*HMM)
 
-	for {
-		var b []byte
-		b, e = reader.ReadBytes('\n')
-		if e == io.EOF {
-			e = nil
-			return
-		}
-		if e != nil {
-			return
-		}
+// 	for {
+// 		var b []byte
+// 		b, e = reader.ReadBytes('\n')
+// 		if e == io.EOF {
+// 			e = nil
+// 			return
+// 		}
+// 		if e != nil {
+// 			return
+// 		}
 
-		hmm := new(HMM)
-		e = json.Unmarshal(b, hmm)
-		if e != nil {
-			return
-		}
-		hmms[hmm.ModelName] = hmm
-	}
-	return
-}
+// 		hmm := new(HMM)
+// 		e = json.Unmarshal(b, hmm)
+// 		if e != nil {
+// 			return
+// 		}
+// 		hmms[hmm.ModelName] = hmm
+// 	}
+// 	return
+// }
 
-// Make models json compatible.
-// Replaces -Inf with -MaxFloat
-// Removes models with NaN
-func filterModels(hmm *HMM) bool {
+// // Make models json compatible.
+// // Replaces -Inf with -MaxFloat
+// // Removes models with NaN
+// func filterModels(hmm *HMM) bool {
 
-	for i, v := range hmm.InitProbs {
+// 	for i, v := range hmm.InitProbs {
 
-		if math.IsInf(v, -1) {
-			hmm.InitProbs[i] = -math.MaxFloat64
-		}
+// 		if math.IsInf(v, -1) {
+// 			hmm.InitProbs[i] = -math.MaxFloat64
+// 		}
 
-		if math.IsNaN(v) {
-			return true
-		}
+// 		if math.IsNaN(v) {
+// 			return true
+// 		}
 
-		for j, w := range hmm.TransProbs[i] {
-			if math.IsInf(w, -1) {
-				hmm.TransProbs[i][j] = -math.MaxFloat64
-			}
-			if math.IsNaN(w) {
-				return true
-			}
+// 		for j, w := range hmm.TransProbs[i] {
+// 			if math.IsInf(w, -1) {
+// 				hmm.TransProbs[i][j] = -math.MaxFloat64
+// 			}
+// 			if math.IsNaN(w) {
+// 				return true
+// 			}
 
-		}
-	}
-	return false
-}
+// 		}
+// 	}
+// 	return false
+// }
 
 /* Joins a collection of 2-state HMMs into a single HMM.
 

@@ -57,7 +57,6 @@ func NewGMM(p GMMParam) *GMM {
 
 	for i, _ := range gmm.Components {
 		cname := componentName(gmm.ModelName, i, gmm.NComponents)
-		//gmm.Components[i] = NewGaussian(gmm.NE, nil, nil, gmm.Diag, cname)
 		gmm.Components[i] = NewGaussian(GaussianParam{
 			NumElements: gmm.NE,
 			Name:        cname,
@@ -103,18 +102,30 @@ func (gmm *GMM) logProbInternal(obs, probs []float64) float64 {
 	return max
 }
 
-// Returns the log probability.
-func (gmm *GMM) LogProb(observation interface{}) float64 {
+// Returns log probabilies for samples.
+func (gmm *GMM) LogProbs(x model.Observer) ([]float64, error) {
 
-	obs := observation.([]float64)
-	return gmm.logProbInternal(obs, nil)
+	c, e := x.ObsChan()
+	if e != nil {
+		return nil, e
+	}
+	scores := make([]float64, 0, 0)
+	for v := range c {
+		scores = append(scores, gmm.LogProb(v))
+	}
+	return scores, nil
+}
+
+// Returns log probability for observation.
+func (gmm *GMM) LogProb(obs model.Obs) float64 {
+
+	o := obs.Value().([]float64)
+	return gmm.logProbInternal(o, nil)
 }
 
 // Returns the probability.
-func (gmm *GMM) Prob(observation interface{}) float64 {
-
-	obs := observation.([]float64)
-	return math.Exp(gmm.LogProb(obs))
+func (gmm *GMM) prob(obs []float64) float64 {
+	return math.Exp(gmm.LogProb(F64ToObs(obs)))
 }
 
 /*

@@ -58,34 +58,38 @@ func TestTrainGMM(t *testing.T) {
 	})
 
 	t.Logf("Initial Weights: \n%+v", gmm.Weights)
+	{
+		// Estimate mean variance of the data.
+		g := NewGaussian(GaussianParam{
+			NumElements: dim,
+			Name:        "test training",
+		})
 
-	// Estimate mean variance of the data.
-	g := NewGaussian(GaussianParam{
-		NumElements: dim,
-		Name:        "test training",
-	})
+		r := rand.New(rand.NewSource(seed))
+		for i := 0; i < numObs; i++ {
+			rv, err := model.RandNormalVector(mean0, std0, r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			g.UpdateOne(F64ToObs(rv), 1.0)
+			rv, err = model.RandNormalVector(mean1, std1, r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			g.UpdateOne(F64ToObs(rv), 1.0)
+		}
+		g.Estimate()
+		t.Logf("Gaussian Model for training set:")
+		t.Logf("Mean: \n%+v", g.Mean)
+		t.Logf("SD: \n%+v", g.StdDev)
 
-	r := rand.New(rand.NewSource(seed))
-	for i := 0; i < numObs; i++ {
-		rv, err := model.RandNormalVector(mean0, std0, r)
-		if err != nil {
-			t.Fatal(err)
-		}
-		g.UpdateOne(F64ToObs(rv), 1.0)
-		rv, err = model.RandNormalVector(mean1, std1, r)
-		if err != nil {
-			t.Fatal(err)
-		}
-		g.UpdateOne(F64ToObs(rv), 1.0)
+		// Use the estimated mean and sd to generate a seed GMM.
+		gmm = RandomGMM(g.Mean, g.StdDev, numComp,
+			"mygmm", 99)
+		t.Logf("Random GMM: %+v.", gmm)
+		t.Logf("Component 0: %+v.", gmm.Components[0])
+		t.Logf("Component 1: %+v.", gmm.Components[1])
 	}
-	g.Estimate()
-	t.Logf("Gaussian Model for training set:")
-	t.Logf("Mean: \n%+v", g.Mean)
-	t.Logf("SD: \n%+v", g.StdDev)
-
-	// Use the estimated mean and sd to generate a seed GMM.
-	gmm = RandomGMM(g.Mean, g.StdDev, numComp,
-		"mygmm", 99)
 
 	for iter := 0; iter < numIter; iter++ {
 		t.Logf("Starting GMM training iteration %d.", iter)
@@ -100,12 +104,12 @@ func TestTrainGMM(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			g.UpdateOne(F64ToObs(rv), 1.0)
+			gmm.UpdateOne(F64ToObs(rv), 1.0)
 			rv, err = model.RandNormalVector(mean1, std1, r)
 			if err != nil {
 				t.Fatal(err)
 			}
-			g.UpdateOne(F64ToObs(rv), 1.0)
+			gmm.UpdateOne(F64ToObs(rv), 1.0)
 		}
 
 		// Estimates GMM params.
