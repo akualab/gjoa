@@ -2,21 +2,18 @@ package gaussian
 
 import (
 	"fmt"
-	"github.com/akualab/gjoa/floatx"
-	"github.com/akualab/gjoa/model"
-	"github.com/gonum/floats"
 	"math"
 	"math/rand"
+
+	"github.com/akualab/gjoa/floatx"
+	"github.com/akualab/gjoa/model"
+	"github.com/golang/glog"
+	"github.com/gonum/floats"
 )
 
-type GMMConfig struct {
-}
-
 type GMM struct {
-	*model.BaseModel
 	ModelName    string      `json:"name"`
 	NE           int         `json:"num_elements"`
-	IsTrainable  bool        `json:"trainable"`
 	NSamples     float64     `json:"nsamples"`
 	Diag         bool        `json:"diag"`
 	NComponents  int         `json:"num_components"`
@@ -27,78 +24,56 @@ type GMM struct {
 	Components   []*Gaussian `json:"components,omitempty"`
 	Iteration    int         `json:"iteration"`
 	tmpProbs     []float64
+	rand         *rand.Rand
 }
 
-func init() {
-	m := new(GMM)
-	model.Register(m)
+// GMM parameters.
+type GMMParam struct {
+	NumElements   int
+	NumComponents int
+	IsFullCov     bool
+	Name          string
 }
 
 // A multivariate Gaussian mixture model.
-func NewGaussianMixture(numElements, numComponents int,
-	trainable, diagonal bool, name string) (gmm *GMM, e error) {
+//func NewGaussianMixture(numElements, numComponents int,
+//	diagonal bool, name string) (gmm *GMM) {
+func NewGMM(p GMMParam) *GMM {
 
-	if !diagonal {
-		e = fmt.Errorf("Full covariance matrix is not supported yet.")
-		return
+	if p.IsFullCov {
+		glog.Fatalf("Full covariance matrix is not supported yet.")
 	}
 
-	if !trainable {
-		gmm = &GMM{
-			NComponents: numComponents,
-			Diag:        true,
-			NE:          numElements,
-			ModelName:   name,
-			IsTrainable: trainable,
-		}
-		return
+	gmm := &GMM{
+		NComponents:  p.NumComponents,
+		Components:   make([]*Gaussian, p.NumComponents, p.NumComponents),
+		PosteriorSum: make([]float64, p.NumComponents),
+		LogWeights:   make([]float64, p.NumComponents),
+		Diag:         true,
+		NE:           p.NumElements,
+		ModelName:    p.Name,
+		rand:         rand.New(rand.NewSource(seed)),
 	}
-
-	gmm = EmptyGaussianMixture()
-	gmm.NComponents = numComponents
-	gmm.Components = make([]*Gaussian, numComponents, numComponents)
-	gmm.PosteriorSum = make([]float64, numComponents)
-	gmm.LogWeights = make([]float64, numComponents)
-	gmm.Diag = true
-	gmm.NE = numElements
-	gmm.ModelName = name
-	gmm.IsTrainable = trainable
 
 	for i, _ := range gmm.Components {
-		cname := getComponentName(gmm.ModelName, i, gmm.NComponents)
-		gmm.Components[i], e = NewGaussian(gmm.NE, nil, nil, gmm.IsTrainable, gmm.Diag, cname)
-		if e != nil {
-			return
-		}
+		cname := componentName(gmm.ModelName, i, gmm.NComponents)
+		gmm.Components[i] = NewGaussian(GaussianParam{
+			NumElements: gmm.NE,
+			Name:        cname,
+			IsFullCov:   !gmm.Diag,
+		})
+
 	}
 
 	// Initialize weights.
 	logw := -math.Log(float64(gmm.NComponents))
 	floatx.Apply(setValueFunc(logw), gmm.LogWeights, nil)
 
-	e = gmm.Initialize()
-	if e != nil {
-		return
-	}
-	return
-}
-
-func (gmm *GMM) Initialize() error {
-
 	gmm.tmpProbs = make([]float64, gmm.NComponents)
 
 	// Initialize weights.
 	gmm.Weights = make([]float64, gmm.NComponents)
-	floatx.Apply(exp, gmm.LogWeights, gmm.Weights)
-	return nil
-}
-
-// Returns an empty model with the base modeled initialized.
-// Use it reading model from Reader.
-func EmptyGaussianMixture() *GMM {
-
-	gmm := &GMM{}
-	gmm.BaseModel = model.NewBaseModel(model.Modeler(gmm))
+	floatx.Exp(gmm.Weights, gmm.LogWeights)
 	return gmm
 }
 
@@ -110,7 +85,7 @@ func (gmm *GMM) logProbInternal(obs, probs []float64) float64 {
 
 	/* Compute log probabilities for this observation. */
 	for i, c := range gmm.Components {
-		v1 := c.LogProb(obs)
+		v1 := c.logProb(obs)
 		v2 := gmm.LogWeights[i]
 		v := v1 + v2
 
@@ -127,18 +102,30 @@ func (gmm *GMM) logProbInternal(obs, probs []float64) float64 {
 	return max
 }
 
-// Returns the log probability.
-func (gmm *GMM) LogProb(observation interface{}) float64 {
+// Returns log probabilies for samples.
+func (gmm *GMM) LogProbs(x model.Observer) ([]float64, error) {
 
-	obs := observation.([]float64)
-	return gmm.logProbInternal(obs, nil)
+	c, e := x.ObsChan()
+	if e != nil {
+		return nil, e
+	}
+	scores := make([]float64, 0, 0)
+	for v := range c {
+		scores = append(scores, gmm.LogProb(v))
+	}
+	return scores, nil
+}
+
+// Returns log probability for observation.
+func (gmm *GMM) LogProb(obs model.Obs) float64 {
+
+	o := obs.Value().([]float64)
+	return gmm.logProbInternal(o, nil)
 }
 
 // Returns the probability.
-func (gmm *GMM) Prob(observation interface{}) float64 {
-
-	obs := observation.([]float64)
-	return math.Exp(gmm.LogProb(obs))
+func (gmm *GMM) prob(obs []float64) float64 {
+	return math.Exp(gmm.LogProb(F64ToObs(obs)))
 }
 
 /*
@@ -150,25 +137,22 @@ func (gmm *GMM) Prob(observation interface{}) float64 {
 
 */
 
-func (gmm *GMM) Update(obs []float64, w float64) error {
+func (gmm *GMM) UpdateOne(o model.Obs, w float64) error {
 
-	if !gmm.IsTrainable {
-		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.ModelName)
-	}
-
+	obs, _ := ObsToF64(o)
 	maxProb := gmm.logProbInternal(obs, gmm.tmpProbs)
 	gmm.Likelihood += maxProb
 	floatx.Apply(addScalarFunc(-maxProb+math.Log(w)), gmm.tmpProbs, nil)
 
 	// Compute posterior probabilities.
-	floatx.Apply(exp, gmm.tmpProbs, nil)
+	floatx.Exp(gmm.tmpProbs, gmm.tmpProbs)
 
 	// Update posterior sum, needed to compute mixture weights.
 	floats.Add(gmm.PosteriorSum, gmm.tmpProbs)
 
 	// Update Gaussian components.
 	for i, c := range gmm.Components {
-		c.Update(obs, gmm.tmpProbs[i])
+		c.UpdateOne(o, gmm.tmpProbs[i])
 	}
 
 	// Count number of observations.
@@ -179,28 +163,23 @@ func (gmm *GMM) Update(obs []float64, w float64) error {
 
 func (gmm *GMM) Estimate() error {
 
-	if !gmm.IsTrainable {
-		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.ModelName)
-	}
-
 	// Estimate mixture weights.
 	floatx.Apply(scaleFunc(1.0/gmm.NSamples), gmm.PosteriorSum, gmm.Weights)
-	floatx.Apply(log, gmm.Weights, gmm.LogWeights)
+	floatx.Log(gmm.LogWeights, gmm.Weights)
 
 	// Estimate component density.
 	for _, c := range gmm.Components {
-		c.Estimate()
+		err := c.Estimate()
+		if err != nil {
+			return err
+		}
 	}
 	gmm.Iteration += 1
 
 	return nil
 }
 
-func (gmm *GMM) Clear() error {
-
-	if !gmm.IsTrainable {
-		return fmt.Errorf("Attempted to train model [%s] which is not trainable.", gmm.ModelName)
-	}
+func (gmm *GMM) Clear() {
 
 	for _, c := range gmm.Components {
 		c.Clear()
@@ -208,65 +187,81 @@ func (gmm *GMM) Clear() error {
 	floatx.Apply(setValueFunc(0), gmm.PosteriorSum, nil)
 	gmm.NSamples = 0
 	gmm.Likelihood = 0
-
-	return nil
 }
 
 // Returns a random GMM vector
-func (gmm *GMM) Random(r *rand.Rand) (interface{}, []int, error) {
+func (gmm *GMM) Sample() model.Obs {
 	// Choose a component using weights
-	comp, err := model.RandIntFromDist(gmm.Weights, r)
+	comp, err := model.RandIntFromDist(gmm.Weights, gmm.rand)
 	if err != nil {
-		return nil, nil, err
+		glog.Fatalf("Couldn't generate sample. Error: %s", err)
 	}
 	// Get a random vector from that component
-	return gmm.Components[comp].Random(r)
+	return gmm.Components[comp].Sample()
+}
+
+// SampleChan returns a channel with samples generated by the GMM model.
+func (gmm *GMM) SampleChan(size int) <-chan model.Obs {
+
+	if len(gmm.Weights) == 0 {
+		glog.Fatal("Parameter Weights is missing.")
+	}
+	if gmm.rand == nil {
+		glog.Fatal("Random value generator is missing.")
+	}
+	c := make(chan model.Obs, 1000)
+	go func() {
+		for i := 0; i < size; i++ {
+			c <- gmm.Sample()
+		}
+		close(c)
+	}()
+	return c
 }
 
 // Returns a random vector using the mean and sd vectors.
-func RandomVector(mean, sd []float64, r *rand.Rand) (vec []float64, e error) {
+func RandomVector(mean, sd []float64, r *rand.Rand) []float64 {
 
 	nrows := len(mean)
 	if !floats.EqualLengths(mean, sd) {
 		panic(floatx.ErrLength)
 	}
 
-	vec = make([]float64, nrows)
+	vec := make([]float64, nrows)
 	for i := 0; i < nrows; i++ {
 		v := r.NormFloat64()*sd[i] + mean[i]
 		vec[i] = v
 	}
-	return
+	return vec
 }
 
 // Generates a random Gaussian mixture model using mean and variance vectors as seed.
 // Use this function to initialize the GMM before training. The mean and sd
 // vector can be estimated from the data set using a Gaussian model.
 func RandomGMM(mean, sd []float64, numComponents int,
-	name string, seed int64) (gmm *GMM, e error) {
+	name string, seed int64) *GMM {
 
 	nrows := len(mean)
 	if !floats.EqualLengths(mean, sd) {
 		panic(floatx.ErrLength)
 	}
 
-	gmm, e = NewGaussianMixture(nrows, numComponents, true, true, name)
-	if e != nil {
-		return
-	}
+	gmm := NewGMM(GMMParam{
+		NumElements:   nrows,
+		NumComponents: numComponents,
+		Name:          name,
+	})
 
 	r := rand.New(rand.NewSource(seed))
 	for _, c := range gmm.Components {
 		var rv []float64
-		if rv, e = RandomVector(mean, sd, r); e != nil {
-			return
-		}
+		rv = RandomVector(mean, sd, r)
 		c.Mean = rv
 		variance := make([]float64, len(sd))
-		floatx.Apply(sq, sd, variance)
+		floatx.Sq(variance, sd)
 		c.setVariance(variance)
 	}
-	return
+	return gmm
 }
 
 // Returns the Gaussian components.
@@ -275,7 +270,7 @@ func (gmm *GMM) Components() []*Gaussian {
 	return gmm.Components
 }
 */
-func getComponentName(name string, n, numComponents int) string {
+func componentName(name string, n, numComponents int) string {
 
 	max := numComponents - 1
 	switch {
@@ -299,7 +294,6 @@ func getComponentName(name string, n, numComponents int) string {
 func (gmm *GMM) Name() string        { return gmm.ModelName }
 func (gmm *GMM) NumSamples() float64 { return gmm.NSamples }
 func (gmm *GMM) NumElements() int    { return gmm.NE }
-func (gmm *GMM) Trainable() bool     { return gmm.IsTrainable }
 func (gmm *GMM) SetName(name string) { gmm.ModelName = name }
 
 // Export struct.

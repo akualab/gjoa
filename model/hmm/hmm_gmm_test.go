@@ -1,13 +1,14 @@
 package hmm
 
 import (
-	"github.com/akualab/gjoa"
-	"github.com/akualab/gjoa/model"
-	"github.com/akualab/gjoa/model/gaussian"
 	"math"
 	"math/rand"
 	"testing"
 	"time"
+
+	"github.com/akualab/gjoa"
+	"github.com/akualab/gjoa/model"
+	"github.com/akualab/gjoa/model/gaussian"
 )
 
 func MakeGmm(t *testing.T, mean, sd [][]float64, weights []float64) *gaussian.GMM {
@@ -111,7 +112,7 @@ func TestTrainHmmGmm(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			hmm.Update(obs, 1.0)
+			hmm.UpdateOne(obs, 1.0)
 		}
 		hmm.Estimate()
 	}

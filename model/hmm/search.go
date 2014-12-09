@@ -7,7 +7,7 @@ package hmm
 
 import (
 	"github.com/akualab/gjoa/floatx"
-	//"github.com/golang/glog"
+	"github.com/akualab/gjoa/model/gaussian"
 )
 
 // The viterbi algorithm computes the probable sequence of states for an HMM.
@@ -44,7 +44,8 @@ func (hmm *HMM) Viterbi(observations [][]float64) (bt []int, logViterbiProb floa
 
 	// Init delta
 	for i := 0; i < N; i++ {
-		b := hmm.ObsModels[i].LogProb(observations[0])
+		o := gaussian.F64ToObs(observations[0])
+		b := hmm.ObsModels[i].LogProb(o)
 		delta[i][0] = hmm.InitProbs[i] + b
 	}
 
@@ -53,7 +54,8 @@ func (hmm *HMM) Viterbi(observations [][]float64) (bt []int, logViterbiProb floa
 		for i := 0; i < N; i++ {
 			// Computing max in k to define delta(i,t)
 			// init max with k=0
-			b := hmm.ObsModels[i].LogProb(observations[t])
+			o := gaussian.F64ToObs(observations[t])
+			b := hmm.ObsModels[i].LogProb(o)
 			max := delta[0][t-1] + hmm.TransProbs[0][i] + b
 			argmax := 0
 			for k := 1; k < N; k++ {

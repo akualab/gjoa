@@ -1,7 +1,6 @@
 package gaussian
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 
@@ -15,14 +14,13 @@ const (
 	SMALL_SD        = 0.01
 	SMALL_VARIANCE  = SMALL_SD * SMALL_SD
 	MIN_NUM_SAMPLES = 0.01
+	seed            = 33
 )
 
 // Multivariate Gaussian distribution.
 type Gaussian struct {
-	*model.BaseModel
 	ModelName   string    `json:"name,omitempty"`
 	NE          int       `json:"num_elements"`
-	IsTrainable bool      `json:"trainable"`
 	NSamples    float64   `json:"nsamples"`
 	Diag        bool      `json:"diag"`
 	Sumx        []float64 `json:"sumx,omitempty"`
@@ -34,14 +32,10 @@ type Gaussian struct {
 	tmpArray    []float64
 	const1      float64 // -(N/2)log(2PI) Depends only on NE.
 	const2      float64 // const1 - sum(log sigma_i) Also depends on variance.
-	fpool       *floatx.Pool
+	rand        *rand.Rand
 }
 
 // Define functions for elementwise transformations.
-var log = func(r int, v float64) float64 { return math.Log(v) }
-var exp = func(r int, v float64) float64 { return math.Exp(v) }
-var sq = func(r int, v float64) float64 { return v * v }
-var sqrt = func(r int, v float64) float64 { return math.Sqrt(v) }
 var inv = func(r int, v float64) float64 { return 1.0 / v }
 var floorv = func(r int, v float64) float64 {
 	if v < SMALL_VARIANCE {
@@ -60,100 +54,152 @@ func scaleFunc(f float64) floatx.ApplyFunc {
 	return func(r int, v float64) float64 { return v * f }
 }
 
-func init() {
-	m := new(Gaussian)
-	model.Register(m)
+// Gaussian parameters.
+type GaussianParam struct {
+	NumElements int
+	Mean        []float64
+	StdDev      []float64
+	IsFullCov   bool
+	Name        string
 }
 
-func NewGaussian(numElements int, mean, sd []float64,
-	trainable, diagonal bool, name string) (g *Gaussian, e error) {
+//func NewGaussian(numElements int, mean, sd []float64,
+//	diagonal bool, name string) *Gaussian {
+func NewGaussian(p GaussianParam) *Gaussian {
 
-	if !diagonal {
-		e = fmt.Errorf("Full covariance matrix is not supported yet.")
-		return
+	if p.IsFullCov {
+		glog.Fatal("Full covariance matrix is not supported yet.")
 	}
 
-	g = EmptyGaussian()
-	g.Mean = mean
-	g.StdDev = sd
-	g.Diag = true
-	g.NE = numElements
-	g.ModelName = name
-	g.IsTrainable = trainable
-	g.fpool = floatx.NewPool(numElements)
-
-	g.Initialize()
-	return
-}
-
-func (g *Gaussian) Initialize() error {
-
-	if g.Mean == nil {
-		g.Mean = make([]float64, g.NE)
+	if p.Mean == nil {
+		p.Mean = make([]float64, p.NumElements)
 	}
 
-	g.variance = make([]float64, g.NE)
-	g.varianceInv = make([]float64, g.NE)
-	if g.StdDev == nil {
-		g.StdDev = make([]float64, g.NE)
-		floatx.Apply(setValueFunc(SMALL_SD), g.StdDev, nil)
+	if p.StdDev == nil {
+		p.StdDev = make([]float64, p.NumElements)
+		floatx.Apply(setValueFunc(SMALL_SD), p.StdDev, nil)
 	}
-	floatx.Apply(sq, g.StdDev, g.variance)
+
+	g := &Gaussian{
+		Mean:        p.Mean,
+		StdDev:      p.StdDev,
+		Diag:        true,
+		NE:          p.NumElements,
+		ModelName:   p.Name,
+		rand:        rand.New(rand.NewSource(seed)),
+		variance:    make([]float64, p.NumElements),
+		varianceInv: make([]float64, p.NumElements),
+		Sumx:        make([]float64, p.NumElements),
+		Sumxsq:      make([]float64, p.NumElements),
+		tmpArray:    make([]float64, p.NumElements),
+	}
+
+	floatx.Sq(g.variance, g.StdDev)
 
 	// Initializes variance, varianceInv, and StdDev.
 	g.setVariance(g.variance)
 
-	if g.IsTrainable {
-		g.Sumx = make([]float64, g.NE)
-		g.Sumxsq = make([]float64, g.NE)
-	}
-
-	g.tmpArray = make([]float64, g.NE)
-	floatx.Apply(log, g.variance, g.tmpArray)
+	floatx.Log(g.tmpArray, g.variance)
 	g.const1 = -float64(g.NE) * math.Log(2.0*math.Pi) / 2.0
 	g.const2 = g.const1 - floats.Sum(g.tmpArray)/2.0
 
-	return nil
-}
-
-// Returns an empty model with the base modeled initialized.
-// Use it reading model from Reader.
-func EmptyGaussian() *Gaussian {
-
-	g := &Gaussian{}
-	g.BaseModel = model.NewBaseModel(model.Modeler(g))
 	return g
 }
 
-func (g *Gaussian) LogProb(observation interface{}) (v float64) {
+// Implements Update() method in Trainer interface.
+func (g *Gaussian) Update(x model.Observer, w func(model.Obs) float64) error {
+	c, e := x.ObsChan()
+	if e != nil {
+		return e
+	}
+	for v := range c {
+		//		fv := v.Value().([]float64)
+		//		fv, _ := ObsToF64(v)
+		err := g.UpdateOne(v, w(v))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-	obs := observation.([]float64)
+func (g *Gaussian) Predict(x model.Observer) ([]model.Labeler, error) {
+
+	glog.Fatal("Predict method not implemented.")
+	return nil, nil
+}
+
+func (g *Gaussian) Sample() model.Obs {
+	obs, e := model.RandNormalVector(g.Mean, g.StdDev, g.rand)
+	if e != nil {
+		glog.Fatal(e)
+	}
+	return model.NewFloatObs(obs, model.SimpleLabel{})
+}
+
+func (g *Gaussian) SampleChan(size int) <-chan model.Obs {
+
+	if len(g.Mean) == 0 {
+		glog.Fatal("Parameter Mean is missing.")
+	}
+	if len(g.StdDev) == 0 {
+		glog.Fatal("Parameter StdDev is missing.")
+	}
+	if g.rand == nil {
+		glog.Fatal("Random value generator is missing.")
+	}
+	c := make(chan model.Obs, 1000)
+	go func() {
+		for i := 0; i < size; i++ {
+			c <- g.Sample()
+		}
+		close(c)
+	}()
+	return c
+}
+
+// Returns log probabilies for samples.
+func (g *Gaussian) LogProbs(x model.Observer) ([]float64, error) {
+
+	c, e := x.ObsChan()
+	if e != nil {
+		return nil, e
+	}
+	scores := make([]float64, 0, 0)
+	for v := range c {
+		scores = append(scores, g.LogProb(v))
+	}
+	return scores, nil
+}
+
+// Returns log probability for observation.
+func (g *Gaussian) LogProb(obs model.Obs) float64 {
+
+	return g.logProb(obs.Value().([]float64))
+}
+
+func (g *Gaussian) logProb(obs []float64) (v float64) {
+
 	for i, x := range obs {
 		s := g.Mean[i] - x
 		v += s * s * g.varianceInv[i] / 2.0
 	}
 	v = g.const2 - v
-
 	return
 }
 
-func (g *Gaussian) Prob(observation interface{}) float64 {
+func (g *Gaussian) prob(obs []float64) float64 {
 
-	obs := observation.([]float64)
-
-	return math.Exp(g.LogProb(obs))
+	return math.Exp(g.logProb(obs))
 }
 
-func (g *Gaussian) Update(obs []float64, w float64) error {
-
-	if !g.IsTrainable {
-		return fmt.Errorf("Attempted to update model [%s] which is not trainable.", g.Name())
-	}
+func (g *Gaussian) UpdateOne(o model.Obs, w float64) error {
 
 	/* Update sufficient statistics. */
+	obs, _ := ObsToF64(o)
 	floatx.Apply(scaleFunc(w), obs, g.tmpArray)
 	floats.Add(g.Sumx, g.tmpArray)
-	floatx.Apply(sq, obs, g.tmpArray)
+	floatx.Sq(g.tmpArray, obs)
 	floats.Scale(w, g.tmpArray)
 	floats.Add(g.Sumxsq, g.tmpArray)
 	g.NSamples += w
@@ -161,11 +207,8 @@ func (g *Gaussian) Update(obs []float64, w float64) error {
 	return nil
 }
 
+// Implements Estimate() method in Trainer interface.
 func (g *Gaussian) Estimate() error {
-
-	if !g.IsTrainable {
-		return fmt.Errorf("Attempted to estimate model [%s] which is not trainable.", g.ModelName)
-	}
 
 	if g.NSamples > MIN_NUM_SAMPLES {
 
@@ -177,7 +220,8 @@ func (g *Gaussian) Estimate() error {
 		 */
 		tmp := g.variance // borrow as an intermediate array.
 
-		floatx.Apply(sq, g.Mean, g.tmpArray)
+		//		floatx.Apply(sq, g.Mean, g.tmpArray)
+		floatx.Sq(g.tmpArray, g.Mean)
 		floatx.Apply(scaleFunc(1.0/g.NSamples), g.Sumxsq, tmp)
 		floats.SubTo(g.variance, tmp, g.tmpArray)
 		floatx.Apply(floorv, g.variance, nil)
@@ -190,23 +234,18 @@ func (g *Gaussian) Estimate() error {
 	g.setVariance(g.variance) // to update varInv and stddev.
 
 	/* Update log Gaussian constant. */
-	floatx.Apply(log, g.variance, g.tmpArray)
+	floatx.Log(g.tmpArray, g.variance)
 	g.const2 = g.const1 - floats.Sum(g.tmpArray)/2.0
 
 	return nil
 }
 
-func (g *Gaussian) Clear() error {
-
-	if !g.IsTrainable {
-		return fmt.Errorf("Attempted to clear model [%s] which is not trainable.", g.ModelName)
-	}
+// Implements Clear() method in Trainer interface.
+func (g *Gaussian) Clear() {
 
 	floatx.Apply(setValueFunc(0), g.Sumx, nil)
 	floatx.Apply(setValueFunc(0), g.Sumxsq, nil)
 	g.NSamples = 0
-
-	return nil
 }
 
 func (g *Gaussian) setVariance(variance []float64) {
@@ -218,38 +257,28 @@ func (g *Gaussian) setVariance(variance []float64) {
 func (g *Gaussian) standardDeviation() (sd []float64) {
 
 	sd = make([]float64, g.NE)
-	floatx.Apply(sqrt, g.variance, sd)
+	floatx.Sqrt(sd, g.variance)
 	return
-}
-
-func (g *Gaussian) Random(r *rand.Rand) (interface{}, []int, error) {
-	obs, e := model.RandNormalVector(g.Mean, g.StdDev, r)
-	return obs, nil, e
 }
 
 func (g *Gaussian) Name() string        { return g.ModelName }
 func (g *Gaussian) NumSamples() float64 { return g.NSamples }
 func (g *Gaussian) NumElements() int    { return g.NE }
-func (g *Gaussian) Trainable() bool     { return g.IsTrainable }
 func (g *Gaussian) SetName(name string) { g.ModelName = name }
 
-func (g *Gaussian) Clone() (ng *Gaussian) {
+func (g *Gaussian) Clone() *Gaussian {
 
-	//	ng = &Gaussian{}
-
-	ng, e := NewGaussian(g.NE, nil, nil, g.IsTrainable, g.Diag, g.ModelName)
-	if e != nil {
-		glog.Fatal(e)
-	}
-
-	ng.Initialize()
+	ng := NewGaussian(GaussianParam{
+		NumElements: g.NE,
+		Name:        g.ModelName,
+		IsFullCov:   !g.Diag,
+	})
 
 	//	fmt.Printf("xxx ng sumx: %+v\n\n", ng)
 	//	fmt.Printf("xxx g  sumx: %+v\n\n", g)
 
 	ng.ModelName = g.ModelName
 	ng.NE = g.NE
-	ng.IsTrainable = g.IsTrainable
 	ng.NSamples = g.NSamples
 	ng.Diag = g.Diag
 
@@ -262,6 +291,15 @@ func (g *Gaussian) Clone() (ng *Gaussian) {
 	copy(ng.tmpArray, g.tmpArray)
 	ng.const1 = g.const1
 	ng.const2 = g.const2
-	// ng.fpool = g.fpool TODO
-	return
+	return ng
+}
+
+// ObsToF64 converts an Obs to a tuple with value []float64 and label string.
+func ObsToF64(o model.Obs) ([]float64, string) {
+	return o.Value().([]float64), o.Label().Name()
+}
+
+// F64ToObs converts a []float64 to Obs.
+func F64ToObs(v []float64) model.Obs {
+	return model.NewFloatObs(v, model.SimpleLabel{})
 }
