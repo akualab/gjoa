@@ -113,8 +113,6 @@ func (g *Gaussian) Update(x model.Observer, w func(model.Obs) float64) error {
 		return e
 	}
 	for v := range c {
-		//		fv := v.Value().([]float64)
-		//		fv, _ := ObsToF64(v)
 		err := g.UpdateOne(v, w(v))
 		if err != nil {
 			return err

@@ -8,26 +8,35 @@ import (
 
 	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/model"
-	"github.com/akualab/gjoa/model/gaussian"
+	gm "github.com/akualab/gjoa/model/gaussian"
 )
 
-func MakeGmm(t *testing.T, mean, sd [][]float64, weights []float64) *gaussian.GMM {
+func MakeGmm(t *testing.T, mean, sd [][]float64, weights []float64) *gm.GMM {
 
 	dim := len(mean[0])
 	ncomp := len(weights)
-	g0, eg0 := gaussian.NewGaussian(ncomp, mean[0], sd[0], true, true, "g0")
-	if eg0 != nil {
-		t.Fatal(eg0)
-	}
-	g1, eg1 := gaussian.NewGaussian(ncomp, mean[1], sd[1], true, true, "g1")
-	if eg1 != nil {
-		t.Fatal(eg1)
-	}
-	components := []*gaussian.Gaussian{g0, g1}
-	gmm, e := gaussian.NewGaussianMixture(dim, ncomp, true, true, "mygmm")
-	if e != nil {
-		t.Fatal(e)
-	}
+
+	g0 := gm.NewGaussian(gm.GaussianParam{
+		NumElements: ncomp,
+		Name:        "g0",
+		Mean:        mean[0],
+		StdDev:      sd[0],
+	})
+
+	g1 := gm.NewGaussian(gm.GaussianParam{
+		NumElements: ncomp,
+		Name:        "g1",
+		Mean:        mean[1],
+		StdDev:      sd[1],
+	})
+
+	components := []*gm.Gaussian{g0, g1}
+	gmm := gm.NewGMM(gm.GMMParam{
+		NumElements:   dim,
+		NumComponents: ncomp,
+		Name:          "mygmm",
+	})
+
 	// this should probably be done in NewGaussianMixture
 	gmm.Components = components
 	gmm.Weights = weights
@@ -46,12 +55,22 @@ func MakeHmmGmm(t *testing.T) *HMM {
 	gmm1 := MakeGmm(t, mean1, sd1, weight1)
 	initialStateProbs := []float64{0.3, 0.7}
 	transProbs := [][]float64{{0.6, 0.4}, {0.5, 0.5}}
-	models := []*gaussian.GMM{gmm0, gmm1}
+	models := []*gm.GMM{gmm0, gmm1}
 	m := make([]model.Modeler, len(models))
 	for i, v := range models {
 		m[i] = v
 	}
-	hmm, e := NewHMM(transProbs, initialStateProbs, m, false, "testhmm", nil)
+	hmm, e := NewHMM(HMMParam{
+		TransProbs:        transProbs,
+		InitialStateProbs: initialStateProbs,
+		ObsModels:         m,
+		Name:              "testhmm",
+		UpdateIP:          true,
+		UpdateTP:          true,
+		GeneratorSeed:     0,
+		GeneratorMaxLen:   100,
+	})
+
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -62,26 +81,30 @@ func MakeRandomHmmGmm(t *testing.T, seed int64) *HMM {
 	mean := [][]float64{{2.5, 3}, {-2.5, -3}}
 	sd := [][]float64{{0.7, 0.7}, {0.7, 0.7}}
 
-	gmm0, e0 := gaussian.RandomGMM(mean[0], sd[0], 2, "gmm0", seed)
-	if e0 != nil {
-		t.Fatal(e0)
-	}
-	gmm1, e1 := gaussian.RandomGMM(mean[1], sd[1], 2, "gmm1", seed)
-	if e1 != nil {
-		t.Fatal(e1)
-	}
+	gmm0 := gm.RandomGMM(mean[0], sd[0], 2, "gmm0", seed)
+	gmm1 := gm.RandomGMM(mean[1], sd[1], 2, "gmm1", seed)
+
 	r := rand.New(rand.NewSource(seed))
 	ran0 := r.Float64()
 	ran1 := r.Float64()
 	ran2 := r.Float64()
 	initialStateProbs := []float64{ran0, 1 - ran0}
 	transProbs := [][]float64{{ran1, 1 - ran1}, {ran2, 1 - ran2}}
-	models := []*gaussian.GMM{gmm0, gmm1}
+	models := []*gm.GMM{gmm0, gmm1}
 	m := make([]model.Modeler, len(models))
 	for i, v := range models {
 		m[i] = v
 	}
-	hmm, e := NewHMM(transProbs, initialStateProbs, m, true, "testhmm0", nil)
+	hmm, e := NewHMM(HMMParam{
+		TransProbs:        transProbs,
+		InitialStateProbs: initialStateProbs,
+		ObsModels:         m,
+		Name:              "testhmm0",
+		UpdateIP:          true,
+		UpdateTP:          true,
+		GeneratorSeed:     0,
+		GeneratorMaxLen:   100,
+	})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -92,7 +115,7 @@ func TestTrainHmmGmm(t *testing.T) {
 	var seed int64 = 31
 	hmm0 := MakeHmmGmm(t)
 	hmm := MakeRandomHmmGmm(t, seed)
-	iter := 5
+	iter := 6
 	// size of the generated sequence
 	n := 100
 	// number of sequences
@@ -131,10 +154,10 @@ func CompareHMMs(t *testing.T, hmm0 *HMM, hmm *HMM, eps float64) {
 		"error in TransProbs[1]", eps)
 	gjoa.CompareSliceFloat(t, hmm0.InitProbs, hmm.InitProbs,
 		"error in logInitProbs", eps)
-	mA := hmm0.ObsModels[0].(*gaussian.GMM)
-	mB := hmm0.ObsModels[1].(*gaussian.GMM)
-	m0 := hmm.ObsModels[0].(*gaussian.GMM)
-	m1 := hmm.ObsModels[1].(*gaussian.GMM)
+	mA := hmm0.ObsModels[0].(*gm.GMM)
+	mB := hmm0.ObsModels[1].(*gm.GMM)
+	m0 := hmm.ObsModels[0].(*gm.GMM)
+	m1 := hmm.ObsModels[1].(*gm.GMM)
 	if DistanceGmm2(t, mA, m0) < DistanceGmm2(t, mA, m1) {
 		CompareGMMs(t, mA, m0, eps)
 		CompareGMMs(t, mB, m1, eps)
@@ -144,7 +167,7 @@ func CompareHMMs(t *testing.T, hmm0 *HMM, hmm *HMM, eps float64) {
 	}
 }
 
-func CompareGMMs(t *testing.T, g1 *gaussian.GMM, g2 *gaussian.GMM, eps float64) {
+func CompareGMMs(t *testing.T, g1 *gm.GMM, g2 *gm.GMM, eps float64) {
 	d0 := DistanceGaussian(t, g1.Components[0], g2.Components[0])
 	d1 := DistanceGaussian(t, g1.Components[0], g2.Components[1])
 	t.Logf("distance between gaussians: %f %f", d0, d1)
@@ -161,7 +184,7 @@ func CompareGMMs(t *testing.T, g1 *gaussian.GMM, g2 *gaussian.GMM, eps float64) 
 }
 
 // distance for GMM with two components
-func DistanceGmm2(t *testing.T, g1 *gaussian.GMM, g2 *gaussian.GMM) float64 {
+func DistanceGmm2(t *testing.T, g1 *gm.GMM, g2 *gm.GMM) float64 {
 	distance0 := DistanceGaussian(t, g1.Components[0], g2.Components[0])
 	distance0 += DistanceGaussian(t, g1.Components[1], g2.Components[1])
 	distance1 := DistanceGaussian(t, g1.Components[0], g2.Components[1])
@@ -170,7 +193,7 @@ func DistanceGmm2(t *testing.T, g1 *gaussian.GMM, g2 *gaussian.GMM) float64 {
 }
 
 // L_inf distance between gaussian means
-func DistanceGaussian(t *testing.T, g1 *gaussian.Gaussian, g2 *gaussian.Gaussian) float64 {
+func DistanceGaussian(t *testing.T, g1 *gm.Gaussian, g2 *gm.Gaussian) float64 {
 	arr0 := g1.Mean
 	arr1 := g2.Mean
 	err := 0.0

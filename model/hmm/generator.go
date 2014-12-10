@@ -36,8 +36,14 @@ func (gen *Generator) Next(n int) ([][]float64, []int, error) {
 	for i := 0; i < n; i++ {
 		states[i] = state0
 		g := gen.hmm.ObsModels[state0]
-		x := g.Sample()
-		obs[i] = x.(model.FloatObs).Value() //([]float64)
+
+		gs, ok := g.(model.Sampler)
+		if !ok {
+			return nil, nil, fmt.Errorf("mixture component does not implement the sampler interface")
+		}
+
+		x := gs.Sample()
+		obs[i] = x.Value().([]float64)
 		if err0 != nil {
 			return nil, nil, fmt.Errorf("Error generating Random model")
 		}

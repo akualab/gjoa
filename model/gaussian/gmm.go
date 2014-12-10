@@ -128,6 +128,12 @@ func (gmm *GMM) prob(obs []float64) float64 {
 	return math.Exp(gmm.LogProb(F64ToObs(obs)))
 }
 
+func (gmm *GMM) Predict(x model.Observer) ([]model.Labeler, error) {
+
+	glog.Fatal("Predict method not implemented.")
+	return nil, nil
+}
+
 /*
   The posterior prob for each mixture component. We approximate the sum using max.
 
@@ -158,6 +164,21 @@ func (gmm *GMM) UpdateOne(o model.Obs, w float64) error {
 	// Count number of observations.
 	gmm.NSamples += w
 
+	return nil
+}
+
+// Implements Update() method in Trainer interface.
+func (gmm *GMM) Update(x model.Observer, w func(model.Obs) float64) error {
+	c, e := x.ObsChan()
+	if e != nil {
+		return e
+	}
+	for v := range c {
+		err := gmm.UpdateOne(v, w(v))
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

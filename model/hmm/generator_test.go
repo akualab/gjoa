@@ -1,14 +1,15 @@
 package hmm
 
 import (
-	"github.com/akualab/gjoa"
-	"github.com/akualab/gjoa/floatx"
-	"github.com/akualab/gjoa/model"
-	"github.com/akualab/gjoa/model/gaussian"
 	"math"
 	"math/rand"
 	"testing"
 	"time"
+
+	"github.com/akualab/gjoa"
+	"github.com/akualab/gjoa/floatx"
+	"github.com/akualab/gjoa/model"
+	"github.com/akualab/gjoa/model/gaussian"
 )
 
 func MakeHMM2(t *testing.T) *HMM {
@@ -18,14 +19,20 @@ func MakeHMM2(t *testing.T) *HMM {
 	mean1 := []float64{4, 4}
 	sd1 := []float64{0.4472135955, 1.73205080757}
 
-	g0, eg0 := gaussian.NewGaussian(2, mean0, sd0, true, true, "g0")
-	if eg0 != nil {
-		t.Fatal(eg0)
-	}
-	g1, eg1 := gaussian.NewGaussian(2, mean1, sd1, true, true, "g1")
-	if eg1 != nil {
-		t.Fatal(eg1)
-	}
+	g0 := gaussian.NewGaussian(gaussian.GaussianParam{
+		NumElements: 2,
+		Name:        "g0",
+		Mean:        mean0,
+		StdDev:      sd0,
+	})
+
+	g1 := gaussian.NewGaussian(gaussian.GaussianParam{
+		NumElements: 2,
+		Name:        "g1",
+		Mean:        mean1,
+		StdDev:      sd1,
+	})
+
 	initialStateProbs := []float64{0.25, 0.75}
 	transProbs := [][]float64{{0.7, 0.3}, {0.5, 0.5}}
 	models := []*gaussian.Gaussian{g0, g1}
@@ -33,7 +40,17 @@ func MakeHMM2(t *testing.T) *HMM {
 	for i, v := range models {
 		m[i] = v
 	}
-	hmm, e := NewHMM(transProbs, initialStateProbs, m, false, "testhmm", nil)
+
+	hmm, e := NewHMM(HMMParam{
+		TransProbs:        transProbs,
+		InitialStateProbs: initialStateProbs,
+		ObsModels:         m,
+		Name:              "testhmm",
+		UpdateIP:          true,
+		UpdateTP:          true,
+		GeneratorSeed:     0,
+		GeneratorMaxLen:   100,
+	})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -56,14 +73,19 @@ func MakeRandHMM(t *testing.T, seed int64) *HMM {
 	ran4 := r.Float64()
 	sd0 := []float64{math.Sqrt(ran3), math.Sqrt(1 - ran3)}
 	sd1 := []float64{math.Sqrt(ran4), math.Sqrt(1 - ran4)}
-	g0, eg0 := gaussian.NewGaussian(2, mean0, sd0, true, true, "g0")
-	if eg0 != nil {
-		t.Fatal(eg0)
-	}
-	g1, eg1 := gaussian.NewGaussian(2, mean1, sd1, true, true, "g1")
-	if eg1 != nil {
-		t.Fatal(eg1)
-	}
+	g0 := gaussian.NewGaussian(gaussian.GaussianParam{
+		NumElements: 2,
+		Name:        "g0",
+		Mean:        mean0,
+		StdDev:      sd0,
+	})
+	g1 := gaussian.NewGaussian(gaussian.GaussianParam{
+		NumElements: 2,
+		Name:        "g1",
+		Mean:        mean1,
+		StdDev:      sd1,
+	})
+
 	initialStateProbs := []float64{ran0, 1 - ran0}
 	transProbs := [][]float64{{ran1, 1 - ran1}, {ran2, 1 - ran2}}
 	models := []*gaussian.Gaussian{g0, g1}
@@ -71,7 +93,18 @@ func MakeRandHMM(t *testing.T, seed int64) *HMM {
 	for i, v := range models {
 		m[i] = v
 	}
-	hmm, e := NewHMM(transProbs, initialStateProbs, m, true, "testhmm", nil)
+
+	hmm, e := NewHMM(HMMParam{
+		TransProbs:        transProbs,
+		InitialStateProbs: initialStateProbs,
+		ObsModels:         m,
+		Name:              "testhmm",
+		UpdateIP:          true,
+		UpdateTP:          true,
+		GeneratorSeed:     0,
+		GeneratorMaxLen:   100,
+	})
+
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -89,7 +122,7 @@ func TestTrainHMM(t *testing.T) {
 	copy(log_tp_0, hmm.TransProbs[0])
 	copy(log_tp_1, hmm.TransProbs[1])
 	// number of updates
-	iter := 5
+	iter := 6
 	// size of the generated sequence
 	n := 100
 	// number of sequences
@@ -119,7 +152,7 @@ func TestTrainHMM(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			hmm.Update(obs, 1.0)
+			hmm.UpdateOne(obs, 1.0)
 		}
 		hmm.Estimate()
 

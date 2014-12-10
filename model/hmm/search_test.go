@@ -3,9 +3,11 @@ package hmm
 import (
 	"flag"
 	"fmt"
-	"github.com/akualab/gjoa"
-	"github.com/akualab/graph"
 	"testing"
+
+	"github.com/akualab/gjoa"
+	"github.com/akualab/gjoa/model/gaussian"
+	"github.com/akualab/graph"
 )
 
 type vvalue struct {
@@ -37,10 +39,12 @@ func MakeGraph(t *testing.T) *graph.Graph {
 	hmm := MakeHMM(t)
 	// Define score functions to return state probabilities.
 	var s1Func = func(n int, node *graph.Node) float64 {
-		return hmm.ObsModels[0].LogProb(obs0[n])
+		o := gaussian.F64ToObs(obs0[n])
+		return hmm.ObsModels[0].LogProb(o)
 	}
 	var s2Func = func(n int, node *graph.Node) float64 {
-		return hmm.ObsModels[1].LogProb(obs0[n])
+		o := gaussian.F64ToObs(obs0[n])
+		return hmm.ObsModels[1].LogProb(o)
 	}
 	var finalFunc = func(n int, node *graph.Node) float64 {
 		return 0

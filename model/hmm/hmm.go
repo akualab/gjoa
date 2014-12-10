@@ -138,6 +138,7 @@ func NewHMM(p HMMParam) (hmm *HMM, e error) {
 	}
 
 	hmm.generator = NewGenerator(hmm, p.GeneratorSeed)
+	return
 }
 
 func defaultConfig() *gjoa.Config {
@@ -883,15 +884,16 @@ func JoinHMMCollection(g *graph.Graph, hmmColl map[string]*HMM, name string) (hm
 		}
 	}
 
-	config := &gjoa.Config{
-		HMM: gjoa.HMM{
-			UpdateIP:        false,
-			UpdateTP:        false,
-			GeneratorSeed:   0,
-			GeneratorMaxLen: 100,
-		},
-	}
-	hmmOut, e := NewHMM(probs, initProbs, obsModels, true, name, config)
+	hmmOut, e := NewHMM(HMMParam{
+		TransProbs:        probs,
+		InitialStateProbs: initProbs,
+		ObsModels:         obsModels,
+		Name:              name,
+		UpdateIP:          false,
+		UpdateTP:          false,
+		GeneratorSeed:     0,
+		GeneratorMaxLen:   100,
+	})
 	gjoa.Fatal(e)
 	return
 }
