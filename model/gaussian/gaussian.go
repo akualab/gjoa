@@ -11,10 +11,10 @@ import (
 )
 
 const (
-	SMALL_SD        = 0.01
-	SMALL_VARIANCE  = SMALL_SD * SMALL_SD
-	MIN_NUM_SAMPLES = 0.01
-	seed            = 33
+	smallSD       = 0.01
+	smallVar      = smallSD * smallSD
+	minNumSamples = 0.01
+	seed          = 33
 )
 
 // Multivariate Gaussian distribution.
@@ -38,8 +38,8 @@ type Gaussian struct {
 // Define functions for elementwise transformations.
 var inv = func(r int, v float64) float64 { return 1.0 / v }
 var floorv = func(r int, v float64) float64 {
-	if v < SMALL_VARIANCE {
-		return SMALL_VARIANCE
+	if v < smallVar {
+		return smallVar
 	}
 	return v
 }
@@ -77,7 +77,7 @@ func NewGaussian(p GaussianParam) *Gaussian {
 
 	if p.StdDev == nil {
 		p.StdDev = make([]float64, p.NumElements)
-		floatx.Apply(setValueFunc(SMALL_SD), p.StdDev, nil)
+		floatx.Apply(setValueFunc(smallSD), p.StdDev, nil)
 	}
 
 	g := &Gaussian{
@@ -208,7 +208,7 @@ func (g *Gaussian) UpdateOne(o model.Obs, w float64) error {
 // Implements Estimate() method in Trainer interface.
 func (g *Gaussian) Estimate() error {
 
-	if g.NSamples > MIN_NUM_SAMPLES {
+	if g.NSamples > minNumSamples {
 
 		/* Estimate the mean. */
 		floatx.Apply(scaleFunc(1.0/g.NSamples), g.Sumx, g.Mean)
@@ -226,7 +226,7 @@ func (g *Gaussian) Estimate() error {
 	} else {
 
 		/* Not enough training sample. */
-		floatx.Apply(setValueFunc(SMALL_VARIANCE), g.variance, nil)
+		floatx.Apply(setValueFunc(smallVar), g.variance, nil)
 		floatx.Apply(setValueFunc(0), g.Mean, nil)
 	}
 	g.setVariance(g.variance) // to update varInv and stddev.

@@ -2,7 +2,7 @@ package model
 
 import "fmt"
 
-// A statistical model.
+// A Modeler type is a complete implementation of a statistical model in gjoa.
 type Modeler interface {
 
 	// The model name.
@@ -14,9 +14,10 @@ type Modeler interface {
 	Trainer
 	Predictor
 	Scorer
+	Sampler
 }
 
-// Model trainer.
+// A Trainer type can do statictical learning.
 type Trainer interface {
 
 	// Updates model using weighted samples: x[i] * w(x[i]).
@@ -44,18 +45,18 @@ var Weight = func(w float64) func(o Obs) float64 {
 	}
 }
 
-// Returns predicted label for data.
+// Predictor returns a label with a hypothesis given the observations.
 type Predictor interface {
 	Predict(x Observer) ([]Labeler, error)
 }
 
-// Returns score for data.
+// Scorer computes log probabilities.
 type Scorer interface {
 	LogProbs(x Observer) ([]float64, error)
 	LogProb(x Obs) float64
 }
 
-// A sample label.
+// The Labeler interface manages data labels.
 type Labeler interface {
 
 	// Human-readable name.
@@ -68,7 +69,8 @@ type Labeler interface {
 	IsEqual(label Labeler) bool
 }
 
-// An observation.
+// Obs is a generic interface to handle observed data.
+// Each observation may have a value and a label.
 type Obs interface {
 
 	// The observation's value.
@@ -78,8 +80,7 @@ type Obs interface {
 	Label() Labeler
 }
 
-// Data is represented as a sequence of objects that
-// implement the Obs interface.
+// The Observer provides streams of observations.
 type Observer interface {
 
 	// Returns channel of observations.
@@ -87,6 +88,7 @@ type Observer interface {
 	ObsChan() (<-chan Obs, error)
 }
 
+// The Sampler type generated data from the model.
 type Sampler interface {
 	// Returns a sample drawn from the underlying distribution.
 	Sample() Obs
@@ -96,12 +98,13 @@ type Sampler interface {
 	SampleChan(size int) <-chan Obs
 }
 
-// Implements an Observer whose values are slices of float64.
+// FloatObs is an implementation of an Observer whose values are slices of float64.
 type FloatObs struct {
 	value []float64
 	label SimpleLabel
 }
 
+// NewFloatObs creates new FloatObs objects.
 func NewFloatObs(val []float64, lab SimpleLabel) Obs {
 	return FloatObs{
 		value: val,
@@ -109,29 +112,29 @@ func NewFloatObs(val []float64, lab SimpleLabel) Obs {
 	}
 }
 
-// Returns observation value.
+// Value method returns the observed value.
 func (fo FloatObs) Value() interface{} { return interface{}(fo.value) }
 
-// Returns observation label.
+// Label returns the label for the observation.
 func (fo FloatObs) Label() Labeler { return Labeler(fo.label) }
 
-// Implements Labeler interface.
+// SimpleLabel implements a basic Labeler interface.
 type SimpleLabel struct {
 	name string
 	id   int
 }
 
-// Returnes unique id.
+// Id method returns a unique id for the label.
 func (lab SimpleLabel) Id() int {
 	return lab.id
 }
 
-// Returns label name.
+// Name returns a human-readable label name.
 func (lab SimpleLabel) Name() string {
 	return lab.name
 }
 
-// Returns true if labels are equal.
+// IsEqual compares two labels.
 func (lab SimpleLabel) IsEqual(lab2 Labeler) bool {
 	if lab.Id() == lab2.Id() {
 		return true
@@ -139,7 +142,7 @@ func (lab SimpleLabel) IsEqual(lab2 Labeler) bool {
 	return false
 }
 
-// Simple sampler for floating-point values.
+// FloatObserver implements an observer to stream FloatObs objects.
 // Not safe to use with multiple goroutines.
 type FloatObserver struct {
 	Values [][]float64
@@ -147,6 +150,7 @@ type FloatObserver struct {
 	length int
 }
 
+// NewFloatObserver creates a new FloatObserver.
 func NewFloatObserver(v [][]float64, lab []SimpleLabel) (*FloatObserver, error) {
 	if len(v) != len(lab) {
 		return nil, fmt.Errorf("length of v [%d] and length of lab [%d] don't match.", len(v), len(lab))
@@ -158,7 +162,7 @@ func NewFloatObserver(v [][]float64, lab []SimpleLabel) (*FloatObserver, error) 
 	}, nil
 }
 
-// Returns channel of FloatObs as type Obs.
+// ObsChan implements the ObsChan method for the observer interface.
 func (fo FloatObserver) ObsChan() (<-chan Obs, error) {
 
 	obsChan := make(chan Obs, 1000)

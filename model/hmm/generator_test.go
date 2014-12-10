@@ -122,13 +122,13 @@ func TestTrainHMM(t *testing.T) {
 	copy(log_tp_0, hmm.TransProbs[0])
 	copy(log_tp_1, hmm.TransProbs[1])
 	// number of updates
-	iter := 6
+	iter := 5
 	// size of the generated sequence
 	n := 100
 	// number of sequences
 	m := 100000
 	// max error for long test
-	eps := 0.004
+	eps := 0.007
 	if testing.Short() {
 		m = 1000
 		eps = 0.03
