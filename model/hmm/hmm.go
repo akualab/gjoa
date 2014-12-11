@@ -75,21 +75,7 @@ type Model struct {
 var log = func(r int, v float64) float64 { return math.Log(v) }
 var log2D = func(r int, c int, v float64) float64 { return math.Log(v) }
 
-// HMM Parameters.
-// type HMMParam struct {
-// 	TransProbs        [][]float64
-// 	InitialStateProbs []float64
-// 	ObsModels         []model.Modeler
-// 	Trainable         bool
-// 	Name              string
-// 	UpdateIP          bool
-// 	UpdateTP          bool
-// 	GeneratorSeed     int64
-// 	GeneratorMaxLen   int
-// }
-
-// Create a new HMM.
-//func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []model.Modeler, trainable bool, name string, config *gjoa.Config) (hmm *HMM, e error) {
+// NewModel creates a new HMM.
 func NewModel(transProbs [][]float64, obsModels []model.Modeler, options ...func(*Model)) *Model {
 
 	r, _ := floatx.Check2D(transProbs)
@@ -99,6 +85,8 @@ func NewModel(transProbs [][]float64, obsModels []model.Modeler, options ...func
 		SumXi:        floatx.MakeFloat2D(r, r),
 		SumGamma:     make([]float64, r),
 		SumInitProbs: make([]float64, r),
+		updateIP:     true,
+		updateTP:     true,
 		seed:         model.DefaultSeed,
 		maxGenLen:    100,
 	}
@@ -893,12 +881,13 @@ func Name(name string) func(*Model) {
 }
 
 // Seed sets a seed value for random functions.
+// Uses default seed value if omitted.
 func Seed(seed int64) func(*Model) {
 	return func(hmm *Model) { hmm.seed = seed }
 }
 
-// MaxGenLength option sets the length of the sequences
-// created by the HMM generator.
+// MaxGenLen option sets the length of the sequences
+// created by the HMM generator. Default is 100.
 func MaxGenLen(n int) func(*Model) {
 	return func(hmm *Model) { hmm.maxGenLen = n }
 }

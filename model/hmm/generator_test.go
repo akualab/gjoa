@@ -30,7 +30,7 @@ func MakeHMM2(t *testing.T) *Model {
 		m[i] = v
 	}
 
-	return NewModel(transProbs, m, InitProbs(initialStateProbs))
+	return NewModel(transProbs, m, InitProbs(initialStateProbs), Seed(0))
 }
 
 func MakeRandHMM(t *testing.T, seed int64) *Model {
@@ -60,7 +60,7 @@ func MakeRandHMM(t *testing.T, seed int64) *Model {
 		m[i] = v
 	}
 
-	return NewModel(transProbs, m, InitProbs(initialStateProbs))
+	return NewModel(transProbs, m, InitProbs(initialStateProbs), Seed(0))
 }
 
 func TestTrainHMM(t *testing.T) {
