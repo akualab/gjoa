@@ -2,6 +2,11 @@ package model
 
 import "fmt"
 
+const (
+	// DefaultSeed provided for model implementation.
+	DefaultSeed = 33
+)
+
 // A Modeler type is a complete implementation of a statistical model in gjoa.
 type Modeler interface {
 
@@ -9,7 +14,7 @@ type Modeler interface {
 	Name() string
 
 	// Dimensionality of the observation vector.
-	NumElements() int
+	Dim() int
 
 	Trainer
 	Predictor
@@ -52,7 +57,6 @@ type Predictor interface {
 
 // Scorer computes log probabilities.
 type Scorer interface {
-	LogProbs(x Observer) ([]float64, error)
 	LogProb(x Obs) float64
 }
 
@@ -174,6 +178,16 @@ func (fo FloatObserver) ObsChan() (<-chan Obs, error) {
 	}()
 
 	return obsChan, nil
+}
+
+// ObsToF64 converts an Obs to a tuple with value []float64 and label string.
+func ObsToF64(o Obs) ([]float64, string) {
+	return o.Value().([]float64), o.Label().Name()
+}
+
+// F64ToObs converts a []float64 to Obs.
+func F64ToObs(v []float64) Obs {
+	return NewFloatObs(v, SimpleLabel{})
 }
 
 // ////////////////

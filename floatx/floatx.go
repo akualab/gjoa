@@ -43,6 +43,18 @@ func ConvertInfSlice2D(values [][]float64) [][]float64 {
 	return values
 }
 
+// Define functions for elementwise transformations.
+
+func Floorv(min float64) func(r int, v float64) float64 {
+
+	return func(r int, v float64) float64 {
+		if v < min {
+			return min
+		}
+		return v
+	}
+}
+
 var Inv = func(r int, v float64) float64 { return 1.0 / v }
 
 func AddScalarFunc(f float64) ApplyFunc {

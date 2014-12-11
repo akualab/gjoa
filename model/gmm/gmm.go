@@ -1,0 +1,405 @@
+package gmm
+
+import (
+	"fmt"
+	"math"
+	"math/rand"
+
+	"github.com/akualab/gjoa/floatx"
+	"github.com/akualab/gjoa/model"
+	"github.com/akualab/gjoa/model/gaussian"
+	"github.com/golang/glog"
+	"github.com/gonum/floats"
+)
+
+// Model is a mixture of Gaussian distributions.
+type Model struct {
+	ModelName    string            `json:"name"`
+	ModelDim     int               `json:"dim"`
+	NSamples     float64           `json:"nsamples"`
+	Diag         bool              `json:"diag"`
+	NComponents  int               `json:"num_components"`
+	PosteriorSum []float64         `json:"posterior_sum,omitempty"`
+	Weights      []float64         `json:"-"`
+	LogWeights   []float64         `json:"weights,omitempty"`
+	Likelihood   float64           `json:"likelihood"`
+	Components   []*gaussian.Model `json:"components,omitempty"`
+	Iteration    int               `json:"iteration"`
+	tmpProbs     []float64
+	seed         int64
+	rand         *rand.Rand
+}
+
+// NewModel creates a new Gaussian mixture model.
+func NewModel(dim, numComponents int, options ...func(*Model)) *Model {
+
+	gmm := &Model{
+		ModelName:    "GMM", // default name
+		ModelDim:     dim,
+		NComponents:  numComponents,
+		Diag:         true,
+		PosteriorSum: make([]float64, numComponents),
+		tmpProbs:     make([]float64, numComponents),
+		seed:         model.DefaultSeed, // default seed
+	}
+
+	// Set options.
+	for _, option := range options {
+		option(gmm)
+	}
+
+	gmm.rand = rand.New(rand.NewSource(gmm.seed))
+
+	// Create components if not provided.
+	if len(gmm.Components) == 0 {
+		gmm.Components = make([]*gaussian.Model, numComponents, numComponents)
+		for i := range gmm.Components {
+			cname := componentName(gmm.ModelName, i, gmm.NComponents)
+			gmm.Components[i] = gaussian.NewModel(gmm.ModelDim, gaussian.Name(cname))
+		}
+	}
+
+	// Initialize weights.
+	// Caller may pass weight, log(weights), or no weights.
+	switch {
+
+	case len(gmm.LogWeights) > 0 && len(gmm.Weights) > 0:
+		glog.Fatal("options not allowed: provide only one of LogWeights or Weights")
+
+	case len(gmm.LogWeights) == 0 && len(gmm.Weights) == 0:
+		gmm.LogWeights = make([]float64, numComponents)
+		logw := -math.Log(float64(gmm.NComponents))
+		floatx.Apply(floatx.SetValueFunc(logw), gmm.LogWeights, nil)
+		gmm.Weights = make([]float64, gmm.NComponents)
+		floatx.Exp(gmm.Weights, gmm.LogWeights)
+
+	case len(gmm.LogWeights) > 0:
+		gmm.Weights = make([]float64, gmm.NComponents)
+		floatx.Exp(gmm.Weights, gmm.LogWeights)
+
+	case len(gmm.Weights) > 0:
+		gmm.LogWeights = make([]float64, numComponents)
+		floatx.Log(gmm.LogWeights, gmm.Weights)
+	}
+	return gmm
+}
+
+// Computes log prob for mixture.// SIDE EFFECT => returns logProb of
+// Gaussian comp + logWeight in matrix pointed by func arg probs.
+func (gmm *Model) logProbInternal(obs, probs []float64) float64 {
+
+	var max = -math.MaxFloat64
+
+	/* Compute log probabilities for this observation. */
+	for i, c := range gmm.Components {
+		o := model.F64ToObs(obs)
+		v1 := c.LogProb(o)
+		v2 := gmm.LogWeights[i]
+		v := v1 + v2
+
+		if probs != nil {
+			probs[i] = v
+		}
+		if v > max {
+			max = v
+		}
+	}
+
+	// To simplify computation, use the max prob in the denominator instead
+	// of the sum.
+	return max
+}
+
+// LogProb returns log probability for observation.
+func (gmm *Model) LogProb(obs model.Obs) float64 {
+
+	o := obs.Value().([]float64)
+	return gmm.logProbInternal(o, nil)
+}
+
+// Returns the probability.
+func (gmm *Model) prob(obs []float64) float64 {
+	return math.Exp(gmm.LogProb(model.F64ToObs(obs)))
+}
+
+// Predict returns a hypothesis given the observation.
+func (gmm *Model) Predict(x model.Observer) ([]model.Labeler, error) {
+
+	glog.Fatal("Predict method not implemented.")
+	return nil, nil
+}
+
+/*
+  The posterior prob for each mixture component. We approximate the sum using max.
+
+                 p(o|c(i)) p(c(i))
+   p(c(i)|o) ~ ---------------------
+                max{p(o|c(i)) p(c(i))}
+
+*/
+
+// Estimate computes model parameters using sufficient statistics.
+func (gmm *Model) UpdateOne(o model.Obs, w float64) error {
+
+	obs, _ := model.ObsToF64(o)
+	maxProb := gmm.logProbInternal(obs, gmm.tmpProbs)
+	gmm.Likelihood += maxProb
+	floatx.Apply(floatx.AddScalarFunc(-maxProb+math.Log(w)), gmm.tmpProbs, nil)
+
+	// Compute posterior probabilities.
+	floatx.Exp(gmm.tmpProbs, gmm.tmpProbs)
+
+	// Update posterior sum, needed to compute mixture weights.
+	floats.Add(gmm.PosteriorSum, gmm.tmpProbs)
+
+	// Update Gaussian components.
+	for i, c := range gmm.Components {
+		c.UpdateOne(o, gmm.tmpProbs[i])
+	}
+
+	// Count number of observations.
+	gmm.NSamples += w
+
+	return nil
+}
+
+// Update updates sufficient statistics using observations.
+func (gmm *Model) Update(x model.Observer, w func(model.Obs) float64) error {
+	c, e := x.ObsChan()
+	if e != nil {
+		return e
+	}
+	for v := range c {
+		err := gmm.UpdateOne(v, w(v))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Estimate computes model parameters using sufficient statistics.
+func (gmm *Model) Estimate() error {
+
+	// Estimate mixture weights.
+	floatx.Apply(floatx.ScaleFunc(1.0/gmm.NSamples), gmm.PosteriorSum, gmm.Weights)
+	floatx.Log(gmm.LogWeights, gmm.Weights)
+
+	// Estimate component density.
+	for _, c := range gmm.Components {
+		err := c.Estimate()
+		if err != nil {
+			return err
+		}
+	}
+	gmm.Iteration++
+
+	return nil
+}
+
+// Clear resets sufficient statistics.
+func (gmm *Model) Clear() {
+
+	for _, c := range gmm.Components {
+		c.Clear()
+	}
+	floatx.Apply(floatx.SetValueFunc(0), gmm.PosteriorSum, nil)
+	gmm.NSamples = 0
+	gmm.Likelihood = 0
+}
+
+// Sample returns a GMM sample.
+func (gmm *Model) Sample() model.Obs {
+	// Choose a component using weights
+	comp, err := model.RandIntFromDist(gmm.Weights, gmm.rand)
+	if err != nil {
+		glog.Fatalf("Couldn't generate sample. Error: %s", err)
+	}
+	// Get a random vector from that component
+	return gmm.Components[comp].Sample()
+}
+
+// SampleChan returns a channel with samples generated by the GMM model.
+func (gmm *Model) SampleChan(size int) <-chan model.Obs {
+
+	if len(gmm.Weights) == 0 {
+		glog.Fatal("Parameter Weights is missing.")
+	}
+	if gmm.rand == nil {
+		glog.Fatal("Random value generator is missing.")
+	}
+	c := make(chan model.Obs, 1000)
+	go func() {
+		for i := 0; i < size; i++ {
+			c <- gmm.Sample()
+		}
+		close(c)
+	}()
+	return c
+}
+
+// Returns a random vector using the mean and sd vectors.
+func RandomVector(mean, sd []float64, r *rand.Rand) []float64 {
+
+	nrows := len(mean)
+	if !floats.EqualLengths(mean, sd) {
+		panic(floatx.ErrLength)
+	}
+
+	vec := make([]float64, nrows)
+	for i := 0; i < nrows; i++ {
+		v := r.NormFloat64()*sd[i] + mean[i]
+		vec[i] = v
+	}
+	return vec
+}
+
+// RandomModel generates a random Gaussian mixture model using mean and variance vectors as seed.
+// Use this function to initialize the GMM before training. The mean and sd
+// vector can be estimated from the data set using a Gaussian model.
+func RandomModel(mean, sd []float64, numComponents int,
+	name string, seed int64) *Model {
+
+	n := len(mean)
+	if !floats.EqualLengths(mean, sd) {
+		panic(floatx.ErrLength)
+	}
+	cs := make([]*gaussian.Model, n, n)
+	r := rand.New(rand.NewSource(seed))
+	for i := 0; i < n; i++ {
+		rv := RandomVector(mean, sd, r)
+		cs[i] = gaussian.NewModel(n, gaussian.Mean(rv), gaussian.StdDev(sd))
+	}
+	gmm := NewModel(n, numComponents, Name(name), Components(cs))
+	return gmm
+}
+
+func componentName(name string, n, numComponents int) string {
+
+	max := numComponents - 1
+	switch {
+	case max < 10:
+		return fmt.Sprintf("%s-%d", name, n)
+
+	case max < 100:
+		return fmt.Sprintf("%s-%02d", name, n)
+
+	case max < 1000:
+		return fmt.Sprintf("%s-%03d", name, n)
+
+	case max < 10000:
+		return fmt.Sprintf("%s-%04d", name, n)
+
+	default:
+		return fmt.Sprintf("%s-%d", name, n)
+	}
+}
+
+// Dim is the dimensionality of the observation vector.
+func (gmm *Model) Dim() int { return gmm.ModelDim }
+
+// Export struct.
+/*type GMMValues struct {
+	Name          string
+	Type          string
+	NumElements   int
+	NumSamples    float64
+	Diagonal      bool
+	NumComponents int
+	PosteriorSum  []float64 `json:",omitempty"`
+	Weights       []float64
+	Likelihood    float64
+	Components    []interface{}
+}
+
+func (gmm *GMM) Values() interface{} {
+
+	values := &GMMValues{
+		Name:          gmm.name,
+		Type:          gmm.Type(),
+		NumElements:   gmm.numElements,
+		NumSamples:    gmm.numSamples,
+		Diagonal:      gmm.diagonal,
+		NumComponents: gmm.numComponents,
+		PosteriorSum:  gmm.PosteriorSum,
+		Weights:       gmm.Weights,
+		Likelihood:    gmm.totalLikelihood,
+		Components:    make([]interface{}, gmm.numComponents),
+	}
+
+	for k, v := range gmm.components {
+		values.Components[k] = v.Values()
+	}
+
+	return values
+}
+*/
+/*
+func (gmm *GMM) New(values interface{}) (model.Modeler, error) {
+
+	v := values.(*GMMValues)
+
+	ng, e := NewGaussianMixture(v.NumElements, v.NumComponents, true, v.Diagonal, v.Name)
+	if e != nil {
+		return nil, e
+	}
+
+	gaussian := &Gaussian{}
+	for k, gv := range v.Components {
+
+		// Create a Gaussian component using the Gaussian values.
+		g, e := gaussian.New(gv)
+		if e != nil {
+			return nil, e
+		}
+		ng.components[k] = g.(*Gaussian)
+	}
+	ng.Weights = v.Weights
+	ng.numSamples = v.NumSamples
+	ng.totalLikelihood = v.Likelihood
+
+	if len(v.PosteriorSum) > 0 {
+		ng.PosteriorSum = v.PosteriorSum
+	}
+
+	return ng, nil
+}
+*/
+
+// Options
+
+// Name returns the name of the model.
+func (gmm *Model) Name() string {
+	return gmm.ModelName
+}
+
+// SetName sets a name for the model.
+func (gmm *Model) setName(name string) {
+	gmm.ModelName = name
+}
+
+// Name is an option to set the model name.
+func Name(name string) func(*Model) {
+	return func(gmm *Model) { gmm.setName(name) }
+}
+
+// Seed sets a seed value for random functions.
+func Seed(seed int64) func(*Model) {
+	return func(gmm *Model) { gmm.seed = seed }
+}
+
+// Components sets the mixture components for the model.
+func Components(cs []*gaussian.Model) func(*Model) {
+	return func(gmm *Model) { gmm.Components = cs }
+}
+
+// Weights sets the mixture weights for the model.
+func Weights(w []float64) func(*Model) {
+	return func(gmm *Model) { gmm.Weights = w }
+}
+
+// LogWeights sets the mixture weights for the model
+// using log(w) as the argument.
+func LogWeights(logw []float64) func(*Model) {
+	return func(gmm *Model) { gmm.LogWeights = logw }
+}

@@ -14,21 +14,11 @@ const epsilon = 0.004
 
 func TestGaussian(t *testing.T) {
 
-	g := NewGaussian(GaussianParam{
-		NumElements: 10,
-		Name:        "testing",
-	})
-
+	g := NewModel(10, Name("testing"))
 	mean := []float64{0.5, 1, 2}
 	sd := []float64{1, 1, 1}
 
-	g = NewGaussian(GaussianParam{
-		NumElements: 3,
-		Mean:        mean,
-		StdDev:      sd,
-		Name:        "testing",
-	})
-
+	g = NewModel(3, Name("testing"), Mean(mean), StdDev(sd))
 	obs := []float64{1, 1, 1}
 
 	p := g.logProb(obs)
@@ -49,10 +39,7 @@ func TestTrainGaussian(t *testing.T) {
 	dim := 8
 	mean := []float64{0.1, 0.2, 0.3, 0.4, 1, 1, 1, 1}
 	std := []float64{0.5, 0.5, 0.5, 0.5, 0.1, 0.2, 0.3, 0.4}
-	g := NewGaussian(GaussianParam{
-		NumElements: dim,
-		Name:        "test training",
-	})
+	g := NewModel(dim, Name("test training"))
 
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < 2000000; i++ {
@@ -60,7 +47,7 @@ func TestTrainGaussian(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.UpdateOne(F64ToObs(rv), 1.0)
+		g.UpdateOne(model.F64ToObs(rv), 1.0)
 	}
 	g.Estimate()
 	t.Logf("Mean: \n%+v", g.Mean)
@@ -91,10 +78,7 @@ func TestTrainGaussian2(t *testing.T) {
 	labels := make([]model.SimpleLabel, numSamp, numSamp)
 	mean := []float64{0.1, 0.2, 0.3, 0.4, 1, 1, 1, 1}
 	std := []float64{0.5, 0.5, 0.5, 0.5, 0.1, 0.2, 0.3, 0.4}
-	g := NewGaussian(GaussianParam{
-		NumElements: dim,
-		Name:        "test training",
-	})
+	g := NewModel(dim, Name("test training"))
 
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < numSamp; i++ {
@@ -132,10 +116,7 @@ func TestCloneGaussian(t *testing.T) {
 	dim := 8
 	mean := []float64{0.1, 0.2, 0.3, 0.4, 1, 1, 1, 1}
 	std := []float64{0.5, 0.5, 0.5, 0.5, 0.1, 0.2, 0.3, 0.4}
-	g := NewGaussian(GaussianParam{
-		NumElements: dim,
-		Name:        "test cloning",
-	})
+	g := NewModel(dim, Name("test cloning"))
 
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < 2000; i++ {
@@ -143,7 +124,7 @@ func TestCloneGaussian(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.UpdateOne(F64ToObs(rv), 1.0)
+		g.UpdateOne(model.F64ToObs(rv), 1.0)
 	}
 	g.Estimate()
 
@@ -185,10 +166,7 @@ func BenchmarkTrain(b *testing.B) {
 	dim := 8
 	mean := []float64{0.1, 0.2, 0.3, 0.4, 1, 1, 1, 1}
 	std := []float64{0.5, 0.5, 0.5, 0.5, 0.1, 0.2, 0.3, 0.4}
-	g := NewGaussian(GaussianParam{
-		NumElements: dim,
-		Name:        "test training",
-	})
+	g := NewModel(dim, Name("test training"))
 
 	r := rand.New(rand.NewSource(33))
 	buf := make([][]float64, 2000000, 2000000)
@@ -202,7 +180,7 @@ func BenchmarkTrain(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		for i := 0; i < 2000000; i++ {
-			g.UpdateOne(F64ToObs(buf[i]), 1.0)
+			g.UpdateOne(model.F64ToObs(buf[i]), 1.0)
 		}
 		g.Estimate()
 		g.Clear()
@@ -223,10 +201,7 @@ func BenchmarkTrain2(b *testing.B) {
 	}
 	mean := []float64{0.1, 0.2, 0.3, 0.4, 1, 1, 1, 1}
 	std := []float64{0.5, 0.5, 0.5, 0.5, 0.1, 0.2, 0.3, 0.4}
-	g := NewGaussian(GaussianParam{
-		NumElements: dim,
-		Name:        "test training",
-	})
+	g := NewModel(dim, Name("test training"))
 
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < numSamp; i++ {

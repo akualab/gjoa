@@ -1,4 +1,4 @@
-package gaussian
+package gmm
 
 import (
 	"flag"
@@ -7,7 +7,10 @@ import (
 
 	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/model"
+	"github.com/akualab/gjoa/model/gaussian"
 )
+
+const epsilon = 0.004
 
 func init() {
 	flag.Set("logtostderr", "true")
@@ -16,11 +19,7 @@ func init() {
 
 func TestGMMName(t *testing.T) {
 
-	gmm := NewGMM(GMMParam{
-		NumElements:   4,
-		NumComponents: 123,
-		Name:          "mygmm",
-	})
+	gmm := NewModel(4, 123, Name("mygmm"))
 
 	// for i, c := range gmm.Components() {
 	// 	t.Logf("Name for comp #%4d: %s", i, c.Name())
@@ -50,20 +49,11 @@ func TestTrainGMM(t *testing.T) {
 	mean1 := []float64{4, 4}
 	std1 := []float64{1, 1}
 	dim := len(mean0)
-
-	gmm := NewGMM(GMMParam{
-		NumElements:   dim,
-		NumComponents: numComp,
-		Name:          "mygmm",
-	})
-
+	gmm := NewModel(dim, numComp, Name("mygmm"))
 	t.Logf("Initial Weights: \n%+v", gmm.Weights)
 	{
 		// Estimate mean variance of the data.
-		g := NewGaussian(GaussianParam{
-			NumElements: dim,
-			Name:        "test training",
-		})
+		g := gaussian.NewModel(dim, gaussian.Name("test training"))
 
 		r := rand.New(rand.NewSource(seed))
 		for i := 0; i < numObs; i++ {
@@ -71,12 +61,12 @@ func TestTrainGMM(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			g.UpdateOne(F64ToObs(rv), 1.0)
+			g.UpdateOne(model.F64ToObs(rv), 1.0)
 			rv, err = model.RandNormalVector(mean1, std1, r)
 			if err != nil {
 				t.Fatal(err)
 			}
-			g.UpdateOne(F64ToObs(rv), 1.0)
+			g.UpdateOne(model.F64ToObs(rv), 1.0)
 		}
 		g.Estimate()
 		t.Logf("Gaussian Model for training set:")
@@ -84,7 +74,7 @@ func TestTrainGMM(t *testing.T) {
 		t.Logf("SD: \n%+v", g.StdDev)
 
 		// Use the estimated mean and sd to generate a seed GMM.
-		gmm = RandomGMM(g.Mean, g.StdDev, numComp,
+		gmm = RandomModel(g.Mean, g.StdDev, numComp,
 			"mygmm", 99)
 		t.Logf("Random GMM: %+v.", gmm)
 		t.Logf("Component 0: %+v.", gmm.Components[0])
@@ -104,12 +94,12 @@ func TestTrainGMM(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			gmm.UpdateOne(F64ToObs(rv), 1.0)
+			gmm.UpdateOne(model.F64ToObs(rv), 1.0)
 			rv, err = model.RandNormalVector(mean1, std1, r)
 			if err != nil {
 				t.Fatal(err)
 			}
-			gmm.UpdateOne(F64ToObs(rv), 1.0)
+			gmm.UpdateOne(model.F64ToObs(rv), 1.0)
 		}
 
 		// Estimates GMM params.
@@ -165,7 +155,7 @@ func TestTrainGMM(t *testing.T) {
 
 }
 
-func MakeGMM(t *testing.T) *GMM {
+func MakeGMM(t *testing.T) *Model {
 
 	mean0 := []float64{1, 2}
 	sd0 := []float64{0.3, 0.3}
@@ -174,28 +164,10 @@ func MakeGMM(t *testing.T) *GMM {
 	weights := []float64{0.6, 0.4}
 	dim := len(mean0)
 
-	g0 := NewGaussian(GaussianParam{
-		NumElements: 2,
-		Name:        "g0",
-		Mean:        mean0,
-		StdDev:      sd0,
-	})
-	g1 := NewGaussian(GaussianParam{
-		NumElements: 2,
-		Name:        "g1",
-		Mean:        mean1,
-		StdDev:      sd1,
-	})
-	components := []*Gaussian{g0, g1}
-	gmm := NewGMM(GMMParam{
-		NumElements:   dim,
-		NumComponents: 2,
-		Name:          "mygmm",
-	})
-
-	// this should probably be done in NewGaussianMixture
-	gmm.Components = components
-	gmm.Weights = weights
+	g0 := gaussian.NewModel(2, gaussian.Name("g0"), gaussian.Mean(mean0), gaussian.StdDev(sd0))
+	g1 := gaussian.NewModel(2, gaussian.Name("g1"), gaussian.Mean(mean1), gaussian.StdDev(sd1))
+	components := []*gaussian.Model{g0, g1}
+	gmm := NewModel(dim, 2, Name("mygmm"), Components(components), Weights(weights))
 	return gmm
 }
 
@@ -206,16 +178,12 @@ func TestTrainGMM2(t *testing.T) {
 	numIter := 10
 	numObs := 2000000
 	gmm0 := MakeGMM(t)
-	gmm := NewGMM(GMMParam{
-		NumElements:   dim,
-		NumComponents: numComp,
-		Name:          "mygmm",
-	})
+	gmm := NewModel(dim, numComp, Name("mygmm"))
 
 	t.Logf("Initial Weights: \n%+v", gmm.Weights)
 	mean01 := []float64{2.5, 3}
 	sd01 := []float64{0.70710678118, 0.70710678118}
-	gmm = RandomGMM(mean01, sd01, numComp, "mygmm", 99)
+	gmm = RandomModel(mean01, sd01, numComp, "mygmm", 99)
 
 	for iter := 0; iter < numIter; iter++ {
 		t.Logf("Starting GMM training iteration %d.", iter)
@@ -317,7 +285,7 @@ func TestTrainGMM2(t *testing.T) {
 // 	gjoa.CompareSliceFloat(t, gmm.PosteriorSum, gmm1.PosteriorSum, "PosteriorSum doesn't match.", epsilon)
 // }
 
-func CompareGaussians(t *testing.T, g1 *Gaussian, g2 *Gaussian, epsilon float64) {
+func CompareGaussians(t *testing.T, g1 *gaussian.Model, g2 *gaussian.Model, epsilon float64) {
 	gjoa.CompareSliceFloat(t, g1.Mean, g2.Mean, "Wrong Mean", epsilon)
 	gjoa.CompareSliceFloat(t, g1.StdDev, g2.StdDev, "Wrong SD", epsilon)
 }
