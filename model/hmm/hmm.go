@@ -13,28 +13,22 @@ import (
 	"math"
 	"math/rand"
 
-	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
-	"github.com/akualab/gjoa/model/gaussian"
 	"github.com/akualab/graph"
 	"github.com/golang/glog"
 	"github.com/gonum/floats"
 )
 
 const (
-	SMALL_NUMBER = 0.000001
+	smallNumber = 0.000001
 )
 
-var exp = func(r int, v float64) float64 { return math.Exp(v) }
-
-func setValueFunc(f float64) floatx.ApplyFunc {
-	return func(r int, v float64) float64 { return f }
-}
-
+// Obslice type is a slice of modelers.
 type ObsSlice []model.Modeler
 
-type HMM struct {
+// Model is a hidden Markov model.
+type Model struct {
 
 	// Model name.
 	ModelName string `json:"name"`
@@ -71,7 +65,10 @@ type HMM struct {
 	SumProb      float64     `json:"sum_probs,omitempty"`
 	SumInitProbs []float64   `json:"sum_init_probs,omitempty"`
 	generator    *Generator
-	opt          *HMMParam
+	maxGenLen    int
+	seed         int64
+	updateIP     bool
+	updateTP     bool
 }
 
 // Define functions for elementwise transformations.
@@ -79,32 +76,47 @@ var log = func(r int, v float64) float64 { return math.Log(v) }
 var log2D = func(r int, c int, v float64) float64 { return math.Log(v) }
 
 // HMM Parameters.
-type HMMParam struct {
-	TransProbs        [][]float64
-	InitialStateProbs []float64
-	ObsModels         []model.Modeler
-	Trainable         bool
-	Name              string
-	UpdateIP          bool
-	UpdateTP          bool
-	GeneratorSeed     int64
-	GeneratorMaxLen   int
-}
+// type HMMParam struct {
+// 	TransProbs        [][]float64
+// 	InitialStateProbs []float64
+// 	ObsModels         []model.Modeler
+// 	Trainable         bool
+// 	Name              string
+// 	UpdateIP          bool
+// 	UpdateTP          bool
+// 	GeneratorSeed     int64
+// 	GeneratorMaxLen   int
+// }
 
 // Create a new HMM.
 //func NewHMM(transProbs [][]float64, initialStateProbs []float64, obsModels []model.Modeler, trainable bool, name string, config *gjoa.Config) (hmm *HMM, e error) {
-func NewHMM(p HMMParam) (hmm *HMM, e error) {
-	r, _ := floatx.Check2D(p.TransProbs)
-	r1 := len(p.InitialStateProbs)
+func NewModel(transProbs [][]float64, obsModels []model.Modeler, options ...func(*Model)) *Model {
+
+	r, _ := floatx.Check2D(transProbs)
+	hmm := &Model{
+		ModelName:    "HMM",
+		ObsModels:    obsModels,
+		SumXi:        floatx.MakeFloat2D(r, r),
+		SumGamma:     make([]float64, r),
+		SumInitProbs: make([]float64, r),
+		seed:         model.DefaultSeed,
+		maxGenLen:    100,
+	}
+
+	// Set options.
+	for _, option := range options {
+		option(hmm)
+	}
+	r1 := len(hmm.InitProbs)
 
 	if r1 > 0 && r != r1 {
-		e = fmt.Errorf("Num states mismatch. transProbs has [%d] and initialStateProbs have [%d].", r, r1)
+		glog.Fatalf("Num states mismatch. transProbs has [%d] and initialStateProbs have [%d].", r, r1)
 	}
 
 	// If no initial state probs, use equal probs.
 	if r1 == 0 {
-		p.InitialStateProbs = make([]float64, r)
-		floatx.Apply(setValueFunc(1.0/float64(r)), p.InitialStateProbs, nil)
+		hmm.InitProbs = make([]float64, r)
+		floatx.Apply(floatx.SetValueFunc(1.0/float64(r)), hmm.InitProbs, nil)
 	}
 
 	// init logTransProbs and logInitProbs
@@ -112,46 +124,25 @@ func NewHMM(p HMMParam) (hmm *HMM, e error) {
 	logInitProbs := make([]float64, r)
 
 	// apply log to transProbs and initialStateProbs
-	logTransProbs = floatx.Apply2D(log2D, p.TransProbs, logTransProbs)
-	logInitProbs = floatx.Apply(log, p.InitialStateProbs, logInitProbs)
+	logTransProbs = floatx.Apply2D(log2D, transProbs, logTransProbs)
+	logInitProbs = floatx.Apply(log, hmm.InitProbs, logInitProbs)
 
 	// replace Inf with MaxFloat64 value so we can write/read JSON.
 	logTransProbs = floatx.ConvertInfSlice2D(logTransProbs)
 	logInitProbs = floatx.ConvertInfSlice(logInitProbs)
 
 	glog.Infof("New HMM. Num states = %d.", r)
-	glog.Infof("Init. State Probs:    %v.", p.InitialStateProbs)
+	glog.Infof("Init. State Probs:    %v.", hmm.InitProbs)
 	glog.Infof("Log Init Probs:       %v.", logInitProbs)
-	glog.Infof("Trans. Probs:         %v.", p.TransProbs)
+	glog.Infof("Trans. Probs:         %v.", transProbs)
 	glog.Infof("Log Trans. Probs:     %v.", logTransProbs)
 
-	hmm = &HMM{
-		NStates:      r,
-		TransProbs:   logTransProbs,
-		ObsModels:    p.ObsModels,
-		InitProbs:    logInitProbs,
-		ModelName:    p.Name,
-		SumXi:        floatx.MakeFloat2D(r, r),
-		SumGamma:     make([]float64, r),
-		SumInitProbs: make([]float64, r),
-		opt:          &p,
-	}
+	hmm.NStates = r
+	hmm.TransProbs = logTransProbs
+	hmm.InitProbs = logInitProbs
 
-	hmm.generator = NewGenerator(hmm, p.GeneratorSeed)
-	return
-}
-
-func defaultConfig() *gjoa.Config {
-
-	config := &gjoa.Config{
-		HMM: gjoa.HMM{
-			UpdateIP:        true,
-			UpdateTP:        true,
-			GeneratorSeed:   0,
-			GeneratorMaxLen: 100,
-		},
-	}
-	return config
+	hmm.generator = NewGenerator(hmm)
+	return hmm
 }
 
 // Compute alphas. Indices are: α(state, time)
@@ -167,7 +158,7 @@ func defaultConfig() *gjoa.Config {
 // 3. Termination:    P(O/Φ) = sum_{i=0}^{N-1} α(i,T-1)
 // For scaling details see Rabiner/Juang and
 // http://courses.media.mit.edu/2010fall/mas622j/ProblemSets/ps4/tutorial.pdf
-func (hmm *HMM) alpha(observations [][]float64) (α [][]float64, logProb float64, e error) {
+func (hmm *Model) alpha(observations [][]float64) (α [][]float64, logProb float64, e error) {
 
 	// Num states.
 	N := hmm.NStates
@@ -182,7 +173,7 @@ func (hmm *HMM) alpha(observations [][]float64) (α [][]float64, logProb float64
 
 	// 1. Initialization. Add in the log domain.
 	for i := 0; i < N; i++ {
-		o := gaussian.F64ToObs(observations[0])
+		o := model.F64ToObs(observations[0])
 		α[i][0] = hmm.InitProbs[i] + hmm.ObsModels[i].LogProb(o)
 	}
 
@@ -196,7 +187,7 @@ func (hmm *HMM) alpha(observations [][]float64) (α [][]float64, logProb float64
 			for i := 0; i < N; i++ {
 				sum += math.Exp(α[i][t] + hmm.TransProbs[i][j])
 			}
-			o := gaussian.F64ToObs(observations[t+1])
+			o := model.F64ToObs(observations[t+1])
 			v := math.Log(sum) + hmm.ObsModels[j].LogProb(o)
 			α[j][t+1] = v
 
@@ -224,7 +215,7 @@ func (hmm *HMM) alpha(observations [][]float64) (α [][]float64, logProb float64
 //
 // 1. Initialization: β(i,T-1) = 1;  0<=i<N
 // 2. Induction:      β(i,t) =  sum_{j=0}^{N-1} a(i,j) b(j,o(t+1)) β(j,t+1); t=T-2,T-3,...,0; 0<=i<N
-func (hmm *HMM) beta(observations [][]float64) (β [][]float64, e error) {
+func (hmm *Model) beta(observations [][]float64) (β [][]float64, e error) {
 
 	// Num states.
 	N := hmm.NStates
@@ -251,7 +242,7 @@ func (hmm *HMM) beta(observations [][]float64) (β [][]float64, e error) {
 			var sum float64
 			for j := 0; j < N; j++ {
 
-				o := gaussian.F64ToObs(observations[t+1])
+				o := model.F64ToObs(observations[t+1])
 				sum += math.Exp(hmm.TransProbs[i][j] + // a(i,j)
 					hmm.ObsModels[j].LogProb(o) + // b(j,o(t+1))
 					β[j][t+1]) // β(j,t+1)
@@ -272,7 +263,7 @@ func (hmm *HMM) beta(observations [][]float64) (β [][]float64, e error) {
 
 // Compute gammas. Indices are: γ(state, time)
 // γ(i,t) =  α(i,t)β(i,t) / sum_{j=0}^{N-1} α(j,t)β(i,t);  0<=j<N
-func (hmm *HMM) gamma(α, β [][]float64) (γ [][]float64, e error) {
+func (hmm *Model) gamma(α, β [][]float64) (γ [][]float64, e error) {
 
 	αr, αc := floatx.Check2D(α)
 	βr, βc := floatx.Check2D(β)
@@ -317,7 +308,7 @@ func (hmm *HMM) gamma(α, β [][]float64) (γ [][]float64, e error) {
             sum_{i=0}^{N-1} sum_{j=0}^{N-1} α(i,t) a(i,j) b(j,o(t+1)) β(j,t+1)
 
 */
-func (hmm *HMM) xi(observations, α, β [][]float64) (ζ [][][]float64, e error) {
+func (hmm *Model) xi(observations, α, β [][]float64) (ζ [][][]float64, e error) {
 
 	a := hmm.TransProbs
 	αr, αc := floatx.Check2D(α)
@@ -346,7 +337,7 @@ func (hmm *HMM) xi(observations, α, β [][]float64) (ζ [][][]float64, e error)
 	for t := 0; t < T-1; t++ {
 		var sum float64 = 0.0
 		for j := 0; j < N; j++ {
-			o := gaussian.F64ToObs(observations[t+1])
+			o := model.F64ToObs(observations[t+1])
 			b := hmm.ObsModels[j].LogProb(o)
 			for i := 0; i < N; i++ {
 				x := α[i][t] + a[i][j] + b + β[j][t+1]
@@ -366,7 +357,7 @@ func (hmm *HMM) xi(observations, α, β [][]float64) (ζ [][][]float64, e error)
 
 // Update model statistics.
 // sequence is a matrix
-func (hmm *HMM) UpdateOne(observations [][]float64, w float64) (e error) {
+func (hmm *Model) UpdateOne(observations [][]float64, w float64) (e error) {
 
 	var α, β, γ [][]float64
 	var ζ [][][]float64
@@ -414,20 +405,20 @@ func (hmm *HMM) UpdateOne(observations [][]float64, w float64) (e error) {
 
 	tmp := make([]float64, T)
 	for i, g := range γ {
-		floatx.Apply(exp, g[:T-1], tmp[:T-1])
+		floatx.Exp(tmp[:T-1], g[:T-1])
 		sumg := floats.Sum(tmp[:T-1])
 		hmm.SumGamma[i] += sumg
 
 		outputStatePDF := hmm.ObsModels[i].(model.Trainer)
 		for t := 0; t < T; t++ {
-			o := gaussian.F64ToObs(observations[t])
+			o := model.F64ToObs(observations[t])
 			outputStatePDF.UpdateOne(o, tmp[t]) // exp(g(t))
 		}
 
 		hmm.SumInitProbs[i] += tmp[0] // [3]
 
 		for j, x := range ζ[i] {
-			floatx.Apply(exp, x[:T-1], tmp[:T-1])
+			floatx.Exp(tmp[:T-1], x[:T-1])
 			hmm.SumXi[i][j] += floats.Sum(tmp[:T-1])
 		}
 	}
@@ -439,18 +430,18 @@ func (hmm *HMM) UpdateOne(observations [][]float64, w float64) (e error) {
 	return
 }
 
-func (hmm *HMM) Estimate() error {
+func (hmm *Model) Estimate() error {
 
 	// Initial state probabilities.
 	s := floats.Sum(hmm.SumInitProbs)
-	if hmm.opt.UpdateIP {
+	if hmm.updateIP {
 		glog.V(4).Infof("Sum Init. Probs:    %v.", hmm.SumInitProbs)
 		floatx.Apply(floatx.ScaleFunc(1.0/s), hmm.SumInitProbs, hmm.InitProbs)
 		floatx.Log(hmm.InitProbs, hmm.InitProbs)
 	}
 
 	// Transition probabilities.
-	if hmm.opt.UpdateTP {
+	if hmm.updateTP {
 		for i, sxi := range hmm.SumXi {
 			sg := hmm.SumGamma[i]
 			floatx.Apply(floatx.ScaleFunc(1.0/sg), sxi, hmm.TransProbs[i])
@@ -463,7 +454,7 @@ func (hmm *HMM) Estimate() error {
 	return nil
 }
 
-func (hmm *HMM) Clear() error {
+func (hmm *Model) Clear() error {
 
 	for _, m := range hmm.ObsModels {
 		m.(model.Trainer).Clear()
@@ -477,7 +468,7 @@ func (hmm *HMM) Clear() error {
 }
 
 // Returns the log probability.
-func (hmm *HMM) LogProb(observation interface{}) float64 {
+func (hmm *Model) LogProb(observation interface{}) float64 {
 
 	// TODO
 	//obs := observation.([][]float64)
@@ -485,30 +476,28 @@ func (hmm *HMM) LogProb(observation interface{}) float64 {
 }
 
 // Returns the probability.
-func (hmm *HMM) Prob(observation interface{}) float64 {
+func (hmm *Model) Prob(observation interface{}) float64 {
 
 	obs := observation.([][]float64)
 	return math.Exp(hmm.LogProb(obs))
 }
 
-func (hmm *HMM) Random(r *rand.Rand) (interface{}, []int, error) {
+func (hmm *Model) Random(r *rand.Rand) (interface{}, []int, error) {
 
-	return hmm.generator.Next(hmm.opt.GeneratorMaxLen)
+	return hmm.generator.Next(hmm.maxGenLen)
 }
 
-func (hmm *HMM) SetName(name string) {}
-func (hmm *HMM) NumSamples() float64 { return 0.0 }
-func (hmm *HMM) NumElements() int {
+// Dim is the dimensionality of the observation vector.
+func (hmm *Model) Dim() int {
 
 	if hmm.ObsModels[0] == nil {
 		glog.Fatalf("No observation model available.")
 	}
-	return hmm.ObsModels[0].NumElements()
+	return hmm.ObsModels[0].Dim()
 }
-func (hmm *HMM) Name() string { return hmm.ModelName }
 
 // Returns a map from state model name to state model index.
-func (hmm *HMM) Indices() (m map[string]int) {
+func (hmm *Model) Indices() (m map[string]int) {
 
 	m = make(map[string]int)
 	for k, v := range hmm.ObsModels {
@@ -521,7 +510,7 @@ func (hmm *HMM) Indices() (m map[string]int) {
 }
 
 // Returns a map from state model name to state model.
-func (hmm *HMM) ModelMap() map[string]model.Modeler {
+func (hmm *Model) ModelMap() map[string]model.Modeler {
 
 	m := make(map[string]model.Modeler)
 	for name, i := range hmm.Indices() {
@@ -531,7 +520,7 @@ func (hmm *HMM) ModelMap() map[string]model.Modeler {
 }
 
 // Compute α and β.
-func (hmm *HMM) alphaBeta(observations [][]float64) (α, β [][]float64, logProb float64, e error) {
+func (hmm *Model) alphaBeta(observations [][]float64) (α, β [][]float64, logProb float64, e error) {
 
 	α, logProb, e = hmm.alpha(observations)
 	if e != nil {
@@ -546,7 +535,7 @@ func (hmm *HMM) alphaBeta(observations [][]float64) (α, β [][]float64, logProb
 }
 
 // Compute α and β concurrently.
-func (hmm *HMM) concurrentAlphaBeta(observations [][]float64) (α, β [][]float64, logProb float64, e error) {
+func (hmm *Model) concurrentAlphaBeta(observations [][]float64) (α, β [][]float64, logProb float64, e error) {
 
 	α_done := make(chan bool)
 	β_done := make(chan bool)
@@ -583,7 +572,7 @@ func (hmm *HMM) concurrentAlphaBeta(observations [][]float64) (α, β [][]float6
 }
 
 // Compute γ and ζ.
-func (hmm *HMM) gammaXi(observations, α, β [][]float64) (γ [][]float64, ζ [][][]float64, e error) {
+func (hmm *Model) gammaXi(observations, α, β [][]float64) (γ [][]float64, ζ [][][]float64, e error) {
 
 	γ, e = hmm.gamma(α, β)
 	if e != nil {
@@ -598,7 +587,7 @@ func (hmm *HMM) gammaXi(observations, α, β [][]float64) (γ [][]float64, ζ []
 }
 
 // Compute γ and ζ concurrently.
-func (hmm *HMM) concurrentGammaXi(observations, α, β [][]float64) (γ [][]float64, ζ [][][]float64, e error) {
+func (hmm *Model) concurrentGammaXi(observations, α, β [][]float64) (γ [][]float64, ζ [][][]float64, e error) {
 
 	γ_done := make(chan bool)
 	ζ_done := make(chan bool)
@@ -799,7 +788,7 @@ func (hmm *HMM) concurrentGammaXi(observations, α, β [][]float64) (γ [][]floa
    state:  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
                     ^              ^
 */
-func JoinHMMCollection(g *graph.Graph, hmmColl map[string]*HMM, name string) (hmmOut *HMM) {
+func JoinHMMCollection(g *graph.Graph, hmmColl map[string]*Model, name string) (hmmOut *Model) {
 
 	numNodes := len(hmmColl)
 	var numStates, stateIndex int
@@ -884,16 +873,55 @@ func JoinHMMCollection(g *graph.Graph, hmmColl map[string]*HMM, name string) (hm
 		}
 	}
 
-	hmmOut, e := NewHMM(HMMParam{
-		TransProbs:        probs,
-		InitialStateProbs: initProbs,
-		ObsModels:         obsModels,
-		Name:              name,
-		UpdateIP:          false,
-		UpdateTP:          false,
-		GeneratorSeed:     0,
-		GeneratorMaxLen:   100,
-	})
-	gjoa.Fatal(e)
+	hmmOut = NewModel(probs, obsModels, InitProbs(initProbs), Name(name), UpdateIP(false), UpdateTP(false))
 	return
+}
+
+// Name returns the name of the model.
+func (hmm *Model) Name() string {
+	return hmm.ModelName
+}
+
+// SetName sets a name for the model.
+func (hmm *Model) setName(name string) {
+	hmm.ModelName = name
+}
+
+// Name is an option to set the model name.
+func Name(name string) func(*Model) {
+	return func(hmm *Model) { hmm.setName(name) }
+}
+
+// Seed sets a seed value for random functions.
+func Seed(seed int64) func(*Model) {
+	return func(hmm *Model) { hmm.seed = seed }
+}
+
+// MaxGenLength option sets the length of the sequences
+// created by the HMM generator.
+func MaxGenLen(n int) func(*Model) {
+	return func(hmm *Model) { hmm.maxGenLen = n }
+}
+
+// UpdateIP option to update initial state probabilities.
+// Default is true.
+func UpdateIP(flag bool) func(*Model) {
+	return func(m *Model) {
+		m.updateIP = flag
+	}
+}
+
+// UpdateTP option to update state transition probabilities.
+// Default is true.
+func UpdateTP(flag bool) func(*Model) {
+	return func(m *Model) {
+		m.updateTP = flag
+	}
+}
+
+// InitProbs is an option to set the initial set probabilities.
+func InitProbs(ip []float64) func(*Model) {
+	return func(m *Model) {
+		m.InitProbs = ip
+	}
 }

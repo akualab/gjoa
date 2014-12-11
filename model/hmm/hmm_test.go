@@ -44,33 +44,23 @@ func init() {
    Viterbi gives you the P(q | O,  model), that is, it maximizes of over the whole sequence.
 */
 
-func MakeHMM(t *testing.T) *HMM {
+func MakeHMM(t *testing.T) *Model {
 
 	// Gaussian 1.
 	mean1 := []float64{1}
 	sd1 := []float64{1}
-	g1 := gm.NewGaussian(gm.GaussianParam{
-		NumElements: 1,
-		Name:        "g1",
-		Mean:        mean1,
-		StdDev:      sd1,
-	})
+	g1 := gm.NewModel(1, gm.Name("g1"), gm.Mean(mean1), gm.StdDev(sd1))
 
 	// Gaussian 2.
 	mean2 := []float64{4}
 	sd2 := []float64{2}
-	g2 := gm.NewGaussian(gm.GaussianParam{
-		NumElements: 1,
-		Name:        "g2",
-		Mean:        mean2,
-		StdDev:      sd2,
-	})
+	g2 := gm.NewModel(1, gm.Name("g2"), gm.Mean(mean2), gm.StdDev(sd2))
 
 	initialStateProbs := []float64{0.8, 0.2}
 	transProbs := [][]float64{{0.9, 0.1}, {0.3, 0.7}}
 
 	// These are the models.
-	models := []*gm.Gaussian{g1, g2}
+	models := []*gm.Model{g1, g2}
 
 	// To pass an HMM we need to convert []*gm.Gaussian[]
 	// to []model.Trainer
@@ -79,21 +69,7 @@ func MakeHMM(t *testing.T) *HMM {
 	for i, v := range models {
 		m[i] = v
 	}
-	hmm, e := NewHMM(HMMParam{
-		TransProbs:        transProbs,
-		InitialStateProbs: initialStateProbs,
-		ObsModels:         m,
-		Name:              "testhmm",
-		UpdateIP:          true,
-		UpdateTP:          true,
-		GeneratorSeed:     0,
-		GeneratorMaxLen:   100,
-	})
-
-	if e != nil {
-		t.Fatal(e)
-	}
-	return hmm
+	return NewModel(transProbs, m, InitProbs(initialStateProbs))
 }
 
 func TestLogProb(t *testing.T) {

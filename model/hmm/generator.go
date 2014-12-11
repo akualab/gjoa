@@ -8,12 +8,12 @@ import (
 )
 
 type Generator struct {
-	hmm *HMM
+	hmm *Model
 	r   *rand.Rand
 }
 
-func NewGenerator(hmm *HMM, seed int64) (gen *Generator) {
-	r := rand.New(rand.NewSource(seed))
+func NewGenerator(hmm *Model) (gen *Generator) {
+	r := rand.New(rand.NewSource(hmm.seed))
 	gen = &Generator{
 		hmm: hmm,
 		r:   r,

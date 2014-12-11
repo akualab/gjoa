@@ -261,7 +261,7 @@ func Mean(mean []float64) func(*Model) {
 	}
 }
 
-// SD is an option function. Use it to set a
+// StdDev is an option function. Use it to set a
 // standard deviation vector when creating a
 // new Gaussian model.
 func StdDev(sd []float64) func(*Model) {
