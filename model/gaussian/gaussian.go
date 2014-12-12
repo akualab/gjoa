@@ -1,8 +1,18 @@
+// Copyright (c) 2014 AKUALAB INC., All rights reserved.
+//
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package gaussian
 
 import (
+	"encoding/json"
+	"io"
+	"io/ioutil"
 	"math"
 	"math/rand"
+	"os"
+	"path/filepath"
 
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
@@ -27,12 +37,12 @@ type Model struct {
 	Sumxsq      []float64 `json:"sumx_sq,omitempty"`
 	Mean        []float64 `json:"mean"`
 	StdDev      []float64 `json:"sd"`
+	Seed        int64     `json:"seed"`
 	variance    []float64
 	varianceInv []float64
 	tmpArray    []float64
 	const1      float64 // -(N/2)log(2PI) Depends only on ModelDim.
 	const2      float64 // const1 - sum(log sigma_i) Also depends on variance.
-	seed        int64
 	rand        *rand.Rand
 }
 
@@ -45,23 +55,24 @@ func NewModel(dim int, options ...func(*Model)) *Model {
 		Diag:        true,
 		variance:    make([]float64, dim),
 		varianceInv: make([]float64, dim),
-		Sumx:        make([]float64, dim),
-		Sumxsq:      make([]float64, dim),
 		tmpArray:    make([]float64, dim),
-		seed:        model.DefaultSeed,
+		Seed:        model.DefaultSeed,
 	}
 
 	// Set options.
 	for _, option := range options {
 		option(g)
 	}
-
-	g.rand = rand.New(rand.NewSource(g.seed))
-
+	g.rand = rand.New(rand.NewSource(g.Seed))
+	if len(g.Sumx) == 0 {
+		g.Sumx = make([]float64, dim)
+	}
+	if len(g.Sumxsq) == 0 {
+		g.Sumxsq = make([]float64, dim)
+	}
 	if g.Mean == nil {
 		g.Mean = make([]float64, dim)
 	}
-
 	if g.StdDev == nil {
 		g.StdDev = make([]float64, dim)
 		floatx.Apply(floatx.SetValueFunc(smallSD), g.StdDev, nil)
@@ -75,7 +86,6 @@ func NewModel(dim int, options ...func(*Model)) *Model {
 	floatx.Log(g.tmpArray, g.variance)
 	g.const1 = -float64(g.ModelDim) * math.Log(2.0*math.Pi) / 2.0
 	g.const2 = g.const1 - floats.Sum(g.tmpArray)/2.0
-
 	return g
 }
 
@@ -86,10 +96,7 @@ func (g *Model) Update(x model.Observer, w func(model.Obs) float64) error {
 		return e
 	}
 	for v := range c {
-		err := g.UpdateOne(v, w(v))
-		if err != nil {
-			return err
-		}
+		g.UpdateOne(v, w(v))
 	}
 	return nil
 }
@@ -155,7 +162,7 @@ func (g *Model) prob(obs []float64) float64 {
 }
 
 // UpdateOne updates sufficient statistics using one observation.
-func (g *Model) UpdateOne(o model.Obs, w float64) error {
+func (g *Model) UpdateOne(o model.Obs, w float64) {
 
 	/* Update sufficient statistics. */
 	obs, _ := model.ObsToF64(o)
@@ -165,8 +172,6 @@ func (g *Model) UpdateOne(o model.Obs, w float64) error {
 	floats.Scale(w, g.tmpArray)
 	floats.Add(g.Sumxsq, g.tmpArray)
 	g.NSamples += w
-
-	return nil
 }
 
 // Estimate computes model parameters using sufficient statistics.
@@ -226,29 +231,9 @@ func (g *Model) standardDeviation() (sd []float64) {
 // Dim is the dimensionality of the observation vector.
 func (g *Model) Dim() int { return g.ModelDim }
 
-// Clone model.
-func (g *Model) Clone() *Model {
-
-	ng := NewModel(g.ModelDim, Name(g.ModelName))
-
-	//	fmt.Printf("xxx ng sumx: %+v\n\n", ng)
-	//	fmt.Printf("xxx g  sumx: %+v\n\n", g)
-
-	ng.ModelName = g.ModelName
-	ng.ModelDim = g.ModelDim
-	ng.NSamples = g.NSamples
-	ng.Diag = g.Diag
-
-	copy(ng.Sumx, g.Sumx)
-	copy(ng.Sumxsq, g.Sumxsq)
-	copy(ng.Mean, g.Mean)
-	copy(ng.StdDev, g.StdDev)
-	copy(ng.variance, g.variance)
-	copy(ng.varianceInv, g.varianceInv)
-	copy(ng.tmpArray, g.tmpArray)
-	ng.const1 = g.const1
-	ng.const2 = g.const2
-	return ng
+// Name returns the name of the model.
+func (g *Model) Name() string {
+	return g.ModelName
 }
 
 // Options
@@ -268,11 +253,6 @@ func StdDev(sd []float64) func(*Model) {
 	return func(g *Model) { g.StdDev = sd }
 }
 
-// Name returns the name of the model.
-func (g *Model) Name() string {
-	return g.ModelName
-}
-
 // SetName sets a name for the model.
 func (g *Model) setName(name string) {
 	g.ModelName = name
@@ -285,5 +265,88 @@ func Name(name string) func(*Model) {
 
 // Seed sets a seed value for random functions.
 func Seed(seed int64) func(*Model) {
-	return func(g *Model) { g.seed = seed }
+	return func(g *Model) { g.Seed = seed }
+}
+
+// Clone create a clone of src.
+func Clone(src *Model) func(*Model) {
+	g := src
+	return func(ng *Model) {
+		ng.ModelName = g.ModelName
+		ng.ModelDim = g.ModelDim
+		ng.NSamples = g.NSamples
+		ng.Diag = g.Diag
+
+		ng.Sumx = g.Sumx
+		ng.Sumxsq = g.Sumxsq
+
+		ng.Mean = g.Mean
+		ng.StdDev = g.StdDev
+	}
+}
+
+// IO
+
+// Read unmarshals json data from an io.Reader into a model struct.
+func Read(r io.Reader) (*Model, error) {
+
+	b, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get a Model object.
+	m := &Model{}
+	e := json.Unmarshal(b, m)
+
+	if e != nil {
+		return nil, e
+	}
+	m = NewModel(m.ModelDim, Clone(m))
+	return m, nil
+}
+
+// ReadFile unmarshals json data from a file into a model struct.
+func ReadFile(fn string) (*Model, error) {
+
+	f, err := os.Open(fn)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	glog.Infof("Reading model from file %s.", fn)
+	return Read(f)
+}
+
+// Write writes the model to an io.Writer.
+func (g *Model) Write(w io.Writer) error {
+
+	b, err := json.Marshal(g)
+	if err != nil {
+		return err
+	}
+	_, e := w.Write(b)
+	return e
+}
+
+// WriteFile writes the model to file.
+func (g *Model) WriteFile(fn string) error {
+
+	e := os.MkdirAll(filepath.Dir(fn), 0755)
+	if e != nil {
+		return e
+	}
+	f, err := os.Create(fn)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	ee := g.Write(f)
+	if ee != nil {
+		return ee
+	}
+
+	glog.Infof("Wrote model \"%s\" to file %s.", g.Name(), fn)
+	return nil
 }

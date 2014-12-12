@@ -1,8 +1,14 @@
+// Copyright (c) 2014 AKUALAB INC., All rights reserved.
+//
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package gmm
 
 import (
 	"flag"
 	"math/rand"
+	"os"
 	"testing"
 
 	"github.com/akualab/gjoa"
@@ -223,67 +229,55 @@ func TestTrainGMM2(t *testing.T) {
 	}
 }
 
-// func TestWriteReadGMM(t *testing.T) {
-// 	var seed int64 = 33
-// 	dim := 2
-// 	numComp := 2
-// 	numIter := 10
-// 	numObs := 10000
-// 	gmm0 := MakeGMM(t)
-// 	gmm, e := NewGaussianMixture(dim, numComp, true, true, "mygmm")
-// 	if e != nil {
-// 		t.Fatal(e)
-// 	}
-// 	t.Logf("Initial Weights: \n%+v", gmm.Weights)
-// 	mean01 := []float64{2.5, 3}
-// 	sd01 := []float64{0.70710678118, 0.70710678118}
-// 	gmm, e = RandomGMM(mean01, sd01, numComp, "mygmm", 99)
-// 	if e != nil {
-// 		t.Fatal(e)
-// 	}
-// 	for iter := 0; iter < numIter; iter++ {
-// 		t.Logf("Starting GMM training iteration %d.", iter)
-// 		gmm.Clear()
+func TestWriteReadGMM(t *testing.T) {
+	dim := 2
+	numComp := 2
+	numIter := 10
+	numObs := 10000
+	gmm0 := MakeGMM(t)
+	gmm := NewModel(dim, numComp)
+	t.Logf("Initial Weights: \n%+v", gmm.Weights)
+	mean01 := []float64{2.5, 3}
+	sd01 := []float64{0.70710678118, 0.70710678118}
+	gmm = RandomModel(mean01, sd01, numComp, "mygmm", 99)
+	for iter := 0; iter < numIter; iter++ {
+		t.Logf("Starting GMM training iteration %d.", iter)
+		gmm.Clear()
 
-// 		r := rand.New(rand.NewSource(seed))
-// 		for i := 0; i < numObs; i++ {
-// 			rv, _, err := gmm0.Random(r)
-// 			if err != nil {
-// 				t.Fatal(err)
-// 			}
-// 			gmm.Update(rv.([]float64), 1.0)
-// 		}
-// 		gmm.Estimate()
+		for i := 0; i < numObs; i++ {
+			rv := gmm0.Sample()
+			gmm.UpdateOne(rv, 1.0)
+		}
+		gmm.Estimate()
 
-// 		t.Logf("Iter: %d", iter)
-// 	}
+		t.Logf("Iter: %d", iter)
+	}
 
-// 	// Write model.
-// 	fn := os.TempDir() + "gmm.json"
-// 	gmm.WriteFile(fn)
-// 	/*
-// 		x, e1 := gmm.ReadFile(fn)
-// 		if e1 != nil {
-// 			t.Fatal(e1)
-// 		}
-// 		gmm1 := x.(*GMM)
-// 	*/
+	// Write model.
+	fn := os.TempDir() + "gmm.json"
+	t.Logf("Wrote to temp file: %s\n", fn)
+	gmm.WriteFile(fn)
+	/*
+		x, e1 := gmm.ReadFile(fn)
+		if e1 != nil {
+			t.Fatal(e1)
+		}
+		gmm1 := x.(*GMM)
+	*/
 
-// 	// Create another Gaussian model.
-// 	gmm00 := EmptyGaussianMixture()
-// 	m1, e1 := gmm00.ReadFile(fn)
-// 	if e1 != nil {
-// 		t.Fatal(e1)
-// 	}
-// 	gmm1 := m1.(*GMM)
+	// Create another Gaussian model.
+	gmm1, e1 := ReadFile(fn)
+	if e1 != nil {
+		t.Fatal(e1)
+	}
 
-// 	// Compare gmm and gmm1
-// 	for k, v := range gmm.Components {
-// 		CompareGaussians(t, v, gmm1.Components[k], epsilon)
-// 	}
-// 	gjoa.CompareSliceFloat(t, gmm.Weights, gmm1.Weights, "Weights don't match.", epsilon)
-// 	gjoa.CompareSliceFloat(t, gmm.PosteriorSum, gmm1.PosteriorSum, "PosteriorSum doesn't match.", epsilon)
-// }
+	// Compare gmm and gmm1
+	for k, v := range gmm.Components {
+		CompareGaussians(t, v, gmm1.Components[k], epsilon)
+	}
+	gjoa.CompareSliceFloat(t, gmm.Weights, gmm1.Weights, "Weights don't match.", epsilon)
+	gjoa.CompareSliceFloat(t, gmm.PosteriorSum, gmm1.PosteriorSum, "PosteriorSum doesn't match.", epsilon)
+}
 
 func CompareGaussians(t *testing.T, g1 *gaussian.Model, g2 *gaussian.Model, epsilon float64) {
 	gjoa.CompareSliceFloat(t, g1.Mean, g2.Mean, "Wrong Mean", epsilon)

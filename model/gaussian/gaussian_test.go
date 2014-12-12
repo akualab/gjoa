@@ -1,7 +1,13 @@
+// Copyright (c) 2014 AKUALAB INC., All rights reserved.
+//
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package gaussian
 
 import (
 	"math/rand"
+	"os"
 	"testing"
 
 	"github.com/akualab/gjoa"
@@ -14,11 +20,10 @@ const epsilon = 0.004
 
 func TestGaussian(t *testing.T) {
 
-	g := NewModel(10, Name("testing"))
 	mean := []float64{0.5, 1, 2}
 	sd := []float64{1, 1, 1}
 
-	g = NewModel(3, Name("testing"), Mean(mean), StdDev(sd))
+	g := NewModel(3, Name("testing"), Mean(mean), StdDev(sd))
 	obs := []float64{1, 1, 1}
 
 	p := g.logProb(obs)
@@ -29,6 +34,29 @@ func TestGaussian(t *testing.T) {
 	if !gjoa.Comparef64(expected, p, epsilon) {
 		t.Errorf("Wrong LogProb. Expected: [%f], Got: [%f]", expected, p)
 	}
+}
+
+func TestWriteReadGaussian(t *testing.T) {
+
+	mean := []float64{0.5, 1, 2}
+	sd := []float64{1, 2, 4}
+	g := NewModel(3, Name("testing"), Mean(mean), StdDev(sd))
+
+	fn := os.TempDir() + "gaussian.json"
+	g.WriteFile(fn)
+	t.Logf("Wrote to temp file: %s\n", fn)
+
+	// Create another Gaussian model.
+	g1, e := ReadFile(fn)
+	if e != nil {
+		t.Fatal(e)
+	}
+
+	// Read values from file.
+	t.Logf("Original model:\n%+v\n", g)
+	t.Logf("New model read from file:\n%+v\n", g1)
+
+	CompareGaussians(t, g, g1, epsilon)
 }
 
 func TestTrainGaussian(t *testing.T) {
@@ -128,7 +156,7 @@ func TestCloneGaussian(t *testing.T) {
 	}
 	g.Estimate()
 
-	ng := g.Clone()
+	ng := NewModel(g.ModelDim, Clone(g))
 
 	// compare g vs. ng
 	type table struct {
@@ -216,4 +244,9 @@ func BenchmarkTrain2(b *testing.B) {
 		g.Estimate()
 		g.Clear()
 	}
+}
+
+func CompareGaussians(t *testing.T, g1 *Model, g2 *Model, epsilon float64) {
+	gjoa.CompareSliceFloat(t, g1.Mean, g2.Mean, "Wrong Mean", epsilon)
+	gjoa.CompareSliceFloat(t, g1.StdDev, g2.StdDev, "Wrong SD", epsilon)
 }

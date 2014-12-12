@@ -1,15 +1,20 @@
+// Copyright (c) 2014 AKUALAB INC., All rights reserved.
+//
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 /*
+Package hmm provides an implementation of hidden Markov models.
+It is designed for applications in temporal pattern recognition.
 
-Hidden Markov model.
-
-
- α β γ ζ Φ
+The package can support any output distribution of type model.Modeler.
+The time-state trellis can be reprsented using a state-transition matrix
+or a graph.
 
 */
 package hmm
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 
@@ -146,7 +151,7 @@ func NewModel(transProbs [][]float64, obsModels []model.Modeler, options ...func
 // 3. Termination:    P(O/Φ) = sum_{i=0}^{N-1} α(i,T-1)
 // For scaling details see Rabiner/Juang and
 // http://courses.media.mit.edu/2010fall/mas622j/ProblemSets/ps4/tutorial.pdf
-func (hmm *Model) alpha(observations [][]float64) (α [][]float64, logProb float64, e error) {
+func (hmm *Model) alpha(observations [][]float64) (α [][]float64, logProb float64) {
 
 	// Num states.
 	N := hmm.NStates
@@ -203,7 +208,7 @@ func (hmm *Model) alpha(observations [][]float64) (α [][]float64, logProb float
 //
 // 1. Initialization: β(i,T-1) = 1;  0<=i<N
 // 2. Induction:      β(i,t) =  sum_{j=0}^{N-1} a(i,j) b(j,o(t+1)) β(j,t+1); t=T-2,T-3,...,0; 0<=i<N
-func (hmm *Model) beta(observations [][]float64) (β [][]float64, e error) {
+func (hmm *Model) beta(observations [][]float64) (β [][]float64) {
 
 	// Num states.
 	N := hmm.NStates
@@ -251,20 +256,19 @@ func (hmm *Model) beta(observations [][]float64) (β [][]float64, e error) {
 
 // Compute gammas. Indices are: γ(state, time)
 // γ(i,t) =  α(i,t)β(i,t) / sum_{j=0}^{N-1} α(j,t)β(i,t);  0<=j<N
-func (hmm *Model) gamma(α, β [][]float64) (γ [][]float64, e error) {
+func (hmm *Model) gamma(α, β [][]float64) (γ [][]float64) {
 
 	αr, αc := floatx.Check2D(α)
 	βr, βc := floatx.Check2D(β)
 
 	if αr != βr || αc != βc {
-		e = fmt.Errorf("Shape mismatch: alpha[%d,%d] beta[%d,%d]", αr, αc, βr, βc)
-		return
+		glog.Fatalf("Shape mismatch: alpha[%d,%d] beta[%d,%d]", αr, αc, βr, βc)
 	}
 
 	T := αc
 	N := hmm.NStates
 	if αr != N {
-		e = fmt.Errorf("Num rows [%d] doesn't match num states [%d].", αr, N)
+		glog.Fatalf("Num rows [%d] doesn't match num states [%d].", αr, N)
 	}
 
 	// Allocate log-gamma matrix.
@@ -296,7 +300,7 @@ func (hmm *Model) gamma(α, β [][]float64) (γ [][]float64, e error) {
             sum_{i=0}^{N-1} sum_{j=0}^{N-1} α(i,t) a(i,j) b(j,o(t+1)) β(j,t+1)
 
 */
-func (hmm *Model) xi(observations, α, β [][]float64) (ζ [][][]float64, e error) {
+func (hmm *Model) xi(observations, α, β [][]float64) (ζ [][][]float64) {
 
 	a := hmm.TransProbs
 	αr, αc := floatx.Check2D(α)
@@ -304,18 +308,16 @@ func (hmm *Model) xi(observations, α, β [][]float64) (ζ [][][]float64, e erro
 	oc, _ := floatx.Check2D(observations)
 
 	if αr != βr || αc != βc {
-		e = fmt.Errorf("Shape mismatch: alpha[%d,%d] beta[%d,%d]", αr, αc, βr, βc)
-		return
+		glog.Fatalf("Shape mismatch: alpha[%d,%d] beta[%d,%d]", αr, αc, βr, βc)
 	}
 
 	T := αc
 	N := hmm.NStates
 	if oc != T {
-		e = fmt.Errorf("Mismatch in T observations has [%d], expected [%d].", oc, T)
-		return
+		glog.Fatalf("Mismatch in T observations has [%d], expected [%d].", oc, T)
 	}
 	if αr != N {
-		e = fmt.Errorf("Num rows [%d] doesn't match num states [%d].", αr, N)
+		glog.Fatalf("Num rows [%d] doesn't match num states [%d].", αr, N)
 	}
 
 	// Allocate log-xi matrix.
@@ -343,9 +345,8 @@ func (hmm *Model) xi(observations, α, β [][]float64) (ζ [][][]float64, e erro
 	return
 }
 
-// Update model statistics.
-// sequence is a matrix
-func (hmm *Model) UpdateOne(observations [][]float64, w float64) (e error) {
+// UpdateOne updates sufficient statistics using one observation sequence.
+func (hmm *Model) UpdateOne(observations [][]float64, w float64) {
 
 	var α, β, γ [][]float64
 	var ζ [][][]float64
@@ -355,14 +356,8 @@ func (hmm *Model) UpdateOne(observations [][]float64, w float64) (e error) {
 	//N := hmm.NStates
 
 	// Compute  α, β, γ, ζ
-	α, β, logProb, e = hmm.alphaBeta(observations)
-	if e != nil {
-		return
-	}
-	γ, ζ, e = hmm.gammaXi(observations, α, β)
-	if e != nil {
-		return
-	}
+	α, β, logProb = hmm.alphaBeta(observations)
+	γ, ζ = hmm.gammaXi(observations, α, β)
 
 	/*
 		// TODO: compute γ, ζ concurrently using go routines.
@@ -442,7 +437,7 @@ func (hmm *Model) Estimate() error {
 	return nil
 }
 
-func (hmm *Model) Clear() error {
+func (hmm *Model) Clear() {
 
 	for _, m := range hmm.ObsModels {
 		m.(model.Trainer).Clear()
@@ -451,8 +446,6 @@ func (hmm *Model) Clear() error {
 	floatx.Clear(hmm.SumGamma)
 	floatx.Clear(hmm.SumInitProbs)
 	hmm.SumProb = 0
-
-	return nil
 }
 
 // Returns the log probability.
@@ -508,22 +501,15 @@ func (hmm *Model) ModelMap() map[string]model.Modeler {
 }
 
 // Compute α and β.
-func (hmm *Model) alphaBeta(observations [][]float64) (α, β [][]float64, logProb float64, e error) {
+func (hmm *Model) alphaBeta(observations [][]float64) (α, β [][]float64, logProb float64) {
 
-	α, logProb, e = hmm.alpha(observations)
-	if e != nil {
-		return
-	}
-	β, e = hmm.beta(observations)
-	if e != nil {
-		return
-	}
-
+	α, logProb = hmm.alpha(observations)
+	β = hmm.beta(observations)
 	return
 }
 
 // Compute α and β concurrently.
-func (hmm *Model) concurrentAlphaBeta(observations [][]float64) (α, β [][]float64, logProb float64, e error) {
+func (hmm *Model) concurrentAlphaBeta(observations [][]float64) (α, β [][]float64, logProb float64) {
 
 	α_done := make(chan bool)
 	β_done := make(chan bool)
@@ -531,17 +517,11 @@ func (hmm *Model) concurrentAlphaBeta(observations [][]float64) (α, β [][]floa
 
 	// Launch in separate go routines.
 	go func() {
-		α, logProb, e = hmm.alpha(observations)
-		if e != nil {
-			return
-		}
+		α, logProb = hmm.alpha(observations)
 		α_done <- true
 	}()
 	go func() {
-		β, e = hmm.beta(observations)
-		if e != nil {
-			return
-		}
+		β = hmm.beta(observations)
 		β_done <- true
 	}()
 
@@ -560,39 +540,26 @@ func (hmm *Model) concurrentAlphaBeta(observations [][]float64) (α, β [][]floa
 }
 
 // Compute γ and ζ.
-func (hmm *Model) gammaXi(observations, α, β [][]float64) (γ [][]float64, ζ [][][]float64, e error) {
+func (hmm *Model) gammaXi(observations, α, β [][]float64) (γ [][]float64, ζ [][][]float64) {
 
-	γ, e = hmm.gamma(α, β)
-	if e != nil {
-		return
-	}
-	ζ, e = hmm.xi(observations, α, β)
-	if e != nil {
-		return
-	}
-
+	γ = hmm.gamma(α, β)
+	ζ = hmm.xi(observations, α, β)
 	return
 }
 
 // Compute γ and ζ concurrently.
-func (hmm *Model) concurrentGammaXi(observations, α, β [][]float64) (γ [][]float64, ζ [][][]float64, e error) {
+func (hmm *Model) concurrentGammaXi(observations, α, β [][]float64) (γ [][]float64, ζ [][][]float64) {
 
 	γ_done := make(chan bool)
 	ζ_done := make(chan bool)
 
 	// Launch in separate go routines.
 	go func() {
-		γ, e = hmm.gamma(α, β)
-		if e != nil {
-			return
-		}
+		γ = hmm.gamma(α, β)
 		γ_done <- true
 	}()
 	go func() {
-		ζ, e = hmm.xi(observations, α, β)
-		if e != nil {
-			return
-		}
+		ζ = hmm.xi(observations, α, β)
 		ζ_done <- true
 	}()
 

@@ -1,9 +1,19 @@
+// Copyright (c) 2014 AKUALAB INC., All rights reserved.
+//
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package gmm
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"math"
 	"math/rand"
+	"os"
+	"path/filepath"
 
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
@@ -25,8 +35,8 @@ type Model struct {
 	Likelihood   float64           `json:"likelihood"`
 	Components   []*gaussian.Model `json:"components,omitempty"`
 	Iteration    int               `json:"iteration"`
+	Seed         int64             `json:"seed"`
 	tmpProbs     []float64
-	seed         int64
 	rand         *rand.Rand
 }
 
@@ -34,13 +44,12 @@ type Model struct {
 func NewModel(dim, numComponents int, options ...func(*Model)) *Model {
 
 	gmm := &Model{
-		ModelName:    "GMM", // default name
-		ModelDim:     dim,
-		NComponents:  numComponents,
-		Diag:         true,
-		PosteriorSum: make([]float64, numComponents),
-		tmpProbs:     make([]float64, numComponents),
-		seed:         model.DefaultSeed, // default seed
+		ModelName:   "GMM", // default name
+		ModelDim:    dim,
+		NComponents: numComponents,
+		Diag:        true,
+		tmpProbs:    make([]float64, numComponents),
+		Seed:        model.DefaultSeed, // default seed
 	}
 
 	// Set options.
@@ -48,7 +57,11 @@ func NewModel(dim, numComponents int, options ...func(*Model)) *Model {
 		option(gmm)
 	}
 
-	gmm.rand = rand.New(rand.NewSource(gmm.seed))
+	gmm.rand = rand.New(rand.NewSource(gmm.Seed))
+
+	if len(gmm.PosteriorSum) == 0 {
+		gmm.PosteriorSum = make([]float64, gmm.NComponents)
+	}
 
 	// Create components if not provided.
 	if len(gmm.Components) == 0 {
@@ -72,6 +85,7 @@ func NewModel(dim, numComponents int, options ...func(*Model)) *Model {
 		floatx.Apply(floatx.SetValueFunc(logw), gmm.LogWeights, nil)
 		gmm.Weights = make([]float64, gmm.NComponents)
 		floatx.Exp(gmm.Weights, gmm.LogWeights)
+		glog.Infof("init weights with equal values: %.6f", gmm.Weights[0])
 
 	case len(gmm.LogWeights) > 0:
 		gmm.Weights = make([]float64, gmm.NComponents)
@@ -139,7 +153,7 @@ func (gmm *Model) Predict(x model.Observer) ([]model.Labeler, error) {
 */
 
 // Estimate computes model parameters using sufficient statistics.
-func (gmm *Model) UpdateOne(o model.Obs, w float64) error {
+func (gmm *Model) UpdateOne(o model.Obs, w float64) {
 
 	obs, _ := model.ObsToF64(o)
 	maxProb := gmm.logProbInternal(obs, gmm.tmpProbs)
@@ -159,8 +173,6 @@ func (gmm *Model) UpdateOne(o model.Obs, w float64) error {
 
 	// Count number of observations.
 	gmm.NSamples += w
-
-	return nil
 }
 
 // Update updates sufficient statistics using observations.
@@ -170,10 +182,7 @@ func (gmm *Model) Update(x model.Observer, w func(model.Obs) float64) error {
 		return e
 	}
 	for v := range c {
-		err := gmm.UpdateOne(v, w(v))
-		if err != nil {
-			return err
-		}
+		gmm.UpdateOne(v, w(v))
 	}
 	return nil
 }
@@ -370,6 +379,7 @@ func (gmm *GMM) New(values interface{}) (model.Modeler, error) {
 
 // Name returns the name of the model.
 func (gmm *Model) Name() string {
+	glog.Infof("set model name: %s", gmm.Name)
 	return gmm.ModelName
 }
 
@@ -385,12 +395,16 @@ func Name(name string) func(*Model) {
 
 // Seed sets a seed value for random functions.
 func Seed(seed int64) func(*Model) {
-	return func(gmm *Model) { gmm.seed = seed }
+	glog.Infof("set seed: %d", seed)
+	return func(gmm *Model) { gmm.Seed = seed }
 }
 
 // Components sets the mixture components for the model.
 func Components(cs []*gaussian.Model) func(*Model) {
-	return func(gmm *Model) { gmm.Components = cs }
+	return func(gmm *Model) {
+		gmm.Components = cs
+		glog.Infof("set %d mixture components.", len(gmm.Components))
+	}
 }
 
 // Weights sets the mixture weights for the model.
@@ -402,4 +416,81 @@ func Weights(w []float64) func(*Model) {
 // using log(w) as the argument.
 func LogWeights(logw []float64) func(*Model) {
 	return func(gmm *Model) { gmm.LogWeights = logw }
+}
+
+// Clone create a clone of src.
+func Clone(src *Model) func(*Model) {
+	return func(m *Model) {
+		m.NSamples = src.NSamples
+		m.Diag = src.Diag
+		m.PosteriorSum = src.PosteriorSum
+		m.Iteration = src.Iteration
+	}
+}
+
+// IO
+
+// Read unmarshals json data from an io.Reader into a model struct.
+func Read(r io.Reader) (*Model, error) {
+
+	b, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get a Model object.
+	m := &Model{}
+	e := json.Unmarshal(b, m)
+
+	if e != nil {
+		return nil, e
+	}
+	m = NewModel(m.ModelDim, m.NComponents, Clone(m), LogWeights(m.LogWeights),
+		Components(m.Components), Name(m.ModelName), Seed(m.Seed))
+	return m, nil
+}
+
+// ReadFile unmarshals json data from a file into a model struct.
+func ReadFile(fn string) (*Model, error) {
+
+	f, err := os.Open(fn)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	glog.Infof("Reading model from file %s.", fn)
+	return Read(f)
+}
+
+// Write writes the model to an io.Writer.
+func (gmm *Model) Write(w io.Writer) error {
+
+	b, err := json.Marshal(gmm)
+	if err != nil {
+		return err
+	}
+	_, e := w.Write(b)
+	return e
+}
+
+// WriteFile writes the model to file.
+func (gmm *Model) WriteFile(fn string) error {
+
+	e := os.MkdirAll(filepath.Dir(fn), 0755)
+	if e != nil {
+		return e
+	}
+	f, err := os.Create(fn)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	ee := gmm.Write(f)
+	if ee != nil {
+		return ee
+	}
+
+	glog.Infof("Wrote model \"%s\" to file %s.", gmm.Name(), fn)
+	return nil
 }

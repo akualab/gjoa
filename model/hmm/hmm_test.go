@@ -1,3 +1,8 @@
+// Copyright (c) 2014 AKUALAB INC., All rights reserved.
+//
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package hmm
 
 import (
@@ -76,10 +81,7 @@ func TestLogProb(t *testing.T) {
 
 	flag.Parse()
 	hmm := MakeHMM(t)
-	_, logProb, err_alpha := hmm.alpha(obs0)
-	if err_alpha != nil {
-		t.Fatal(err_alpha)
-	}
+	_, logProb := hmm.alpha(obs0)
 	expectedLogProb := -26.4626886822436
 	gjoa.CompareFloats(t, expectedLogProb, logProb, "Error in logProb", epsilon)
 }
@@ -98,18 +100,9 @@ func TestEvaluationGamma(t *testing.T) {
 
 	flag.Parse()
 	hmm := MakeHMM(t)
-	alpha, _, err_alpha := hmm.alpha(obs0)
-	if err_alpha != nil {
-		t.Fatal(err_alpha)
-	}
-	beta, err_beta := hmm.beta(obs0)
-	if err_beta != nil {
-		t.Fatal(err_beta)
-	}
-	gamma, err_gamma := hmm.gamma(alpha, beta)
-	if err_gamma != nil {
-		t.Fatal(err_gamma)
-	}
+	alpha, _ := hmm.alpha(obs0)
+	beta := hmm.beta(obs0)
+	gamma := hmm.gamma(alpha, beta)
 	message := "Error in gamma"
 	gjoa.CompareSliceFloat(t, gamma01, floatx.Flatten2D(gamma), message, epsilon)
 }
@@ -130,18 +123,9 @@ func TestEvaluationXi(t *testing.T) {
 
 	flag.Parse()
 	hmm := MakeHMM(t)
-	alpha, _, err_alpha := hmm.alpha(obs0)
-	if err_alpha != nil {
-		t.Fatal(err_alpha)
-	}
-	beta, err_beta := hmm.beta(obs0)
-	if err_beta != nil {
-		t.Fatal(err_beta)
-	}
-	xi, err_xi := hmm.xi(obs0, alpha, beta)
-	if err_xi != nil {
-		t.Fatal(err_xi)
-	}
+	alpha, _ := hmm.alpha(obs0)
+	beta := hmm.beta(obs0)
+	xi := hmm.xi(obs0, alpha, beta)
 	xsi1 := Convert3DSlideTo1D(xi)
 	message := "Error in xi"
 	gjoa.CompareSliceFloat(t, xsi, xsi1, message, epsilon)

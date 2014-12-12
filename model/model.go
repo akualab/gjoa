@@ -1,3 +1,8 @@
+// Copyright (c) 2014 AKUALAB INC., All rights reserved.
+//
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package model
 
 import "fmt"
@@ -29,7 +34,7 @@ type Trainer interface {
 	Update(x Observer, w func(Obs) float64) error
 
 	// Updates model using a single weighted sample.
-	UpdateOne(o Obs, w float64) error
+	UpdateOne(o Obs, w float64)
 
 	// Estimates model parameters.
 	Estimate() error
