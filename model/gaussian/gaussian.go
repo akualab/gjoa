@@ -46,8 +46,11 @@ type Model struct {
 	rand        *rand.Rand
 }
 
+// Option type is used to pass options to NewModel().
+type Option func(*Model)
+
 // NewModel creates a new Gaussian model.
-func NewModel(dim int, options ...func(*Model)) *Model {
+func NewModel(dim int, options ...Option) *Model {
 
 	g := &Model{
 		ModelName:   "Gaussian",
@@ -240,7 +243,7 @@ func (g *Model) Name() string {
 
 // Mean is an option function. Use it to set a
 // mean vector when creating a new Gaussian model.
-func Mean(mean []float64) func(*Model) {
+func Mean(mean []float64) Option {
 	return func(m *Model) {
 		m.Mean = mean
 	}
@@ -249,7 +252,7 @@ func Mean(mean []float64) func(*Model) {
 // StdDev is an option function. Use it to set a
 // standard deviation vector when creating a
 // new Gaussian model.
-func StdDev(sd []float64) func(*Model) {
+func StdDev(sd []float64) Option {
 	return func(g *Model) { g.StdDev = sd }
 }
 
@@ -259,17 +262,17 @@ func (g *Model) setName(name string) {
 }
 
 // Name is an option to set the model name.
-func Name(name string) func(*Model) {
+func Name(name string) Option {
 	return func(g *Model) { g.setName(name) }
 }
 
 // Seed sets a seed value for random functions.
-func Seed(seed int64) func(*Model) {
+func Seed(seed int64) Option {
 	return func(g *Model) { g.Seed = seed }
 }
 
 // Clone create a clone of src.
-func Clone(src *Model) func(*Model) {
+func Clone(src *Model) Option {
 	g := src
 	return func(ng *Model) {
 		ng.ModelName = g.ModelName

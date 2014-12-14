@@ -40,8 +40,11 @@ type Model struct {
 	rand         *rand.Rand
 }
 
+// Option type is used to pass options to NewModel().
+type Option func(*Model)
+
 // NewModel creates a new Gaussian mixture model.
-func NewModel(dim, numComponents int, options ...func(*Model)) *Model {
+func NewModel(dim, numComponents int, options ...Option) *Model {
 
 	gmm := &Model{
 		ModelName:   "GMM", // default name
@@ -375,11 +378,8 @@ func (gmm *GMM) New(values interface{}) (model.Modeler, error) {
 }
 */
 
-// Options
-
 // Name returns the name of the model.
 func (gmm *Model) Name() string {
-	glog.Infof("set model name: %s", gmm.Name)
 	return gmm.ModelName
 }
 
@@ -388,19 +388,24 @@ func (gmm *Model) setName(name string) {
 	gmm.ModelName = name
 }
 
+// Options
+
 // Name is an option to set the model name.
-func Name(name string) func(*Model) {
-	return func(gmm *Model) { gmm.setName(name) }
+func Name(name string) Option {
+	return func(gmm *Model) {
+		glog.Infof("set model name: %s", gmm.Name)
+		gmm.setName(name)
+	}
 }
 
 // Seed sets a seed value for random functions.
-func Seed(seed int64) func(*Model) {
+func Seed(seed int64) Option {
 	glog.Infof("set seed: %d", seed)
 	return func(gmm *Model) { gmm.Seed = seed }
 }
 
 // Components sets the mixture components for the model.
-func Components(cs []*gaussian.Model) func(*Model) {
+func Components(cs []*gaussian.Model) Option {
 	return func(gmm *Model) {
 		gmm.Components = cs
 		glog.Infof("set %d mixture components.", len(gmm.Components))
@@ -408,18 +413,18 @@ func Components(cs []*gaussian.Model) func(*Model) {
 }
 
 // Weights sets the mixture weights for the model.
-func Weights(w []float64) func(*Model) {
+func Weights(w []float64) Option {
 	return func(gmm *Model) { gmm.Weights = w }
 }
 
 // LogWeights sets the mixture weights for the model
 // using log(w) as the argument.
-func LogWeights(logw []float64) func(*Model) {
+func LogWeights(logw []float64) Option {
 	return func(gmm *Model) { gmm.LogWeights = logw }
 }
 
 // Clone create a clone of src.
-func Clone(src *Model) func(*Model) {
+func Clone(src *Model) Option {
 	return func(m *Model) {
 		m.NSamples = src.NSamples
 		m.Diag = src.Diag

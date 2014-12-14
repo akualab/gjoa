@@ -29,7 +29,7 @@ const (
 	smallNumber = 0.000001
 )
 
-// Obslice type is a slice of modelers.
+// ObsSlice type is a slice of modelers.
 type ObsSlice []model.Modeler
 
 // Model is a hidden Markov model.
@@ -80,8 +80,11 @@ type Model struct {
 var log = func(r int, v float64) float64 { return math.Log(v) }
 var log2D = func(r int, c int, v float64) float64 { return math.Log(v) }
 
+// Option type is used to pass options to NewModel().
+type Option func(*Model)
+
 // NewModel creates a new HMM.
-func NewModel(transProbs [][]float64, obsModels []model.Modeler, options ...func(*Model)) *Model {
+func NewModel(transProbs [][]float64, obsModels []model.Modeler, options ...Option) *Model {
 
 	r, _ := floatx.Check2D(transProbs)
 	hmm := &Model{
@@ -843,25 +846,25 @@ func (hmm *Model) setName(name string) {
 }
 
 // Name is an option to set the model name.
-func Name(name string) func(*Model) {
+func Name(name string) Option {
 	return func(hmm *Model) { hmm.setName(name) }
 }
 
 // Seed sets a seed value for random functions.
 // Uses default seed value if omitted.
-func Seed(seed int64) func(*Model) {
+func Seed(seed int64) Option {
 	return func(hmm *Model) { hmm.seed = seed }
 }
 
 // MaxGenLen option sets the length of the sequences
 // created by the HMM generator. Default is 100.
-func MaxGenLen(n int) func(*Model) {
+func MaxGenLen(n int) Option {
 	return func(hmm *Model) { hmm.maxGenLen = n }
 }
 
 // UpdateIP option to update initial state probabilities.
 // Default is true.
-func UpdateIP(flag bool) func(*Model) {
+func UpdateIP(flag bool) Option {
 	return func(m *Model) {
 		m.updateIP = flag
 	}
@@ -869,14 +872,14 @@ func UpdateIP(flag bool) func(*Model) {
 
 // UpdateTP option to update state transition probabilities.
 // Default is true.
-func UpdateTP(flag bool) func(*Model) {
+func UpdateTP(flag bool) Option {
 	return func(m *Model) {
 		m.updateTP = flag
 	}
 }
 
 // InitProbs is an option to set the initial set probabilities.
-func InitProbs(ip []float64) func(*Model) {
+func InitProbs(ip []float64) Option {
 	return func(m *Model) {
 		m.InitProbs = ip
 	}
