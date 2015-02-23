@@ -1,0 +1,138 @@
+=== RUN TestValues
+--- PASS: TestValues (0.00s)
+	hmme_test.go:89: num moldes: 2
+	hmme_test.go:90: num observations: 10
+	hmme_test.go:97: q:0 i:0 j:1 a:0.9
+	hmme_test.go:97: q:0 i:0 j:4 a:0.1
+	hmme_test.go:97: q:0 i:1 j:1 a:0.5
+	hmme_test.go:97: q:0 i:1 j:2 a:0.5
+	hmme_test.go:97: q:0 i:2 j:2 a:0.3
+	hmme_test.go:97: q:0 i:2 j:3 a:0.6
+	hmme_test.go:97: q:0 i:2 j:4 a:0.1
+	hmme_test.go:97: q:0 i:3 j:3 a:0.7
+	hmme_test.go:97: q:0 i:3 j:4 a:0.3
+	hmme_test.go:97: q:1 i:0 j:1 a:1.0
+	hmme_test.go:97: q:1 i:1 j:1 a:0.3
+	hmme_test.go:97: q:1 i:1 j:2 a:0.2
+	hmme_test.go:97: q:1 i:1 j:3 a:0.5
+	hmme_test.go:97: q:1 i:2 j:2 a:0.6
+	hmme_test.go:97: q:1 i:2 j:3 a:0.4
+	hmme_test.go:108: q:0 i:1 t:0 b:0.2
+	hmme_test.go:108: q:0 i:1 t:1 b:0.4
+	hmme_test.go:108: q:0 i:1 t:2 b:0.5
+	hmme_test.go:108: q:0 i:1 t:3 b:0.5
+	hmme_test.go:108: q:0 i:1 t:4 b:0.5
+	hmme_test.go:108: q:0 i:1 t:5 b:0.7
+	hmme_test.go:108: q:0 i:1 t:6 b:0.5
+	hmme_test.go:108: q:0 i:1 t:7 b:0.4
+	hmme_test.go:108: q:0 i:1 t:8 b:0.2
+	hmme_test.go:108: q:0 i:1 t:9 b:0.5
+	hmme_test.go:108: q:0 i:2 t:0 b:0.7
+	hmme_test.go:108: q:0 i:2 t:1 b:0.5
+	hmme_test.go:108: q:0 i:2 t:2 b:0.7
+	hmme_test.go:108: q:0 i:2 t:3 b:0.5
+	hmme_test.go:108: q:0 i:2 t:4 b:0.2
+	hmme_test.go:108: q:0 i:2 t:5 b:0.4
+	hmme_test.go:108: q:0 i:2 t:6 b:0.4
+	hmme_test.go:108: q:0 i:2 t:7 b:0.7
+	hmme_test.go:108: q:0 i:2 t:8 b:0.4
+	hmme_test.go:108: q:0 i:2 t:9 b:0.4
+	hmme_test.go:108: q:0 i:3 t:0 b:0.5
+	hmme_test.go:108: q:0 i:3 t:1 b:0.2
+	hmme_test.go:108: q:0 i:3 t:2 b:0.4
+	hmme_test.go:108: q:0 i:3 t:3 b:0.5
+	hmme_test.go:108: q:0 i:3 t:4 b:0.2
+	hmme_test.go:108: q:0 i:3 t:5 b:0.7
+	hmme_test.go:108: q:0 i:3 t:6 b:0.7
+	hmme_test.go:108: q:0 i:3 t:7 b:0.4
+	hmme_test.go:108: q:0 i:3 t:8 b:0.5
+	hmme_test.go:108: q:0 i:3 t:9 b:0.2
+	hmme_test.go:108: q:1 i:1 t:0 b:0.4
+	hmme_test.go:108: q:1 i:1 t:1 b:0.5
+	hmme_test.go:108: q:1 i:1 t:2 b:0.5
+	hmme_test.go:108: q:1 i:1 t:3 b:0.7
+	hmme_test.go:108: q:1 i:1 t:4 b:0.5
+	hmme_test.go:108: q:1 i:1 t:5 b:0.2
+	hmme_test.go:108: q:1 i:1 t:6 b:0.4
+	hmme_test.go:108: q:1 i:1 t:7 b:0.7
+	hmme_test.go:108: q:1 i:1 t:8 b:0.4
+	hmme_test.go:108: q:1 i:1 t:9 b:0.5
+	hmme_test.go:108: q:1 i:2 t:0 b:0.4
+	hmme_test.go:108: q:1 i:2 t:1 b:0.2
+	hmme_test.go:108: q:1 i:2 t:2 b:0.4
+	hmme_test.go:108: q:1 i:2 t:3 b:0.5
+	hmme_test.go:108: q:1 i:2 t:4 b:0.7
+	hmme_test.go:108: q:1 i:2 t:5 b:0.2
+	hmme_test.go:108: q:1 i:2 t:6 b:0.5
+	hmme_test.go:108: q:1 i:2 t:7 b:0.4
+	hmme_test.go:108: q:1 i:2 t:8 b:0.7
+	hmme_test.go:108: q:1 i:2 t:9 b:0.4
+=== RUN TestAlpha
+--- PASS: TestAlpha (0.00s)
+	hmme_test.go:188: q:0 i:0 t:0 alpha:    1.000000
+	hmme_test.go:188: q:0 i:1 t:0 alpha:    0.180000
+	hmme_test.go:188: q:0 i:1 t:1 alpha:    0.036000
+	hmme_test.go:188: q:0 i:1 t:2 alpha:    0.009000
+	hmme_test.go:188: q:0 i:1 t:3 alpha:    0.002250
+	hmme_test.go:188: q:0 i:1 t:4 alpha:    0.000563
+	hmme_test.go:188: q:0 i:1 t:5 alpha:    0.000197
+	hmme_test.go:188: q:0 i:1 t:6 alpha:    0.000049
+	hmme_test.go:188: q:0 i:1 t:7 alpha:    0.000010
+	hmme_test.go:188: q:0 i:1 t:8 alpha:    0.000001
+	hmme_test.go:188: q:0 i:1 t:9 alpha:    0.000000
+	hmme_test.go:188: q:0 i:2 t:1 alpha:    0.045000
+	hmme_test.go:188: q:0 i:2 t:2 alpha:    0.022050
+	hmme_test.go:188: q:0 i:2 t:3 alpha:    0.005557
+	hmme_test.go:188: q:0 i:2 t:4 alpha:    0.000558
+	hmme_test.go:188: q:0 i:2 t:5 alpha:    0.000180
+	hmme_test.go:188: q:0 i:2 t:6 alpha:    0.000061
+	hmme_test.go:188: q:0 i:2 t:7 alpha:    0.000030
+	hmme_test.go:188: q:0 i:2 t:8 alpha:    0.000006
+	hmme_test.go:188: q:0 i:2 t:9 alpha:    0.000001
+	hmme_test.go:188: q:0 i:3 t:2 alpha:    0.010800
+	hmme_test.go:188: q:0 i:3 t:3 alpha:    0.010395
+	hmme_test.go:188: q:0 i:3 t:4 alpha:    0.002122
+	hmme_test.go:188: q:0 i:3 t:5 alpha:    0.001274
+	hmme_test.go:188: q:0 i:3 t:6 alpha:    0.000700
+	hmme_test.go:188: q:0 i:3 t:7 alpha:    0.000211
+	hmme_test.go:188: q:0 i:3 t:8 alpha:    0.000083
+	hmme_test.go:188: q:0 i:3 t:9 alpha:    0.000012
+	hmme_test.go:188: q:0 i:4 t:1 alpha:    0.004500
+	hmme_test.go:188: q:0 i:4 t:2 alpha:    0.005445
+	hmme_test.go:188: q:0 i:4 t:3 alpha:    0.003674
+	hmme_test.go:188: q:0 i:4 t:4 alpha:    0.000693
+	hmme_test.go:188: q:0 i:4 t:5 alpha:    0.000400
+	hmme_test.go:188: q:0 i:4 t:6 alpha:    0.000216
+	hmme_test.go:188: q:0 i:4 t:7 alpha:    0.000066
+	hmme_test.go:188: q:0 i:4 t:8 alpha:    0.000025
+	hmme_test.go:188: q:0 i:4 t:9 alpha:    0.000004
+	hmme_test.go:188: q:1 i:0 t:0 alpha:    0.100000
+	hmme_test.go:188: q:1 i:1 t:0 alpha:    0.400000
+	hmme_test.go:188: q:1 i:1 t:1 alpha:    0.060000
+	hmme_test.go:188: q:1 i:1 t:2 alpha:    0.009000
+	hmme_test.go:188: q:1 i:1 t:3 alpha:    0.001890
+	hmme_test.go:188: q:1 i:1 t:4 alpha:    0.000283
+	hmme_test.go:188: q:1 i:1 t:5 alpha:    0.000017
+	hmme_test.go:188: q:1 i:1 t:6 alpha:    0.000002
+	hmme_test.go:188: q:1 i:1 t:7 alpha:    0.000000
+	hmme_test.go:188: q:1 i:2 t:1 alpha:    0.016000
+	hmme_test.go:188: q:1 i:2 t:2 alpha:    0.008640
+	hmme_test.go:188: q:1 i:2 t:3 alpha:    0.003492
+	hmme_test.go:188: q:1 i:2 t:4 alpha:    0.001731
+	hmme_test.go:188: q:1 i:2 t:5 alpha:    0.000219
+	hmme_test.go:188: q:1 i:2 t:6 alpha:    0.000067
+	hmme_test.go:188: q:1 i:2 t:7 alpha:    0.000016
+	hmme_test.go:188: q:1 i:2 t:8 alpha:    0.000007
+	hmme_test.go:188: q:1 i:2 t:9 alpha:    0.000002
+	hmme_test.go:188: q:1 i:3 t:0 alpha:    0.200000
+	hmme_test.go:188: q:1 i:3 t:1 alpha:    0.036400
+	hmme_test.go:188: q:1 i:3 t:2 alpha:    0.007956
+	hmme_test.go:188: q:1 i:3 t:3 alpha:    0.002342
+	hmme_test.go:188: q:1 i:3 t:4 alpha:    0.000834
+	hmme_test.go:188: q:1 i:3 t:5 alpha:    0.000096
+	hmme_test.go:188: q:1 i:3 t:6 alpha:    0.000028
+	hmme_test.go:188: q:1 i:3 t:7 alpha:    0.000007
+	hmme_test.go:188: q:1 i:3 t:8 alpha:    0.000003
+	hmme_test.go:188: q:1 i:3 t:9 alpha:    0.000001
+PASS
+ok  	github.com/akualab/gjoa/model/hmm	0.005s

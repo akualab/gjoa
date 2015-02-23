@@ -97,7 +97,7 @@ type Observer interface {
 	ObsChan() (<-chan Obs, error)
 }
 
-// The Sampler type generated data from the model.
+// The Sampler type generates random data using the model.
 type Sampler interface {
 	// Returns a sample drawn from the underlying distribution.
 	Sample() Obs

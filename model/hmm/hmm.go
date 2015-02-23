@@ -27,6 +27,7 @@ import (
 
 const (
 	smallNumber = 0.000001
+	cap         = 1000
 )
 
 // ObsSlice type is a slice of modelers.
@@ -60,6 +61,9 @@ type Model struct {
 	// Observation probability distribution functions. [nstates x 1]
 	// b(j,k) = P[o(t) | q(t) = j]
 	ObsModels ObsSlice `json:"obs_models,omitempty"`
+
+	// HMM Network
+	Net *Network
 
 	// Complete HMM model.
 	// Φ = (A, B, π)
@@ -141,6 +145,25 @@ func NewModel(transProbs [][]float64, obsModels []model.Modeler, options ...Opti
 	return hmm
 }
 
+// NewModel creates a new HMM.
+func NewModelFromNet(net *Network, options ...Option) *Model {
+
+	hmm := &Model{
+		ModelName: "HMM",
+		Net:       net,
+		updateIP:  true,
+		updateTP:  true,
+		seed:      model.DefaultSeed,
+		maxGenLen: 100,
+	}
+
+	// Set options.
+	for _, option := range options {
+		option(hmm)
+	}
+	return hmm
+}
+
 // Compute alphas. Indices are: α(state, time)
 //
 // α = | α(0,0),   α(0,1)   ... α(0,T-1)   |
@@ -197,6 +220,66 @@ func (hmm *Model) alpha(observations [][]float64) (α [][]float64, logProb float
 		}
 		logProb += logSumAlphas
 	}
+
+	return
+}
+
+// Compute alphas. Indices are: α(state, time)
+//
+// α = | α(0,0),   α(0,1)   ... α(0,T-1)   |
+//     | α(1,0),   α(1,1)   ... α(1,T-1)   |
+//     ...
+//     | α(N-1,0), α(N-1,1) ... α(N-1,T-1) |
+//
+//
+// 1. Initialization: α(i,0) =  π(i) b(i,o(0)); 0<=i<N
+// 2. Induction:      α(j,t+1) =  sum_{i=0}^{N-1}[α(i,t)a(i,j)] b(j,o(t+1)); 0<=t<T-1; 0<=j<N
+// 3. Termination:    P(O/Φ) = sum_{i=0}^{N-1} α(i,T-1)
+// For scaling details see Rabiner/Juang and
+// http://courses.media.mit.edu/2010fall/mas622j/ProblemSets/ps4/tutorial.pdf
+func (hmm *Model) forward(observations [][]float64) (logProb float64) {
+
+	// Num states.
+	//	N := hmm.net.NumStates()
+
+	// num rows: T
+	// num cols: ne
+	//	T, _ := floatx.Check2D(observations)
+
+	// Allocate log-alpha matrix.
+	// TODO: use a reusable data structure to minimize garbage.
+	//	α = floatx.MakeFloat2D(N, T)
+
+	// 1. Initialization. Add in the log domain.
+	// for i := 0; i < N; i++ {
+	// 	o := model.F64ToObs(observations[0])
+	// 	α[i][0] = hmm.InitProbs[i] + hmm.ObsModels[i].LogProb(o)
+	// }
+
+	// // 2. Induction.
+	// var sumAlphas, sum float64
+	// for t := 0; t < T-1; t++ {
+	// 	sumAlphas = 0
+	// 	for j := 0; j < N; j++ {
+
+	// 		sum = 0
+	// 		for i := 0; i < N; i++ {
+	// 			sum += math.Exp(α[i][t] + hmm.TransProbs[i][j])
+	// 		}
+	// 		o := model.F64ToObs(observations[t+1])
+	// 		v := math.Log(sum) + hmm.ObsModels[j].LogProb(o)
+	// 		α[j][t+1] = v
+
+	// 		sumAlphas += math.Exp(v)
+	// 	}
+	// 	// Applied scale for t independent of j.
+	// 	logSumAlphas := math.Log(sumAlphas)
+	// 	for j := 0; j < N; j++ {
+	// 		v := α[j][t+1] - logSumAlphas
+	// 		α[j][t+1] = v
+	// 	}
+	// 	logProb += logSumAlphas
+	// }
 
 	return
 }
