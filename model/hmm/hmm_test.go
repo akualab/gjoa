@@ -1,286 +1,747 @@
-// Copyright (c) 2014 AKUALAB INC., All rights reserved.
-//
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
 package hmm
 
 import (
-	"flag"
+	"math"
+	"math/rand"
+	"os"
 	"testing"
 
-	"github.com/akualab/gjoa"
-	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
-	gm "github.com/akualab/gjoa/model/gaussian"
+	"github.com/akualab/narray"
 )
 
-const epsilon = 0.001
-
-func init() {
-	flag.Set("logtostderr", "true")
-	flag.Set("v", "4")
-}
-
-// Tests
+// Test embedded hmm.
 
 /*
-   DISCUSSION:
-   We created a simple 2-state HMM for testing.
+                     nq=2 (num models)
+          q = 0                q = 1  (model index)
+       N(q=0) = 5            N(q=1) = 4  (num states fro model q)
 
-   If you look at the sample data and model params. I manufactured the
-   data as if it was emitted with the following sequence:
+   0    1     2     3    4   0    1    2     3  (state indices)
+   o-->( )-->( )-->( )-->o   o-->( )-->( )-->o
+           |
+        a(q=0, i=1, j=2)  (transition prob)
 
-   t:  0   1   2   3   4   5   6   7   8   9   10  11
-   q:  s0  s0  s0  s0  s0  s0  s1  s1  s1  s1  s0  s0
-   o:  0.1 0.3 1.1 1.2 0.7 0.7 5.5 7.8 10  5.2 1.1 1.3 <=
-   data I created given the Gaussians [1,1] and [4,4]
+   Transition probs:
 
-   I got the following gamma:
+   q=0                   q=1
+      0  1  2  3  4         0  1  2  3
+   0     .9       .1     0     1
+   1     .5 .5           1     .3 .2 .5
+   2        .3 .6 .1     2        .6 .4
+   3           .7 .3     3
+   4
 
-   γ0: -0.01 -0.00 -0.01 -0.01 -0.02 -0.11 -9.00 -23 -38 -7.8 -0.18 -0.08
-   γ1: -4.59 -5.15 -4.78 -4.58 -4.11 -2.26 -0.00 -0  -0  -0   -1.80 -2.60
-
-   As you can see choosing the gamma with highest prob for each state give
-   us the hidden sequence of states.
-
-   gamma gives you the most likely state at time t. In this case the result is what we expect.
-
-   Viterbi gives you the P(q | O,  model), that is, it maximizes of over the whole sequence.
 */
 
-func MakeHMM(t *testing.T) *Model {
+const (
+	nq    = 2 // num models
+	small = 0.000001
+)
 
-	// Gaussian 1.
-	mean1 := []float64{1}
-	sd1 := []float64{1}
-	g1 := gm.NewModel(1, gm.Name("g1"), gm.Mean(mean1), gm.StdDev(sd1))
+var (
+	obs                           = []int{2, 0, 0, 1, 0, 2, 1, 1, 0, 1}
+	nsymb                         = 3 // num distinct observations: 0,1,2
+	a, b, loga, logb, alpha, beta *narray.NArray
+	nstates                       [nq]int
+	ns, nobs                      int
+	r                             = rand.New(rand.NewSource(33))
+	outputProbs                   *narray.NArray
+	nchain                        Chain
+	hmms                          *chain
+)
 
-	// Gaussian 2.
-	mean2 := []float64{4}
-	sd2 := []float64{2}
-	g2 := gm.NewModel(1, gm.Name("g2"), gm.Mean(mean2), gm.StdDev(sd2))
+func TestMain(m *testing.M) {
 
-	initialStateProbs := []float64{0.8, 0.2}
-	transProbs := [][]float64{{0.9, 0.1}, {0.3, 0.7}}
+	ns = 5 // max num states in a model
+	nstates[0] = 5
+	nstates[1] = 4
+	nobs = len(obs)
+	a = narray.New(nq, ns, ns)
+	b = narray.New(nq, ns, nobs)
+	alpha = narray.New(nq, ns, nobs)
+	beta = narray.New(nq, ns, nobs)
 
-	// These are the models.
-	models := []*gm.Model{g1, g2}
+	a.Set(.9, 0, 0, 1)
+	a.Set(.1, 0, 0, 4)
+	a.Set(.5, 0, 1, 1)
+	a.Set(.5, 0, 1, 2)
+	a.Set(.3, 0, 2, 2)
+	a.Set(.6, 0, 2, 3)
+	a.Set(.1, 0, 2, 4)
+	a.Set(.7, 0, 3, 3)
+	a.Set(.3, 0, 3, 4)
 
-	// To pass an HMM we need to convert []*gm.Gaussian[]
-	// to []model.Trainer
-	// see http://golang.org/doc/faq#convert_slice_of_interface
-	m := make([]model.Modeler, len(models))
-	for i, v := range models {
-		m[i] = v
-	}
-	return NewModel(transProbs, m, InitProbs(initialStateProbs))
-}
+	a.Set(1, 1, 0, 1)
+	a.Set(.3, 1, 1, 1)
+	a.Set(.2, 1, 1, 2)
+	a.Set(.5, 1, 1, 3)
+	a.Set(.6, 1, 2, 2)
+	a.Set(.4, 1, 2, 3)
 
-func TestLogProb(t *testing.T) {
+	//	someProbs := []float64{.2, .4, .5, .7}          // make it easy to debug.
+	dist := [][]float64{{.4, .5, .1}, {.3, .5, .2}} // prob dist for states in model 0 and 1
 
-	flag.Parse()
-	hmm := MakeHMM(t)
-	_, logProb := hmm.alpha(obs0)
-	expectedLogProb := -26.4626886822436
-	gjoa.CompareFloats(t, expectedLogProb, logProb, "Error in logProb", epsilon)
-}
-
-func TestIndices(t *testing.T) {
-
-	flag.Parse()
-	hmm := MakeHMM(t)
-	m := hmm.Indices()
-	t.Logf("Indices: %+v", m)
-
-	gjoa.CompareSliceInt(t, []int{0, 1}, []int{m["g1"], m["g2"]}, "indices don't match")
-}
-
-func TestEvaluationGamma(t *testing.T) {
-
-	flag.Parse()
-	hmm := MakeHMM(t)
-	alpha, _ := hmm.alpha(obs0)
-	beta := hmm.beta(obs0)
-	gamma := hmm.gamma(alpha, beta)
-	message := "Error in gamma"
-	gjoa.CompareSliceFloat(t, gamma01, floatx.Flatten2D(gamma), message, epsilon)
-}
-
-func Convert3DSlideTo1D(s3 [][][]float64) []float64 {
-	s1 := make([]float64, 0, 100)
-	for _, v1 := range s3 {
-		for _, v2 := range v1 {
-			for _, v3 := range v2 {
-				s1 = append(s1, v3)
+	// output probs as a function of model,state,time
+	for q := 0; q < nq; q++ {
+		for i := 1; i < nstates[q]-1; i++ {
+			for t := 0; t < nobs; t++ {
+				p := dist[q][obs[t]]
+				//				k := r.Intn(len(someProbs))
+				//				b.Set(someProbs[k], q, i, t)
+				b.Set(p, q, i, t)
 			}
 		}
 	}
-	return s1
+
+	// same output probs but as a function of model,state,symbol
+	// we need this to test the network implementation.
+	outputProbs = narray.New(nq, ns, nsymb)
+	for q := 0; q < nq; q++ {
+		for i := 1; i < nstates[q]-1; i++ {
+			for k := 0; k < nsymb; k++ {
+				p := math.Log(dist[q][k])
+				outputProbs.Set(p, q, i, k)
+			}
+		}
+	}
+
+	loga = narray.Log(loga, a.Copy())
+	logb = narray.Log(logb, b.Copy())
+
+	initNetFB()
+	initChainFB()
+	os.Exit(m.Run())
 }
 
-func TestEvaluationXi(t *testing.T) {
+func TestValues(t *testing.T) {
 
-	flag.Parse()
-	hmm := MakeHMM(t)
-	alpha, _ := hmm.alpha(obs0)
-	beta := hmm.beta(obs0)
-	xi := hmm.xi(obs0, alpha, beta)
-	xsi1 := Convert3DSlideTo1D(xi)
-	message := "Error in xi"
-	gjoa.CompareSliceFloat(t, xsi, xsi1, message, epsilon)
+	t.Logf("num moldes: %d", nq)
+	t.Logf("num observations: %d", nobs)
+
+	for q := 0; q < nq; q++ {
+		for i := 0; i < nstates[q]; i++ {
+			for j := i; j < nstates[q]; j++ {
+				t.Logf("q:%d i:%d j:%d a:%.1f", q, i, j, a.At(q, i, j))
+				t.Logf("q:%d i:%d j:%d loga:%.1f", q, i, j, loga.At(q, i, j))
+			}
+		}
+	}
+
+	for q := 0; q < nq; q++ {
+		for i := 1; i < nstates[q]-1; i++ {
+			for tt := 0; tt < nobs; tt++ {
+				t.Logf("q:%d i:%d t:%d b:%.1f", q, i, tt, b.At(q, i, tt))
+				t.Logf("q:%d i:%d t:%d logb:%.1f", q, i, tt, logb.At(q, i, tt))
+			}
+		}
+	}
 }
 
-// func TestWriteReadHMM(t *testing.T) {
+func computeAlpha(t *testing.T) {
 
-// 	hmm := MakeHMM(t)
+	// t=0, entry state, first model.
+	alpha.Set(1.0, 0, 0, 0)
+	printLog(t, "alpha", 0, 0, 0, alpha)
 
-// 	fn := os.TempDir() + "hmm.json"
-// 	hmm.WriteFile(fn)
+	// t=0, entry state, after first model.
+	for q := 1; q < nq; q++ {
+		alpha.Set(alpha.At(q-1, 0, 0)*a.At(q-1, 0, nstates[q-1]-1), q, 0, 0)
+		printLog(t, "alpha", q, 0, 0, alpha)
+	}
 
-// 	hmm0 := EmptyHMM()
-// 	x, e1 := hmm0.ReadFile(fn)
-// 	if e1 != nil {
-// 		t.Fatal(e1)
-// 	}
-// 	hmm1 := x.(*HMM)
-// 	for i, v := range hmm.ObsModels {
-// 		m := v.(*gm.Gaussian)
-// 		m1 := hmm1.ObsModels[i].(*gm.Gaussian)
-// 		CompareGaussians(t, m, m1, 0.01)
-// 	}
-// 	for i := 0; i < hmm1.NStates; i++ {
-// 		b := hmm1.ObsModels[i].LogProb(obs0[0])
-// 		t.Logf("LogProb: %f", b)
-// 	}
-// }
+	// t=0, emitting states.
+	for q := 0; q < nq; q++ {
+		for j := 1; j < nstates[q]-1; j++ {
+			v := a.At(q, 0, j) * b.At(q, j, 0)
+			alpha.Set(v, q, j, 0)
+			printLog(t, "alpha", q, j, 0, alpha)
+		}
+	}
 
-// func TestWriteReadHMMCollection(t *testing.T) {
+	// t=0, exit states.
+	for q := 0; q < nq; q++ {
+		var v float64
+		for i := 1; i < nstates[q]-1; i++ {
+			v += alpha.At(q, i, 0) * a.At(q, i, nstates[q]-1)
+		}
+		alpha.Set(v, q, nstates[q]-1, 0)
+		printLog(t, "alpha", q, nstates[q]-1, 0, alpha)
+	}
 
-// 	hmm1 := MakeHMM(t)
-// 	hmm2 := MakeHMM(t)
-// 	hmm3 := MakeHMM(t)
+	for q := 0; q < nq; q++ {
+		for tt := 1; tt < nobs; tt++ {
+			if q == 0 {
+				// t>0, entry state, first model.
+				// alpha(0,0,t) = 0
+				printLog(t, "alpha", 0, 0, tt, alpha)
+			} else {
+				// t>0, entry state, after first model.
+				v := alpha.At(q-1, nstates[q-1]-1, tt-1) + alpha.At(q-1, 0, tt)*a.At(q-1, 0, nstates[q-1]-1)
+				alpha.Set(v, q, 0, tt)
+				printLog(t, "alpha", q, 0, tt, alpha)
+			}
 
-// 	hmm1.ModelName = "H1"
-// 	hmm2.ModelName = "H2"
-// 	hmm3.ModelName = "H3"
+			// t>0, emitting states.
 
-// 	hmms := make(map[string]*HMM)
-// 	hmms["H1"] = hmm1
-// 	hmms["H2"] = hmm2
-// 	hmms["H3"] = hmm3
+			for j := 1; j < nstates[q]-1; j++ {
+				v := alpha.At(q, 0, tt) * a.At(q, 0, j)
+				for i := 1; i < nstates[q]-1; i++ {
+					v += alpha.At(q, i, tt-1) * a.At(q, i, j)
+				}
+				v *= b.At(q, j, tt)
+				alpha.Set(v, q, j, tt)
+				printLog(t, "alpha", q, j, tt, alpha)
+			}
 
-// 	fn := os.TempDir() + "hmmcoll.json"
-// 	t.Logf("Write hmm collection to: %s", fn)
-// 	e := WriteHMMCollection(hmms, fn)
-// 	if e != nil {
-// 		t.Fatal(e)
-// 	}
+			// t>0, exit states.
+			var v float64
+			for i := 1; i < nstates[q]-1; i++ {
+				v += alpha.At(q, i, tt) * a.At(q, i, nstates[q]-1)
+			}
+			alpha.Set(v, q, nstates[q]-1, tt)
+			printLog(t, "alpha", q, nstates[q]-1, tt, alpha)
+		}
+	}
+}
 
-// 	hmmsx, e2 := ReadHMMCollection(fn)
-// 	if e2 != nil {
-// 		t.Fatal(e2)
-// 	}
-// 	t.Logf("read hmm collection:")
-// 	for _, name := range []string{"H1", "H2", "H3"} {
-// 		if hmms[name].ModelName != hmmsx[name].ModelName {
-// 			t.Fatalf("model names don't match [%s] vs. [%s]", hmms[name].ModelName, hmmsx[name].ModelName)
-// 		}
-// 		t.Logf("\n%s\n:", name)
-// 		t.Logf("\n%+v\n:", hmmsx[name])
-// 	}
-// }
+func computeLogAlpha(t *testing.T) {
 
-var (
-	obs0 = [][]float64{{0.1}, {0.3}, {1.1}, {1.2},
-		{0.7}, {0.7}, {5.5}, {7.8},
-		{10.0}, {5.2}, {1.1}, {1.3}}
-	alpha01 = []float64{
-		-1.54708208451888,
-		-2.80709238811418,
-		-3.83134003758912,
-		-4.86850442594034,
-		-5.92973730403429,
-		-6.99328952650412,
-		-18.1370692144982,
-		-36.3195887463382,
-		-57.4758051059185,
-		-32.2645657649804,
-		-25.5978716740632,
-		-26.5391830081456,
-		-5.12277362619872,
-		-6.99404330419337,
-		-7.67194890763762,
-		-8.58593275227677,
-		-9.98735773434079,
-		-11.0914094981902,
-		-11.0792560557189,
-		-14.8528937698143,
-		-21.3216544274498,
-		-23.4704150851531,
-		-26.4904040834703,
-		-29.0712307616184}
-	beta01 = []float64{
-		-24.9258011954291,
-		-23.661415171904,
-		-22.6397641116887,
-		-21.6045197079498,
-		-20.549461075003,
-		-19.579339900188,
-		-17.3294657178329,
-		-13.5557050615525,
-		-7.07931720879328,
-		-2.06607429111337,
-		-1.04620524392834,
-		0,
-		-25.9309053603105,
-		-24.6182012641994,
-		-23.5726285099546,
-		-22.4540945910146,
-		-20.5873818254665,
-		-17.6335597285231,
-		-15.3835555701327,
-		-11.6097949124971,
-		-5.14103425479379,
-		-2.99265648819389,
-		-1.76872378444132,
-		0}
-	gamma01 = []float64{
-		-0.0101945977044363,
-		-0.00581887777458709,
-		-0.00841546703429051,
-		-0.0103354516465726,
-		-0.0165096967936958,
-		-0.10994074444856,
-		-9.00384625008746,
-		-23.4126051256471,
-		-38.0924336324682,
-		-7.86795137385019,
-		-0.181388235747997,
-		-0.076494325902054,
-		-4.59099030426571,
-		-5.14955588614921,
-		-4.78188873534866,
-		-4.5773386610478,
-		-4.11205087756371,
-		-2.2622805444697,
-		-0.000122943608043396,
-		-6.79257761172257e-11,
-		0,
-		-0.000382891103450269,
-		-1.79643918566812,
-		-2.60854207937483}
-	xsi = []float64{
-		-0.0151076230417916, -0.0134668664218517, -0.0174701121578483, -0.0245758675622469,
-		-0.11568757084122, -9.00936561095593, -29.3743846426695, -58.4605163217504,
-		-42.9234897636508, -7.87738137552765, -0.204482040682161, 0,
-		-5.32851547323339, -4.88295302258388, -4.71741675311881, -4.26911837592192,
-		-2.37652915707246, -0.110077221151965, -9.0038462515104, -23.4126051256471,
-		-38.1004437186275, -12.5365216739368, -3.96110379857833, 0,
-		-4.68941145338974, -5.29903007116915, -4.95669127087446, -4.84061648256679,
-		-5.27192028981584, -14.2060978713101, -23.4151837725584, -38.0924336338947,
-		-7.86795137385019, -0.181842984368506, -2.1956267387574, 0,
-		-6.95829686585791, -7.12399378960776, -6.612115474112, -6.04063655320304,
-		-4.48823943832366, -2.26228704378271, -0.000122943675802531, -6.79259981618307e-11,
-		-0.000382891103450158, -1.79646084505424, -2.90772605893015, 0}
-)
+	alpha.SetValue(math.Inf(-1))
+
+	// t=0, entry state, first model.
+	alpha.Set(0.0, 0, 0, 0)
+	printLog(t, "log_alpha", 0, 0, 0, alpha)
+
+	// t=0, entry state, after first model.
+	for q := 1; q < nq; q++ {
+		v := alpha.At(q-1, 0, 0) + loga.At(q-1, 0, nstates[q-1]-1)
+		alpha.Set(v, q, 0, 0)
+		printLog(t, "log_alpha", q, 0, 0, alpha)
+	}
+
+	// t=0, emitting states.
+	for q := 0; q < nq; q++ {
+		for j := 1; j < nstates[q]-1; j++ {
+			v := loga.At(q, 0, j) + logb.At(q, j, 0)
+			alpha.Set(v, q, j, 0)
+			printLog(t, "log_alpha", q, j, 0, alpha)
+		}
+	}
+
+	// t=0, exit states.
+	for q := 0; q < nq; q++ {
+		var v float64
+		for i := 1; i < nstates[q]-1; i++ {
+			v += math.Exp(alpha.At(q, i, 0) + loga.At(q, i, nstates[q]-1))
+		}
+		alpha.Set(math.Log(v), q, nstates[q]-1, 0)
+		printLog(t, "log_alpha", q, nstates[q]-1, 0, alpha)
+	}
+
+	for q := 0; q < nq; q++ {
+		for tt := 1; tt < nobs; tt++ {
+			if q == 0 {
+				// t>0, entry state, first model.
+				// alpha(0,0,t) = 0
+			} else {
+				// t>0, entry state, after first model.
+				v := math.Exp(alpha.At(q-1, nstates[q-1]-1, tt-1)) + math.Exp(alpha.At(q-1, 0, tt)+loga.At(q-1, 0, nstates[q-1]-1))
+				alpha.Set(math.Log(v), q, 0, tt)
+				printLog(t, "log_alpha", q, 0, tt, alpha)
+			}
+
+			// t>0, emitting states.
+			for j := 1; j < nstates[q]-1; j++ {
+				v := math.Exp(alpha.At(q, 0, tt) + loga.At(q, 0, j))
+				for i := 1; i < nstates[q]-1; i++ {
+					v += math.Exp(alpha.At(q, i, tt-1) + loga.At(q, i, j))
+				}
+				v = math.Log(v) + logb.At(q, j, tt)
+				alpha.Set(v, q, j, tt)
+				printLog(t, "log_alpha", q, j, tt, alpha)
+			}
+
+			// t>0, exit states.
+			var v float64
+			for i := 1; i < nstates[q]-1; i++ {
+				v += math.Exp(alpha.At(q, i, tt) + loga.At(q, i, nstates[q]-1))
+			}
+			alpha.Set(math.Log(v), q, nstates[q]-1, tt)
+			printLog(t, "log_alpha", q, nstates[q]-1, tt, alpha)
+		}
+	}
+}
+
+func computeBeta(t *testing.T) {
+
+	// t=nobs-1, exit state, last model.
+	beta.Set(1.0, nq-1, nstates[nq-1]-1, nobs-1)
+
+	// t=nobs-1, exit state, before last model.
+	for q := nq - 2; q >= 0; q-- {
+		v := beta.At(q+1, nstates[q+1]-1, nobs-1) * a.At(q+1, 0, nstates[q+1]-1)
+		beta.Set(v, q, nstates[q]-1, nobs-1)
+	}
+
+	// t=nobs-1, emitting states.
+	for q := nq - 1; q >= 0; q-- {
+		for i := nstates[q] - 2; i > 0; i-- {
+			v := a.At(q, i, nstates[q]-1) * beta.At(q, nstates[q]-1, nobs-1)
+			beta.Set(v, q, i, nobs-1)
+		}
+	}
+
+	// t=nobs-1, entry states.
+	for q := nq - 1; q >= 0; q-- {
+		var v float64
+		for j := 1; j < nstates[q]-1; j++ {
+			v += a.At(q, 0, j) * b.At(q, j, nobs-1) * beta.At(q, j, nobs-1)
+		}
+		beta.Set(v, q, 0, nobs-1)
+	}
+
+	for q := nq - 1; q >= 0; q-- {
+		for tt := nobs - 2; tt >= 0; tt-- {
+
+			if q == nq-1 {
+				// t<nobs-1, exit state, last model.
+				// beta(nq-1,nstates[nq-1]-1,t) = 0
+			} else {
+				// t<nobs-1, exit state, before last model.
+				v := beta.At(q+1, 0, tt+1) + beta.At(q+1, nstates[q+1]-1, tt)*a.At(q+1, 0, nstates[q+1]-1)
+				beta.Set(v, q, nstates[q]-1, tt)
+			}
+
+			// t<nobs-1, emitting states.
+			for i := nstates[q] - 2; i > 0; i-- {
+				v := a.At(q, i, nstates[q]-1) * beta.At(q, nstates[q]-1, tt)
+				for j := 1; j < nstates[q]-1; j++ {
+					v += a.At(q, i, j) * b.At(q, j, tt+1) * beta.At(q, j, tt+1)
+				}
+				beta.Set(v, q, i, tt)
+			}
+
+			// t<nobs-1, entry states.
+			var v float64
+			for j := 1; j < nstates[q]-1; j++ {
+				v += a.At(q, 0, j) * b.At(q, j, tt) * beta.At(q, j, tt)
+			}
+			beta.Set(v, q, 0, tt)
+		}
+	}
+}
+
+func computeLogBeta(t *testing.T) {
+
+	beta.SetValue(math.Inf(-1))
+
+	// t=nobs-1, exit state, last model.
+	beta.Set(0, nq-1, nstates[nq-1]-1, nobs-1)
+	printLog(t, "log_beta", nq-1, nstates[nq-1]-1, nobs-1, beta)
+
+	// t=nobs-1, exit state, before last model.
+	for q := nq - 2; q >= 0; q-- {
+		v := beta.At(q+1, nstates[q+1]-1, nobs-1) + loga.At(q+1, 0, nstates[q+1]-1)
+		beta.Set(v, q, nstates[q]-1, nobs-1)
+		printLog(t, "log_beta", q, nstates[q]-1, nobs-1, beta)
+	}
+
+	// t=nobs-1, emitting states.
+	for q := nq - 1; q >= 0; q-- {
+		for i := nstates[q] - 2; i > 0; i-- {
+			v := loga.At(q, i, nstates[q]-1) + beta.At(q, nstates[q]-1, nobs-1)
+			beta.Set(v, q, i, nobs-1)
+			printLog(t, "log_beta", q, i, nobs-1, beta)
+		}
+	}
+
+	// t=nobs-1, entry states.
+	for q := nq - 1; q >= 0; q-- {
+		var v float64
+		for j := 1; j < nstates[q]-1; j++ {
+			v += math.Exp(loga.At(q, 0, j) + logb.At(q, j, nobs-1) + beta.At(q, j, nobs-1))
+		}
+		beta.Set(math.Log(v), q, 0, nobs-1)
+		printLog(t, "log_beta", q, 0, nobs-1, beta)
+	}
+
+	for q := nq - 1; q >= 0; q-- {
+		for tt := nobs - 2; tt >= 0; tt-- {
+
+			if q == nq-1 {
+				// t<nobs-1, exit state, last model.
+				//	for tt := nobs - 2; tt >= 0; tt-- {
+				//		beta.Set(-math.MaxFloat64, nq-1, nstates[nq-1]-1, tt)
+				//	}
+				printLog(t, "log_beta", q, nstates[nq-1]-1, tt, beta)
+			} else {
+				// t<nobs-1, exit state, before last model.
+				v := math.Exp(beta.At(q+1, 0, tt+1)) + math.Exp(beta.At(q+1, nstates[q+1]-1, tt)+loga.At(q+1, 0, nstates[q+1]-1))
+				beta.Set(math.Log(v), q, nstates[q]-1, tt)
+				printLog(t, "log_beta", q, nstates[q]-1, tt, beta)
+			}
+			// t<nobs-1, emitting states.
+			for i := nstates[q] - 2; i > 0; i-- {
+				v := math.Exp(loga.At(q, i, nstates[q]-1) + beta.At(q, nstates[q]-1, tt))
+				for j := 1; j < nstates[q]-1; j++ {
+					v += math.Exp(loga.At(q, i, j) + logb.At(q, j, tt+1) + beta.At(q, j, tt+1))
+				}
+				beta.Set(math.Log(v), q, i, tt)
+				printLog(t, "log_beta", q, i, tt, beta)
+			}
+
+			// t<nobs-1, entry states.
+			var v float64
+			for j := 1; j < nstates[q]-1; j++ {
+				v += math.Exp(loga.At(q, 0, j) + logb.At(q, j, tt) + beta.At(q, j, tt))
+			}
+			beta.Set(math.Log(v), q, 0, tt)
+			printLog(t, "log_beta", q, 0, tt, beta)
+		}
+	}
+}
+
+func TestAlphaBeta(t *testing.T) {
+
+	computeAlpha(t)
+	computeBeta(t)
+	alpha1 := alpha.At(nq-1, nstates[nq-1]-1, nobs-1)
+	beta1 := beta.At(0, 0, 0)
+	delta := math.Abs(alpha1 - beta1)
+	if delta > small {
+		t.Fatalf("alpha(nq-1,n[q-1]-1,nobs-1)=%e does not match beta(0,0,0)%e", alpha.At(nq-1, nstates[nq-1]-1, nobs-1), beta.At(0, 0, 0))
+	}
+
+	t.Logf("alpha:%e beta:%e", alpha.At(nq-1, nstates[nq-1]-1, nobs-1), beta.At(0, 0, 0))
+	computeLogAlpha(t)
+	computeLogBeta(t)
+	t.Logf("log_alpha:%f log_beta:%f", alpha.At(nq-1, nstates[nq-1]-1, nobs-1), beta.At(0, 0, 0))
+	t.Logf("alpha1:%f alpha2:%f", math.Log(alpha1), alpha.At(nq-1, nstates[nq-1]-1, nobs-1))
+	t.Logf("beta1:%f beta2:%f", math.Log(beta1), beta.At(0, 0, 0))
+
+	computeNetAlpha(t)
+	n := nchain[nq-1]
+	delta = math.Abs(alpha.At(nq-1, nstates[nq-1]-1, nobs-1) - n.α.At(n.ExitState().ID(), nobs-1))
+	if delta > small {
+		t.Fatalf("log_alpha:%f does not match net_alpha:%f", alpha.At(nq-1, nstates[nq-1]-1, nobs-1), n.α.At(n.ExitState().ID(), nobs-1))
+	}
+
+	computeNetBeta(t)
+	n = nchain[0]
+	delta = math.Abs(beta.At(0, 0, 0) - n.β.At(n.EntryState().ID(), 0))
+	if delta > small {
+		t.Fatalf("log_beta:%f does not match net_beta:%f", beta.At(0, 0, 0), n.β.At(n.EntryState().ID(), 0))
+	}
+
+	alpha1 = alpha.At(nq-1, nstates[nq-1]-1, nobs-1)
+	beta1 = beta.At(0, 0, 0)
+	//	computeXAlpha(t)
+	//	computeXBeta(t)
+	xobs := narray.New(nobs, 1)
+	for k, v := range obs {
+		xobs.Set(float64(v), k, 0)
+	}
+	alpha, beta := hmms.fb(xobs)
+	delta = math.Abs(alpha1 - alpha.At(nq-1, nstates[nq-1]-1, nobs-1))
+	if delta > small {
+		t.Fatalf("log_alpha:%f does not match x_alpha:%f", alpha1, alpha.At(nq-1, nstates[nq-1]-1, nobs-1))
+	}
+	delta = math.Abs(beta1 - beta.At(0, 0, 0))
+	if delta > small {
+		t.Fatalf("log_beta:%f does not match x_alpha:%f", beta1, beta.At(0, 0, 0))
+	}
+
+}
+
+//				outputProbs.At(q, i, k)
+type scorer struct {
+	op []float64
+}
+
+func newScorer(model, state int) scorer {
+	sc := scorer{make([]float64, nsymb, nsymb)}
+	for k := 0; k < nsymb; k++ {
+		sc.op[k] = outputProbs.At(model, state, k)
+	}
+	return sc
+}
+
+func (s scorer) LogProb(o model.Obs) float64 {
+	return s.op[o.Value().(int)]
+}
+
+func initNetFB() {
+
+	net0 := NewNetwork("model 0")
+	s00 := net0.AddEntryState()
+	s01 := net0.AddState(newScorer(0, 1))
+	s02 := net0.AddState(newScorer(0, 2))
+	s03 := net0.AddState(newScorer(0, 3))
+	s04 := net0.AddExitState()
+
+	net0.AddArc(s00, s01, loga.At(0, 0, 1))
+	net0.AddArc(s00, s04, loga.At(0, 0, 4))
+	net0.AddArc(s01, s01, loga.At(0, 1, 1))
+	net0.AddArc(s01, s02, loga.At(0, 1, 2))
+	net0.AddArc(s02, s02, loga.At(0, 2, 2))
+	net0.AddArc(s02, s03, loga.At(0, 2, 3))
+	net0.AddArc(s02, s04, loga.At(0, 2, 4))
+	net0.AddArc(s03, s03, loga.At(0, 3, 3))
+	net0.AddArc(s03, s04, loga.At(0, 3, 4))
+
+	net0.Init(nobs)
+
+	net1 := NewNetwork("model 1")
+	s10 := net1.AddEntryState()
+	s11 := net1.AddState(newScorer(1, 1))
+	s12 := net1.AddState(newScorer(1, 2))
+	s13 := net1.AddExitState()
+
+	net1.AddArc(s10, s11, loga.At(1, 0, 1))
+	net1.AddArc(s11, s11, loga.At(1, 1, 1))
+	net1.AddArc(s11, s12, loga.At(1, 1, 2))
+	net1.AddArc(s11, s13, loga.At(1, 1, 3))
+	net1.AddArc(s12, s12, loga.At(1, 2, 2))
+	net1.AddArc(s12, s13, loga.At(1, 2, 3))
+
+	net1.Init(nobs)
+
+	nchain = NewChain(net0, net1)
+}
+
+// Make sure the network values are correct.
+func TestNetValues(t *testing.T) {
+
+	for q, net := range nchain {
+		for i, state := range net.States() {
+			if state.IsEmitting() {
+				for tt, o := range obs {
+					p := state.Model().LogProb(model.NewIntObs(o, model.NoLabel()))
+					if p != logb.At(q, i, tt) {
+						t.Fatalf("mismatched log prob %f vs %f", p, logb.At(q, i, tt))
+					}
+				}
+			}
+		}
+	}
+
+	for q, net := range nchain {
+		for i, from := range net.States() {
+			for j, to := range net.States() {
+				w := net.ArcWeight(from, to)
+				if !math.IsInf(w, -1) && w != loga.At(q, i, j) {
+					t.Fatalf("mismatched log prob (q:%d i:%d j:%d) %f vs %f", q, i, j, w, loga.At(q, i, j))
+				}
+			}
+		}
+	}
+}
+
+// helper function
+func logProb(s *State, o int) float64 {
+	return s.LogProb(model.NewIntObs(o, model.NoLabel()))
+}
+
+func computeNetAlpha(t *testing.T) {
+
+	// t=0, entry state, first model.
+	nchain[0].α.Set(0.0, 0, 0)
+	printLog2(t, "net_alpha", 0, 0, 0, nchain[0].α)
+
+	// t=0, entry state, after first model.
+	for q := 1; q < len(nchain); q++ {
+		n := nchain[q]
+		pn := nchain[q-1]
+		w := pn.ArcWeight(pn.EntryState(), pn.ExitState())
+		v := pn.α.At(0, 0) + w
+		n.α.Set(v, 0, 0)
+		printLog2(t, "net_alpha", q, 0, 0, n.α)
+	}
+
+	// t=0, emitting states.
+	for q, n := range nchain {
+		for j, state := range n.States() {
+			if state.IsEmitting() {
+				v := n.ArcWeight(n.EntryState(), state) + logProb(state, obs[0])
+				n.α.Set(v, j, 0)
+				printLog2(t, "net_alpha", q, j, 0, n.α)
+			}
+		}
+	}
+
+	// t=0, exit states.
+	for q, n := range nchain {
+		var v float64
+		for i, state := range n.States() {
+			if state.IsEmitting() {
+				v += math.Exp(n.α.At(i, 0) + n.ArcWeight(state, n.ExitState()))
+			}
+		}
+		n.α.Set(math.Log(v), n.ExitState().ID(), 0)
+		printLog2(t, "net_alpha", q, n.ExitState().ID(), 0, n.α)
+	}
+
+	for q, n := range nchain {
+		for tt := 1; tt < nobs; tt++ {
+			if q == 0 {
+				// t>0, entry state, first model.
+				// alpha(0,0,t) = -Inf
+				printLog2(t, "net_alpha", q, 0, tt, n.α)
+			} else {
+				pn := nchain[q-1]
+				// t>0, entry state, after first model.
+				v := math.Exp(pn.α.At(pn.ExitState().ID(), tt-1)) +
+					math.Exp(pn.α.At(0, tt)+pn.ArcWeight(pn.EntryState(), pn.ExitState()))
+				n.α.Set(math.Log(v), 0, tt)
+				printLog2(t, "net_alpha", q, 0, tt, n.α)
+			}
+
+			// t>0, emitting states.
+			for j, to := range n.States() {
+				if !to.IsEmitting() {
+					continue
+				}
+				v := math.Exp(n.α.At(n.EntryState().ID(), tt) + n.ArcWeight(n.EntryState(), to))
+
+				for _, from := range n.States() {
+					if !from.IsEmitting() {
+						continue
+					}
+					v += math.Exp(n.α.At(from.ID(), tt-1) + n.ArcWeight(from, to))
+				}
+				v = math.Log(v) + logProb(to, obs[tt])
+				n.α.Set(v, j, tt)
+				printLog2(t, "net_alpha", q, j, tt, n.α)
+			}
+
+			// t>0, exit states.
+			var v float64
+			for _, state := range n.States() {
+				if !state.IsEmitting() {
+					continue
+				}
+				v += math.Exp(n.α.At(state.ID(), tt) + n.ArcWeight(state, n.ExitState()))
+			}
+			n.α.Set(math.Log(v), n.ExitState().ID(), tt)
+			printLog2(t, "net_alpha", q, n.ExitState().ID(), tt, n.α)
+		}
+	}
+}
+
+func computeNetBeta(t *testing.T) {
+
+	lastNet := nchain[nq-1]
+
+	// t=nobs-1, exit state, last model.
+	lastNet.β.Set(0, lastNet.ExitState().ID(), nobs-1)
+	printLog2(t, "net_beta", nq-1, lastNet.ExitState().ID(), nobs-1, lastNet.β)
+
+	// t=nobs-1, exit state, before last model.
+	for q := nq - 2; q >= 0; q-- {
+		n := nchain[q]
+		nn := nchain[q+1]
+		v := nn.β.At(nn.ExitState().ID(), nobs-1) + nn.ArcWeight(nn.EntryState(), nn.ExitState())
+		n.β.Set(v, n.ExitState().ID(), nobs-1)
+		printLog2(t, "net_beta", q, n.ExitState().ID(), nobs-1, n.β)
+	}
+
+	// t=nobs-1, emitting states.
+	for q := nq - 1; q >= 0; q-- {
+		n := nchain[q]
+		for i := nstates[q] - 2; i > 0; i-- {
+			state := n.State(i)
+			v := n.ArcWeight(state, n.ExitState()) + n.β.At(n.ExitState().ID(), nobs-1)
+			n.β.Set(v, i, nobs-1)
+			printLog2(t, "net_beta", q, i, nobs-1, n.β)
+		}
+	}
+
+	// t=nobs-1, entry states.
+	for q := nq - 1; q >= 0; q-- {
+		var v float64
+		n := nchain[q]
+		for _, state := range n.EmitStates() {
+			v += math.Exp(n.ArcWeight(n.EntryState(), state) + logProb(state, obs[nobs-1]) + n.β.At(state.ID(), nobs-1))
+		}
+		n.β.Set(math.Log(v), 0, nobs-1)
+		printLog2(t, "net_beta", q, 0, nobs-1, n.β)
+	}
+
+	for q := nq - 1; q >= 0; q-- {
+		n := nchain[q]
+		for tt := nobs - 2; tt >= 0; tt-- {
+
+			if q == nq-1 {
+				// t<nobs-1, exit state, last model.
+				printLog2(t, "net_beta", q, n.ExitState().ID(), tt, n.β)
+			} else {
+				// t<nobs-1, exit state, before last model.
+				nn := nchain[q+1]
+				v := math.Exp(nn.β.At(nn.EntryState().ID(), tt+1)) + math.Exp(nn.β.At(nn.ExitState().ID(), tt)+nn.ArcWeight(nn.EntryState(), nn.ExitState()))
+				n.β.Set(math.Log(v), n.ExitState().ID(), tt)
+				printLog2(t, "net_beta", q, n.ExitState().ID(), tt, n.β)
+			}
+			// t<nobs-1, emitting states.
+			for i, from := range n.EmitStates() {
+				v := math.Exp(n.ArcWeight(from, n.ExitState()) + n.β.At(n.ExitState().ID(), tt))
+				for _, to := range n.EmitStates() { // TODO use successors
+					v += math.Exp(n.ArcWeight(from, to) + logProb(to, obs[tt+1]) + n.β.At(to.ID(), tt+1))
+				}
+				n.β.Set(math.Log(v), from.ID(), tt)
+				printLog2(t, "net_beta", q, i, tt, n.β)
+			}
+
+			// t<nobs-1, entry states.
+			var v float64
+			for _, state := range n.EmitStates() {
+				v += math.Exp(n.ArcWeight(n.EntryState(), state) + logProb(state, obs[tt]) + n.β.At(state.ID(), tt))
+			}
+			n.β.Set(math.Log(v), n.EntryState().ID(), tt)
+			printLog2(t, "net_beta", q, n.EntryState().ID(), tt, n.β)
+		}
+	}
+}
+
+func printLog(t *testing.T, name string, q, i, tt int, a *narray.NArray) {
+	t.Logf("q:%d i:%d t:%d %s:%12f", q, i, tt, name, a.At(q, i, tt))
+}
+
+func printLog2(t *testing.T, name string, q, i, tt int, a *narray.NArray) {
+	t.Logf("q:%d i:%d t:%d %s:%12f", q, i, tt, name, a.At(i, tt))
+}
+
+func (m *hmm) testLogProb(s, o int) float64 {
+	return m.b[s].LogProb(model.NewIntObs(o, model.NoLabel()))
+}
+
+func initChainFB() {
+
+	hmm0 := newHMM("model 0", 0, narray.New(nstates[0], nstates[0]),
+		[]model.Scorer{nil, newScorer(0, 1), newScorer(0, 2), newScorer(0, 3), nil})
+
+	hmm1 := newHMM("model 0", 0, narray.New(nstates[1], nstates[1]),
+		[]model.Scorer{nil, newScorer(1, 1), newScorer(1, 2), nil})
+
+	hmm0.a.Set(.9, 0, 1)
+	hmm0.a.Set(.1, 0, 4)
+	hmm0.a.Set(.5, 1, 1)
+	hmm0.a.Set(.5, 1, 2)
+	hmm0.a.Set(.3, 2, 2)
+	hmm0.a.Set(.6, 2, 3)
+	hmm0.a.Set(.1, 2, 4)
+	hmm0.a.Set(.7, 3, 3)
+	hmm0.a.Set(.3, 3, 4)
+
+	hmm1.a.Set(1, 0, 1)
+	hmm1.a.Set(.3, 1, 1)
+	hmm1.a.Set(.2, 1, 2)
+	hmm1.a.Set(.5, 1, 3)
+	hmm1.a.Set(.6, 2, 2)
+	hmm1.a.Set(.4, 2, 3)
+
+	hmm0.a = narray.Log(nil, hmm0.a.Copy())
+	hmm1.a = narray.Log(nil, hmm1.a.Copy())
+
+	hmms = newChain(hmm0, hmm1)
+}
