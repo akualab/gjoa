@@ -421,11 +421,9 @@ func TestAlphaBeta(t *testing.T) {
 
 	alpha1 = alpha.At(nq-1, nstates[nq-1]-1, nobs-1)
 	beta1 = beta.At(0, 0, 0)
-	//	computeXAlpha(t)
-	//	computeXBeta(t)
-	xobs := narray.New(nobs, 1)
+	xobs := make([]model.Obs, nobs, nobs)
 	for k, v := range obs {
-		xobs.Set(float64(v), k, 0)
+		xobs[k] = model.NewIntObs(v, model.NoLabel())
 	}
 	alpha, beta := hmms.fb(xobs)
 	delta = math.Abs(alpha1 - alpha.At(nq-1, nstates[nq-1]-1, nobs-1))

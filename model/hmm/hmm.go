@@ -35,8 +35,8 @@ func newHMM(name string, id uint16, a *narray.NArray, b []model.Scorer) *hmm {
 	}
 }
 
-func (m *hmm) logProb(s int, o float64) float64 {
-	return m.b[s].LogProb(model.NewIntObs(int(o), model.NoLabel()))
+func (m *hmm) logProb(s int, x model.Obs) float64 {
+	return m.b[s].LogProb(x)
 }
 
 type chain struct {
@@ -71,10 +71,10 @@ func (ch *chain) last() *hmm {
 	return ch.hmms[ch.nq-1]
 }
 
-func (ch *chain) fb(obs *narray.NArray) (alpha *narray.NArray, beta *narray.NArray) {
+func (ch *chain) fb(obs []model.Obs) (alpha *narray.NArray, beta *narray.NArray) {
 
-	nq := ch.nq          // num hmm models in chain.
-	nobs := obs.Shape[0] // Num observations.
+	nq := ch.nq      // num hmm models in chain.
+	nobs := len(obs) // Num observations.
 
 	alpha = narray.New(nq, ch.maxNS, nobs)
 	beta = narray.New(nq, ch.maxNS, nobs)
@@ -98,7 +98,7 @@ func (ch *chain) fb(obs *narray.NArray) (alpha *narray.NArray, beta *narray.NArr
 	// t=0, emitting states.
 	for q := 0; q < nq; q++ {
 		for j := 1; j < nstates[q]-1; j++ {
-			v := hmms[q].a.At(0, j) + hmms[q].logProb(j, obs.At(0, 0))
+			v := hmms[q].a.At(0, j) + hmms[q].logProb(j, obs[0])
 			alpha.Set(v, q, j, 0)
 		}
 	}
@@ -129,7 +129,7 @@ func (ch *chain) fb(obs *narray.NArray) (alpha *narray.NArray, beta *narray.NArr
 				for i := 1; i < nstates[q]-1; i++ {
 					v += math.Exp(alpha.At(q, i, tt-1) + hmms[q].a.At(i, j))
 				}
-				v = math.Log(v) + hmms[q].logProb(j, obs.At(tt, 0))
+				v = math.Log(v) + hmms[q].logProb(j, obs[tt])
 				alpha.Set(v, q, j, tt)
 			}
 
@@ -165,7 +165,7 @@ func (ch *chain) fb(obs *narray.NArray) (alpha *narray.NArray, beta *narray.NArr
 	for q := nq - 1; q >= 0; q-- {
 		var v float64
 		for j := 1; j < nstates[q]-1; j++ {
-			v += math.Exp(hmms[q].a.At(0, j) + hmms[q].logProb(j, obs.At(nobs-1, 0)) + beta.At(q, j, nobs-1))
+			v += math.Exp(hmms[q].a.At(0, j) + hmms[q].logProb(j, obs[nobs-1]) + beta.At(q, j, nobs-1))
 		}
 		beta.Set(math.Log(v), q, 0, nobs-1)
 	}
@@ -175,9 +175,6 @@ func (ch *chain) fb(obs *narray.NArray) (alpha *narray.NArray, beta *narray.NArr
 
 			if q == nq-1 {
 				// t<nobs-1, exit state, last model.
-				//	for tt := nobs - 2; tt >= 0; tt-- {
-				//		beta.Set(-math.MaxFloat64, nq-1, nstates[nq-1]-1, tt)
-				//	}
 			} else {
 				// t<nobs-1, exit state, before last model.
 				v := math.Exp(beta.At(q+1, 0, tt+1)) + math.Exp(beta.At(q+1, nstates[q+1]-1, tt)+hmms[q+1].a.At(0, nstates[q+1]-1))
@@ -187,7 +184,7 @@ func (ch *chain) fb(obs *narray.NArray) (alpha *narray.NArray, beta *narray.NArr
 			for i := nstates[q] - 2; i > 0; i-- {
 				v := math.Exp(hmms[q].a.At(i, nstates[q]-1) + beta.At(q, nstates[q]-1, tt))
 				for j := 1; j < nstates[q]-1; j++ {
-					v += math.Exp(hmms[q].a.At(i, j) + hmms[q].logProb(j, obs.At(tt+1, 0)) + beta.At(q, j, tt+1))
+					v += math.Exp(hmms[q].a.At(i, j) + hmms[q].logProb(j, obs[tt+1]) + beta.At(q, j, tt+1))
 				}
 				beta.Set(math.Log(v), q, i, tt)
 			}
@@ -195,7 +192,7 @@ func (ch *chain) fb(obs *narray.NArray) (alpha *narray.NArray, beta *narray.NArr
 			// t<nobs-1, entry states.
 			var v float64
 			for j := 1; j < nstates[q]-1; j++ {
-				v += math.Exp(hmms[q].a.At(0, j) + hmms[q].logProb(j, obs.At(tt, 0)) + beta.At(q, j, tt))
+				v += math.Exp(hmms[q].a.At(0, j) + hmms[q].logProb(j, obs[tt]) + beta.At(q, j, tt))
 			}
 			beta.Set(math.Log(v), q, 0, tt)
 		}
