@@ -20,11 +20,11 @@ func (d dummy) LogProb(o model.Obs) float64 { return 0.0 }
 
 func TestNet1(t *testing.T) {
 
-	net := NewNetwork()
-	s0, _ := net.AddEntryState()
-	s1, _ := net.AddState(nil)
-	s2, _ := net.AddState(nil)
-	s3, _ := net.AddExitState()
+	net := NewNetwork("test")
+	s0 := net.AddEntryState()
+	s1 := net.AddState(nil)
+	s2 := net.AddState(nil)
+	s3 := net.AddExitState()
 
 	net.AddArc(s0, s1, 0.8)
 	net.AddArc(s0, s2, 0.2)
@@ -33,44 +33,43 @@ func TestNet1(t *testing.T) {
 	net.AddArc(s2, s2, 0.7)
 	net.AddArc(s2, s3, 0.3)
 
-	_, err := net.AddExitState()
-	if err == nil {
-		t.Fatal("expected error for duplicate exit state")
+	if !panics(func() { net.AddExitState() }) {
+		t.Errorf("did not panic for duplicate exit state")
 	}
 
-	_, err = net.AddEntryState()
-	if err == nil {
-		t.Fatal("expected error for duplicate entry state")
+	if !panics(func() { net.AddEntryState() }) {
+		t.Errorf("did not panic for duplicate entry state")
 	}
 
-	net = NewNetwork()
-	_, _ = net.AddEntryState()
-	_, _ = net.AddState(nil)
-	_, _ = net.AddState(nil)
+	net = NewNetwork("test")
+	net.AddEntryState()
+	net.AddState(nil)
+	net.AddState(nil)
 
-	err = net.Validate()
+	err := net.Validate()
 	if err == nil {
 		t.Fatal("expected invalid network, missing exit state")
 	}
 
-	net = NewNetwork()
-	_, _ = net.AddExitState()
-	_, _ = net.AddState(nil)
-	_, _ = net.AddState(nil)
+	net = NewNetwork("test")
+	net.AddExitState()
+	net.AddState(nil)
+	net.AddState(nil)
 
 	err = net.Validate()
 	if err == nil {
 		t.Fatal("expected invalid network, missing entry state")
 	}
+	net.Init(10)
 }
 
 func TestNet2(t *testing.T) {
 
-	net := NewNetwork()
-	s0, _ := net.AddEntryState()
-	s1, _ := net.AddState(dummy{})
-	s2, _ := net.AddState(dummy{})
-	s3, _ := net.AddExitState()
+	net := NewNetwork("test")
+	s0 := net.AddEntryState()
+	s1 := net.AddState(dummy{})
+	s2 := net.AddState(dummy{})
+	s3 := net.AddExitState()
 
 	net.AddArc(s0, s1, 0.8)
 	net.AddArc(s0, s2, 0.2)
@@ -120,11 +119,11 @@ func MakeNetwork(t *testing.T) *Model {
 	//	initialStateProbs := []float64{0.8, 0.2}
 	//	transProbs := [][]float64{{0.9, 0.1}, {0.3, 0.7}}
 
-	net := NewNetwork()
-	s0, _ := net.AddEntryState()
-	s1, _ := net.AddState(g1)
-	s2, _ := net.AddState(g2)
-	s3, _ := net.AddExitState()
+	net := NewNetwork("test")
+	s0 := net.AddEntryState()
+	s1 := net.AddState(g1)
+	s2 := net.AddState(g2)
+	s3 := net.AddExitState()
 
 	net.AddArc(s0, s1, 0.8)
 	net.AddArc(s0, s2, 0.2)
@@ -144,4 +143,15 @@ func TestGraph(t *testing.T) {
 	_, logProb := hmm.alpha(obs0)
 	expectedLogProb := -26.4626886822436
 	gjoa.CompareFloats(t, expectedLogProb, logProb, "Error in logProb", epsilon)
+}
+
+func panics(fun func()) (b bool) {
+	defer func() {
+		err := recover()
+		if err != nil {
+			b = true
+		}
+	}()
+	fun()
+	return
 }

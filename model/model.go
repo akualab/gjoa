@@ -107,7 +107,7 @@ type Sampler interface {
 	SampleChan(size int) <-chan Obs
 }
 
-// FloatObs is an implementation of an Observer whose values are slices of float64.
+// FloatObs is an implementation of an Observer whose values are slices of type float64.
 type FloatObs struct {
 	value []float64
 	label SimpleLabel
@@ -127,10 +127,36 @@ func (fo FloatObs) Value() interface{} { return interface{}(fo.value) }
 // Label returns the label for the observation.
 func (fo FloatObs) Label() Labeler { return Labeler(fo.label) }
 
+// IntObs is an implementation of an Observer whose values are slices of type int.
+type IntObs struct {
+	value int
+	label SimpleLabel
+}
+
+// NewIntObs creates new IntObs objects.
+func NewIntObs(val int, lab SimpleLabel) Obs {
+	return IntObs{
+		value: val,
+		label: lab,
+	}
+}
+
+// Value method returns the observed value.
+func (io IntObs) Value() interface{} { return interface{}(io.value) }
+
+// Label returns the label for the observation.
+func (io IntObs) Label() Labeler { return Labeler(io.label) }
+
 // SimpleLabel implements a basic Labeler interface.
 type SimpleLabel struct {
 	name string
 	id   int
+}
+
+// NoLabel returns an empty label.
+// Use as a helper function for data with no label.
+func NoLabel() SimpleLabel {
+	return SimpleLabel{}
 }
 
 // Id method returns a unique id for the label.
