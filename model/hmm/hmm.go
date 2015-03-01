@@ -6,32 +6,60 @@ import (
 
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/narray"
+	"github.com/golang/glog"
 )
 
 // The actual hmm network implementation.
 
+type modelSet map[uint16]*hmm
+
+func (ms modelSet) add(hmms []*hmm) {
+
+	for _, h := range hmms {
+		_, exist := ms[h.id]
+		if !exist {
+			ms[h.id] = h
+			glog.V(1).Infof("added model [%s] with id [%d] to set", h.name, h.id)
+		}
+	}
+}
+
 type hmm struct {
+	// Model name.
 	name string
-	id   uint16
-	a    *narray.NArray
-	b    []model.Scorer
+	// Unique id.
+	id uint16
+	// State transition probabilities.
+	a *narray.NArray
+	// Output probabilities.
+	b []model.Scorer
+	// num states
+	ns int
+	// Accumulator for transition probabilities.
+	trAcc *narray.NArray
+	// Accumulator for global occupation counts.
+	occAcc *narray.NArray
 }
 
 func newHMM(name string, id uint16, a *narray.NArray, b []model.Scorer) *hmm {
 
 	if len(a.Shape) != 2 || a.Shape[0] != a.Shape[1] {
-		panic("rank of a must be 2 and matrix should be square")
+		panic("rank must be 2 and matrix should be square")
 	}
-	if a.Shape[0] != len(b) {
+	numStates := a.Shape[0]
+	if len(b) != numStates {
 		err := fmt.Sprintf("length of b is [%d]. must match shape of a [%d]", len(b), a.Shape[0])
 		panic(err)
 	}
 
 	return &hmm{
-		name: name,
-		id:   id,
-		a:    a,
-		b:    b,
+		name:   name,
+		id:     id,
+		a:      a,
+		b:      b,
+		trAcc:  narray.New(numStates, numStates),
+		occAcc: narray.New(numStates),
+		ns:     numStates,
 	}
 }
 
@@ -40,18 +68,33 @@ func (m *hmm) logProb(s int, x model.Obs) float64 {
 }
 
 type chain struct {
-	hmms  []*hmm
+	// Composite hmm.
+	hmms []*hmm
+	// Max number of states needed in this chain.
 	maxNS int
-	nq    int
-	ns    []int
+	// Num hmms in this chain.
+	nq int
+	// Slice of num states for hmms in this chain.
+	ns []int
+	// Observations.
+	obs []model.Obs
+	// alpha, beta arrays.
+	alpha, beta *narray.NArray
+	// the model set.
+	ms modelSet
 }
 
-func newChain(m ...*hmm) *chain {
+func newChain(ms modelSet, obs []model.Obs, m ...*hmm) *chain {
 
+	if ms == nil {
+		panic("model set must be initialized")
+	}
+	ms.add(m) // add models to set
 	ch := &chain{
 		hmms: m,
 		nq:   len(m),
 		ns:   make([]int, len(m), len(m)),
+		obs:  obs,
 	}
 
 	for k, v := range m {
@@ -60,24 +103,110 @@ func newChain(m ...*hmm) *chain {
 		}
 		ch.ns[k] = v.a.Shape[0]
 	}
+	nobs := len(obs)
+	ch.alpha = narray.New(ch.nq, ch.maxNS, nobs)
+	ch.beta = narray.New(ch.nq, ch.maxNS, nobs)
 	return ch
 }
 
-func (ch *chain) first() *hmm {
-	return ch.hmms[0]
+func (ch *chain) update() {
+
+	nobs := len(ch.obs)
+	alpha := ch.alpha
+	beta := ch.beta
+
+	// Compute occupation counts.
+	glog.Infof("computing hmm occupation counts.")
+	for q, h := range ch.hmms {
+		last := ch.ns[q] - 1
+		for t := range ch.obs {
+			for i := 0; i <= last; i++ {
+				v := math.Exp(alpha.At(q, i, t) + beta.At(q, i, t))
+				if i == 0 && q < ch.nq-1 {
+					// if entry state, add direct trans to next model.
+					v += math.Exp(alpha.At(q, 0, t) +
+						h.a.At(0, last) + beta.At(q+1, 0, t))
+				}
+				h.occAcc.Inc(v, i)
+				glog.V(4).Infof("q:%d, t:%d, i:%d, occ:%e", q, t, i, math.Exp(v))
+			}
+		}
+	}
+
+	// Compute state transition counts.
+	glog.Infof("computing hmm state transition counts.")
+	for q, h := range ch.hmms {
+		ns := ch.ns[q]
+		last := ch.ns[q] - 1
+		for t, o := range ch.obs {
+			for i := 0; i < last; i++ {
+				for j := 1; j < ns; j++ {
+
+					if i == 0 && j < last {
+
+						// From entry state to internal state.
+						v := alpha.At(q, 0, t) + h.a.At(0, j) +
+							h.logProb(j, o) + beta.At(q, j, t)
+						h.trAcc.Inc(math.Exp(v), 0, j)
+
+					} else if i > 0 && j < last && t < nobs-1 {
+
+						// Internal transitions.
+						v := alpha.At(q, i, t) + h.a.At(i, j) +
+							h.logProb(j, ch.obs[t+1]) + beta.At(q, j, t+1)
+						h.trAcc.Inc(math.Exp(v), i, j)
+
+					} else if i > 0 && j == last {
+
+						// From internal state to exit state.
+						v := alpha.At(q, i, t) + h.a.At(i, last) + beta.At(q, last, t)
+						h.trAcc.Inc(math.Exp(v), i, last)
+					}
+
+					// Direct transition from entry to exit states.
+					if i == 0 && j == last && q < ch.nq-1 {
+						v := alpha.At(q, 0, t) + h.a.At(0, last) + beta.At(q+1, 0, t)
+						h.trAcc.Inc(math.Exp(v), 0, last)
+					}
+					glog.V(4).Infof("q:%d, t:%d, i:%d, tracc:%e", q, t, i, h.trAcc.At(i, j))
+				}
+			}
+		}
+	}
 }
 
-func (ch *chain) last() *hmm {
-	return ch.hmms[ch.nq-1]
+func (ms modelSet) reestimate() {
+
+	glog.V(4).Infof("reestimating state transition probabilities")
+	for id, h := range ms {
+		ns := h.ns
+		for i := 0; i < ns; i++ {
+			for j := 0; j < ns; j++ {
+				v := h.trAcc.At(i, j) / h.occAcc.At(i)
+				glog.V(4).Infof("name:%10s, id:%d, i:%d, j:%d, old:%e, new:%e", h.name, id, i, j,
+					math.Exp(h.a.At(i, j)), v)
+				h.a.Set(math.Log(v), i, j)
+			}
+		}
+	}
 }
 
-func (ch *chain) fb(obs []model.Obs) (alpha *narray.NArray, beta *narray.NArray) {
+func (ch *chain) reset() {
 
-	nq := ch.nq      // num hmm models in chain.
-	nobs := len(obs) // Num observations.
+	glog.V(4).Infof("reseting accumulators")
+	for _, h := range ch.hmms {
+		h.occAcc.SetValue(0.0)
+		h.trAcc.SetValue(0.0)
+	}
+}
 
-	alpha = narray.New(nq, ch.maxNS, nobs)
-	beta = narray.New(nq, ch.maxNS, nobs)
+func (ch *chain) fb() {
+
+	nq := ch.nq         // num hmm models in chain.
+	nobs := len(ch.obs) // Num observations.
+
+	alpha := ch.alpha
+	beta := ch.beta
 	hmms := ch.hmms
 	nstates := ch.ns
 
@@ -98,7 +227,7 @@ func (ch *chain) fb(obs []model.Obs) (alpha *narray.NArray, beta *narray.NArray)
 	// t=0, emitting states.
 	for q := 0; q < nq; q++ {
 		for j := 1; j < nstates[q]-1; j++ {
-			v := hmms[q].a.At(0, j) + hmms[q].logProb(j, obs[0])
+			v := hmms[q].a.At(0, j) + hmms[q].logProb(j, ch.obs[0])
 			alpha.Set(v, q, j, 0)
 		}
 	}
@@ -126,10 +255,10 @@ func (ch *chain) fb(obs []model.Obs) (alpha *narray.NArray, beta *narray.NArray)
 			// t>0, emitting states.
 			for j := 1; j < nstates[q]-1; j++ {
 				v := math.Exp(alpha.At(q, 0, tt) + hmms[q].a.At(0, j))
-				for i := 1; i < nstates[q]-1; i++ {
+				for i := 1; i <= j; i++ {
 					v += math.Exp(alpha.At(q, i, tt-1) + hmms[q].a.At(i, j))
 				}
-				v = math.Log(v) + hmms[q].logProb(j, obs[tt])
+				v = math.Log(v) + hmms[q].logProb(j, ch.obs[tt])
 				alpha.Set(v, q, j, tt)
 			}
 
@@ -165,7 +294,7 @@ func (ch *chain) fb(obs []model.Obs) (alpha *narray.NArray, beta *narray.NArray)
 	for q := nq - 1; q >= 0; q-- {
 		var v float64
 		for j := 1; j < nstates[q]-1; j++ {
-			v += math.Exp(hmms[q].a.At(0, j) + hmms[q].logProb(j, obs[nobs-1]) + beta.At(q, j, nobs-1))
+			v += math.Exp(hmms[q].a.At(0, j) + hmms[q].logProb(j, ch.obs[nobs-1]) + beta.At(q, j, nobs-1))
 		}
 		beta.Set(math.Log(v), q, 0, nobs-1)
 	}
@@ -183,8 +312,8 @@ func (ch *chain) fb(obs []model.Obs) (alpha *narray.NArray, beta *narray.NArray)
 			// t<nobs-1, emitting states.
 			for i := nstates[q] - 2; i > 0; i-- {
 				v := math.Exp(hmms[q].a.At(i, nstates[q]-1) + beta.At(q, nstates[q]-1, tt))
-				for j := 1; j < nstates[q]-1; j++ {
-					v += math.Exp(hmms[q].a.At(i, j) + hmms[q].logProb(j, obs[tt+1]) + beta.At(q, j, tt+1))
+				for j := i; j < nstates[q]-1; j++ {
+					v += math.Exp(hmms[q].a.At(i, j) + hmms[q].logProb(j, ch.obs[tt+1]) + beta.At(q, j, tt+1))
 				}
 				beta.Set(math.Log(v), q, i, tt)
 			}
@@ -192,7 +321,7 @@ func (ch *chain) fb(obs []model.Obs) (alpha *narray.NArray, beta *narray.NArray)
 			// t<nobs-1, entry states.
 			var v float64
 			for j := 1; j < nstates[q]-1; j++ {
-				v += math.Exp(hmms[q].a.At(0, j) + hmms[q].logProb(j, obs[tt]) + beta.At(q, j, tt))
+				v += math.Exp(hmms[q].a.At(0, j) + hmms[q].logProb(j, ch.obs[tt]) + beta.At(q, j, tt))
 			}
 			beta.Set(math.Log(v), q, 0, tt)
 		}

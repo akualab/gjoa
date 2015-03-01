@@ -1,6 +1,7 @@
 package hmm
 
 import (
+	"flag"
 	"math"
 	"math/rand"
 	"os"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/narray"
+	"github.com/golang/glog"
 )
 
 // Test embedded hmm.
@@ -49,9 +51,17 @@ var (
 	outputProbs                   *narray.NArray
 	nchain                        Chain
 	hmms                          *chain
+	ms                            modelSet
 )
 
 func TestMain(m *testing.M) {
+
+	// configure glog.
+	flag.Set("alsologtostderr", "true")
+	flag.Set("log_dir", "/tmp/log")
+	flag.Set("v", "4")
+	flag.Parse()
+	glog.Info("Logging configured")
 
 	ns = 5 // max num states in a model
 	nstates[0] = 5
@@ -421,11 +431,11 @@ func TestAlphaBeta(t *testing.T) {
 
 	alpha1 = alpha.At(nq-1, nstates[nq-1]-1, nobs-1)
 	beta1 = beta.At(0, 0, 0)
-	xobs := make([]model.Obs, nobs, nobs)
-	for k, v := range obs {
-		xobs[k] = model.NewIntObs(v, model.NoLabel())
-	}
-	alpha, beta := hmms.fb(xobs)
+
+	hmms.fb()
+	t.Logf("alpha1:%f alpha2:%f", alpha1, alpha.At(nq-1, nstates[nq-1]-1, nobs-1))
+	t.Logf("beta1:%f beta2:%f", beta1, beta.At(0, 0, 0))
+
 	delta = math.Abs(alpha1 - alpha.At(nq-1, nstates[nq-1]-1, nobs-1))
 	if delta > small {
 		t.Fatalf("log_alpha:%f does not match x_alpha:%f", alpha1, alpha.At(nq-1, nstates[nq-1]-1, nobs-1))
@@ -434,6 +444,9 @@ func TestAlphaBeta(t *testing.T) {
 	if delta > small {
 		t.Fatalf("log_beta:%f does not match x_alpha:%f", beta1, beta.At(0, 0, 0))
 	}
+
+	hmms.update()
+	ms.reestimate()
 
 }
 
@@ -467,7 +480,7 @@ func initChainFB() {
 	hmm0 := newHMM("model 0", 0, narray.New(nstates[0], nstates[0]),
 		[]model.Scorer{nil, newScorer(0, 1), newScorer(0, 2), newScorer(0, 3), nil})
 
-	hmm1 := newHMM("model 0", 0, narray.New(nstates[1], nstates[1]),
+	hmm1 := newHMM("model 1", 1, narray.New(nstates[1], nstates[1]),
 		[]model.Scorer{nil, newScorer(1, 1), newScorer(1, 2), nil})
 
 	hmm0.a.Set(.9, 0, 1)
@@ -490,5 +503,11 @@ func initChainFB() {
 	hmm0.a = narray.Log(nil, hmm0.a.Copy())
 	hmm1.a = narray.Log(nil, hmm1.a.Copy())
 
-	hmms = newChain(hmm0, hmm1)
+	xobs := make([]model.Obs, nobs, nobs)
+	for k, v := range obs {
+		xobs[k] = model.NewIntObs(v, model.NoLabel())
+	}
+
+	ms = make(modelSet)
+	hmms = newChain(ms, xobs, hmm0, hmm1)
 }
