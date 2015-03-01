@@ -59,7 +59,7 @@ func TestMain(m *testing.M) {
 	// configure glog.
 	flag.Set("alsologtostderr", "true")
 	flag.Set("log_dir", "/tmp/log")
-	flag.Set("v", "4")
+	flag.Set("v", "5")
 	flag.Parse()
 	glog.Info("Logging configured")
 
@@ -432,13 +432,14 @@ func TestAlphaBeta(t *testing.T) {
 	alpha1 = alpha.At(nq-1, nstates[nq-1]-1, nobs-1)
 	beta1 = beta.At(0, 0, 0)
 
-	//	hmms.fb()
+	t.Log("")
+	t.Log("compute fb using package")
 	hmms.update()
-	t.Logf("alpha1:%f alpha2:%f", alpha1, alpha.At(nq-1, nstates[nq-1]-1, nobs-1))
-	t.Logf("beta1:%f beta2:%f", beta1, beta.At(0, 0, 0))
+	alpha2 := hmms.alpha.At(nq-1, nstates[nq-1]-1, nobs-1)
+	beta2 := hmms.beta.At(0, 0, 0)
 
-	alpha2 := alpha.At(nq-1, nstates[nq-1]-1, nobs-1)
-	beta2 := beta.At(0, 0, 0)
+	t.Logf("alpha1:%f alpha2:%f", alpha1, alpha2)
+	t.Logf("beta1:%f beta2:%f", beta1, beta2)
 
 	delta = math.Abs(alpha1 - alpha2)
 	if delta > smallNumber {
