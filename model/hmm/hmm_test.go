@@ -432,20 +432,31 @@ func TestAlphaBeta(t *testing.T) {
 	alpha1 = alpha.At(nq-1, nstates[nq-1]-1, nobs-1)
 	beta1 = beta.At(0, 0, 0)
 
-	hmms.fb()
+	//	hmms.fb()
+	hmms.update()
 	t.Logf("alpha1:%f alpha2:%f", alpha1, alpha.At(nq-1, nstates[nq-1]-1, nobs-1))
 	t.Logf("beta1:%f beta2:%f", beta1, beta.At(0, 0, 0))
 
-	delta = math.Abs(alpha1 - alpha.At(nq-1, nstates[nq-1]-1, nobs-1))
-	if delta > small {
-		t.Fatalf("log_alpha:%f does not match x_alpha:%f", alpha1, alpha.At(nq-1, nstates[nq-1]-1, nobs-1))
-	}
-	delta = math.Abs(beta1 - beta.At(0, 0, 0))
-	if delta > small {
-		t.Fatalf("log_beta:%f does not match x_alpha:%f", beta1, beta.At(0, 0, 0))
+	alpha2 := alpha.At(nq-1, nstates[nq-1]-1, nobs-1)
+	beta2 := beta.At(0, 0, 0)
+
+	delta = math.Abs(alpha1 - alpha2)
+	if delta > smallNumber {
+		t.Fatalf("log_alpha:%f does not match x_alpha:%f", alpha1, alpha2)
 	}
 
-	hmms.update()
+	delta = math.Abs(beta1 - beta2)
+	if delta > smallNumber {
+		t.Fatalf("log_beta:%f does not match x_alpha:%f", beta1, beta2)
+	}
+
+	// check log prob per obs calculated with alpha and beta
+	delta = math.Abs(alpha2-beta2) / float64(nobs)
+	if delta > 0.01 {
+		t.Fatalf("alphaLogProb:%e does not match betaLogProb:%f", alpha2, beta2)
+	}
+
+	//	hmms.update()
 	ms.reestimate()
 
 }

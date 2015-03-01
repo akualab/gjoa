@@ -42,7 +42,7 @@ type Model struct {
 	// q(t) is the state at time t
 	// states are labeled {0,2,...,N-1}
 
-	// Number fo hidden states.
+	// Number of hidden states.
 	// N
 	NStates int `json:"num_states"`
 

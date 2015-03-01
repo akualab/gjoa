@@ -19,7 +19,7 @@ func (ms modelSet) add(hmms []*hmm) {
 		_, exist := ms[h.id]
 		if !exist {
 			ms[h.id] = h
-			glog.V(1).Infof("added model [%s] with id [%d] to set", h.name, h.id)
+			glog.V(1).Infof("add model [%s] with id [%d] to set", h.name, h.id)
 		}
 	}
 }
@@ -111,12 +111,17 @@ func newChain(ms modelSet, obs []model.Obs, m ...*hmm) *chain {
 
 func (ch *chain) update() {
 
+	ch.fb()    // Compute forward-backward probabilities.
+	ch.reset() // reset accumulators.
 	nobs := len(ch.obs)
 	alpha := ch.alpha
 	beta := ch.beta
 
+	logProb := beta.At(0, 0, 0)
+	glog.Infof("log prob per observation:%e", logProb/float64(nobs))
+
 	// Compute occupation counts.
-	glog.Infof("computing hmm occupation counts.")
+	glog.Infof("compute hmm occupation counts.")
 	for q, h := range ch.hmms {
 		last := ch.ns[q] - 1
 		for t := range ch.obs {
@@ -134,7 +139,7 @@ func (ch *chain) update() {
 	}
 
 	// Compute state transition counts.
-	glog.Infof("computing hmm state transition counts.")
+	glog.Infof("compute hmm state transition counts.")
 	for q, h := range ch.hmms {
 		ns := ch.ns[q]
 		last := ch.ns[q] - 1
@@ -177,7 +182,7 @@ func (ch *chain) update() {
 
 func (ms modelSet) reestimate() {
 
-	glog.V(4).Infof("reestimating state transition probabilities")
+	glog.Infof("reestimate state transition probabilities")
 	for id, h := range ms {
 		ns := h.ns
 		for i := 0; i < ns; i++ {
@@ -193,7 +198,7 @@ func (ms modelSet) reestimate() {
 
 func (ch *chain) reset() {
 
-	glog.V(4).Infof("reseting accumulators")
+	glog.V(2).Infof("reset accumulators")
 	for _, h := range ch.hmms {
 		h.occAcc.SetValue(0.0)
 		h.trAcc.SetValue(0.0)
@@ -212,8 +217,8 @@ func (ch *chain) fb() {
 
 	// Compute alpha.
 
+	glog.V(2).Infof("compute forward probabilities")
 	alpha.SetValue(math.Inf(-1))
-	beta.SetValue(math.Inf(-1))
 
 	// t=0, entry state, first model.
 	alpha.Set(0.0, 0, 0, 0)
@@ -271,7 +276,12 @@ func (ch *chain) fb() {
 		}
 	}
 
+	alphaLogProb := alpha.At(nq-1, ch.ns[nq-1]-1, nobs-1)
+	glog.V(2).Infof("alpha total prob:%f, avg per obs:%f", alphaLogProb, alphaLogProb/float64(nobs))
+
 	// Compute beta.
+
+	beta.SetValue(math.Inf(-1))
 
 	// t=nobs-1, exit state, last model.
 	beta.Set(0, nq-1, nstates[nq-1]-1, nobs-1)
@@ -326,5 +336,12 @@ func (ch *chain) fb() {
 			beta.Set(math.Log(v), q, 0, tt)
 		}
 	}
+
+	betaLogProb := beta.At(0, 0, 0)
+	glog.V(4).Infof("beta total prob:%f, avg per obs:%f", betaLogProb, betaLogProb/float64(nobs))
+
+	diff := (alphaLogProb - betaLogProb) / float64(nobs)
+	glog.V(4).Infof("alpha-beta relative diff:%e", diff)
+
 	return
 }
