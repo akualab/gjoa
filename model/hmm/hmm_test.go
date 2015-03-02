@@ -42,7 +42,9 @@ const (
 )
 
 var (
-	obs                           = []int{2, 0, 0, 1, 0, 2, 1, 1, 0, 1}
+	//	obs                           = []int{2, 0, 0, 1, 0, 2, 1, 1, 0, 1}
+	obs                           = []int{2, 0, 0, 1, 0, 2, 1, 1, 0, 1, 1, 1, 2, 1, 2, 0, 0, 1, 2, 1}
+	xobs                          []model.Obs
 	nsymb                         = 3 // num distinct observations: 0,1,2
 	a, b, loga, logb, alpha, beta *narray.NArray
 	nstates                       [nq]int
@@ -51,6 +53,7 @@ var (
 	outputProbs                   *narray.NArray
 	nchain                        Chain
 	hmms                          *chain
+	hmm0, hmm1                    *hmm
 	ms                            modelSet
 )
 
@@ -72,8 +75,7 @@ func TestMain(m *testing.M) {
 	alpha = narray.New(nq, ns, nobs)
 	beta = narray.New(nq, ns, nobs)
 
-	a.Set(.9, 0, 0, 1)
-	a.Set(.1, 0, 0, 4)
+	a.Set(1, 0, 0, 1)
 	a.Set(.5, 0, 1, 1)
 	a.Set(.5, 0, 1, 2)
 	a.Set(.3, 0, 2, 2)
@@ -85,7 +87,6 @@ func TestMain(m *testing.M) {
 	a.Set(1, 1, 0, 1)
 	a.Set(.3, 1, 1, 1)
 	a.Set(.2, 1, 1, 2)
-	a.Set(.5, 1, 1, 3)
 	a.Set(.6, 1, 2, 2)
 	a.Set(.4, 1, 2, 3)
 
@@ -162,7 +163,7 @@ func computeAlpha(t *testing.T) {
 	// t=0, emitting states.
 	for q := 0; q < nq; q++ {
 		for j := 1; j < nstates[q]-1; j++ {
-			v := a.At(q, 0, j) * b.At(q, j, 0)
+			v := alpha.At(q, 0, 0) * a.At(q, 0, j) * b.At(q, j, 0)
 			alpha.Set(v, q, j, 0)
 			printLog(t, "alpha", q, j, 0, alpha)
 		}
@@ -232,7 +233,7 @@ func computeLogAlpha(t *testing.T) {
 	// t=0, emitting states.
 	for q := 0; q < nq; q++ {
 		for j := 1; j < nstates[q]-1; j++ {
-			v := loga.At(q, 0, j) + logb.At(q, j, 0)
+			v := alpha.At(q, 0, 0) + loga.At(q, 0, j) + logb.At(q, j, 0)
 			alpha.Set(v, q, j, 0)
 			printLog(t, "log_alpha", q, j, 0, alpha)
 		}
@@ -489,14 +490,13 @@ func (m *hmm) testLogProb(s, o int) float64 {
 
 func initChainFB() {
 
-	hmm0 := newHMM("model 0", 0, narray.New(nstates[0], nstates[0]),
+	hmm0 = newHMM("model 0", 0, narray.New(nstates[0], nstates[0]),
 		[]model.Scorer{nil, newScorer(0, 1), newScorer(0, 2), newScorer(0, 3), nil})
 
-	hmm1 := newHMM("model 1", 1, narray.New(nstates[1], nstates[1]),
+	hmm1 = newHMM("model 1", 1, narray.New(nstates[1], nstates[1]),
 		[]model.Scorer{nil, newScorer(1, 1), newScorer(1, 2), nil})
 
-	hmm0.a.Set(.9, 0, 1)
-	hmm0.a.Set(.1, 0, 4)
+	hmm0.a.Set(1, 0, 1)
 	hmm0.a.Set(.5, 1, 1)
 	hmm0.a.Set(.5, 1, 2)
 	hmm0.a.Set(.3, 2, 2)
@@ -508,18 +508,68 @@ func initChainFB() {
 	hmm1.a.Set(1, 0, 1)
 	hmm1.a.Set(.3, 1, 1)
 	hmm1.a.Set(.2, 1, 2)
-	hmm1.a.Set(.5, 1, 3)
 	hmm1.a.Set(.6, 2, 2)
 	hmm1.a.Set(.4, 2, 3)
 
 	hmm0.a = narray.Log(nil, hmm0.a.Copy())
 	hmm1.a = narray.Log(nil, hmm1.a.Copy())
 
-	xobs := make([]model.Obs, nobs, nobs)
+	xobs = make([]model.Obs, nobs, nobs)
 	for k, v := range obs {
 		xobs[k] = model.NewIntObs(v, model.NoLabel())
 	}
 
 	ms = make(modelSet)
 	hmms = newChain(ms, xobs, hmm0, hmm1)
+}
+
+func TestTeeModel(t *testing.T) {
+
+	testScorer := func() scorer {
+		return scorer{[]float64{math.Log(0.4), math.Log(0.2), math.Log(0.4)}}
+	}
+	hmm2 := newHMM("model 2", 2, narray.New(3, 3),
+		[]model.Scorer{nil, testScorer(), nil})
+
+	hmm3 := newHMM("model 3", 3, narray.New(4, 4),
+		[]model.Scorer{nil, testScorer(), testScorer(), nil})
+
+	hmm2.a.Set(1, 0, 1)
+	hmm2.a.Set(0.5, 1, 1)
+	hmm2.a.Set(0.5, 1, 2)
+
+	hmm3.a.Set(.9, 0, 1)
+	hmm3.a.Set(.1, 0, 3) // entry to exit transition.
+	hmm3.a.Set(0.5, 1, 1)
+	hmm3.a.Set(0.5, 1, 2)
+	hmm3.a.Set(0.5, 2, 2)
+	hmm3.a.Set(0.5, 2, 3)
+
+	hmm2.a = narray.Log(nil, hmm2.a.Copy())
+	hmm3.a = narray.Log(nil, hmm3.a.Copy())
+
+	ms2 := make(modelSet)
+	hmms2 := newChain(ms2, xobs, hmm0, hmm2, hmm3, hmm0, hmm0, hmm0, hmm0, hmm2)
+
+	hmms2.update()
+	nq := hmms2.nq
+	alpha2 := hmms2.alpha.At(nq-1, hmms2.ns[nq-1]-1, nobs-1)
+	beta2 := hmms2.beta.At(0, 0, 0)
+
+	t.Logf("alpha2:%f", alpha2)
+	t.Logf("beta2:%f", beta2)
+
+	// check log prob per obs calculated with alpha and beta
+	delta := math.Abs(alpha2-beta2) / float64(nobs)
+	if delta > 0.00001 {
+		t.Fatalf("alphaLogProb:%f does not match betaLogProb:%f", alpha2, beta2)
+	}
+
+	if !panics(func() { newChain(ms2, xobs, hmm3, hmm0, hmm2, hmm2) }) {
+		t.Errorf("did not panic - first model has trans from entry to exit")
+	}
+
+	if !panics(func() { newChain(ms2, xobs, hmm1, hmm0, hmm2, hmm3) }) {
+		t.Errorf("did not panic - last model has trans from entry to exit")
+	}
 }

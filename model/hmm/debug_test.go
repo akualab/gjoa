@@ -10,28 +10,6 @@ import (
 
 // Test embedded hmm.
 
-/*
-                     nq=2 (num models)
-          q = 0                q = 1  (model index)
-       N(q=0) = 5            N(q=1) = 4  (num states fro model q)
-
-   0    1     2     3    4   0    1    2     3  (state indices)
-   o-->( )-->( )-->( )-->o   o-->( )-->( )-->o
-           |
-        a(q=0, i=1, j=2)  (transition prob)
-
-   Transition probs:
-
-   q=0                   q=1
-      0  1  2  3  4         0  1  2  3
-   0     .9       .1     0     1
-   1     .5 .5           1     .3 .2 .5
-   2        .3 .6 .1     2        .6 .4
-   3           .7 .3     3
-   4
-
-*/
-
 var (
 	hmms2 *chain
 	ms2   modelSet
@@ -51,7 +29,7 @@ func TestDebug(t *testing.T) {
 
 	// check log prob per obs calculated with alpha and beta
 	delta := math.Abs(alpha2-beta2) / float64(nobs)
-	if delta > 0.01 {
+	if delta > 0.00001 {
 		t.Fatalf("alphaLogProb:%f does not match betaLogProb:%f", alpha2, beta2)
 	}
 
@@ -67,10 +45,17 @@ func initChainFB2() {
 	hmm1 := newHMM("model 1", 1, narray.New(nstates[1], nstates[1]),
 		[]model.Scorer{nil, newScorer(1, 1), newScorer(1, 2), nil})
 
+	testScorer := func() scorer {
+		return scorer{[]float64{math.Log(0.4), math.Log(0.2), math.Log(0.4)}}
+	}
 	hmm2 := newHMM("model 2", 2, narray.New(3, 3),
-		[]model.Scorer{nil, scorer{[]float64{math.Log(0.4), math.Log(0.2), math.Log(0.4)}}, nil})
+		[]model.Scorer{nil, testScorer(), nil})
+
+	hmm3 := newHMM("model 3", 3, narray.New(4, 4),
+		[]model.Scorer{nil, testScorer(), testScorer(), nil})
 
 	hmm0.a.Set(.9, 0, 1)
+	//	hmm0.a.Set(1, 0, 1)
 	hmm0.a.Set(.1, 0, 4)
 	hmm0.a.Set(.5, 1, 1)
 	hmm0.a.Set(.5, 1, 2)
@@ -91,9 +76,16 @@ func initChainFB2() {
 	hmm2.a.Set(0.5, 1, 1)
 	hmm2.a.Set(0.5, 1, 2)
 
+	hmm3.a.Set(1, 0, 1)
+	hmm3.a.Set(0.5, 1, 1)
+	hmm3.a.Set(0.5, 1, 2)
+	hmm3.a.Set(0.5, 2, 2)
+	hmm3.a.Set(0.5, 2, 3)
+
 	hmm0.a = narray.Log(nil, hmm0.a.Copy())
 	hmm1.a = narray.Log(nil, hmm1.a.Copy())
 	hmm2.a = narray.Log(nil, hmm2.a.Copy())
+	hmm3.a = narray.Log(nil, hmm3.a.Copy())
 
 	xobs := make([]model.Obs, nobs, nobs)
 	for k, v := range obs {
@@ -101,6 +93,6 @@ func initChainFB2() {
 	}
 
 	ms2 = make(modelSet)
-	//	hmms2 = newChain(ms2, xobs, hmm0, hmm1)
-	hmms2 = newChain(ms2, xobs, hmm0, hmm1)
+	//	hmms2 = newChain(ms2, xobs, hmm1, hmm1,hmm2)
+	hmms2 = newChain(ms2, xobs, hmm3, hmm0, hmm3, hmm0, hmm0, hmm0, hmm0, hmm3)
 }

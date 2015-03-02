@@ -82,6 +82,8 @@ type chain struct {
 	alpha, beta *narray.NArray
 	// the model set.
 	ms modelSet
+	// total log prob
+	totalProb float64
 }
 
 func newChain(ms modelSet, obs []model.Obs, m ...*hmm) *chain {
@@ -106,6 +108,18 @@ func newChain(ms modelSet, obs []model.Obs, m ...*hmm) *chain {
 	nobs := len(obs)
 	ch.alpha = narray.New(ch.nq, ch.maxNS, nobs)
 	ch.beta = narray.New(ch.nq, ch.maxNS, nobs)
+
+	// Validate.
+
+	// Can't have models with transitions from entry to exit states
+	// at the beginning or end of a chain.
+	if isTeeModel(m[0]) {
+		panic("the first model in the chain can't have a transition from entry to exit states")
+	}
+	if isTeeModel(m[len(m)-1]) {
+		panic("the last model in the chain can't have a transition from entry to exit states")
+	}
+
 	return ch
 }
 
@@ -227,7 +241,6 @@ func (ch *chain) fb() {
 	// t=0, emitting states.
 	for q := 0; q < nq; q++ {
 		for j := 1; j < ns[q]-1; j++ {
-			// v := hmms[q].a.At(0, j) + hmms[q].logProb(j, ch.obs[0])
 			v := alpha.At(q, 0, 0) + hmms[q].a.At(0, j) + hmms[q].logProb(j, ch.obs[0])
 			alpha.Set(v, q, j, 0)
 			glog.V(5).Infof("q:%d, i:%d, t:%d, alpha:%f", q, j, 0, v)
@@ -245,9 +258,9 @@ func (ch *chain) fb() {
 		glog.V(5).Infof("q:%d, i:%d, t:%d, alpha:%f", q, exit, 0, math.Log(v))
 	}
 
-	for q := 0; q < nq; q++ {
-		exit := ns[q] - 1
-		for tt := 1; tt < nobs; tt++ {
+	for tt := 1; tt < nobs; tt++ {
+		for q := 0; q < nq; q++ {
+			exit := ns[q] - 1
 			for j := 0; j <= exit; j++ {
 				var v float64
 				switch {
@@ -258,25 +271,24 @@ func (ch *chain) fb() {
 						v += math.Exp(alpha.At(q, i, tt-1) + hmms[q].a.At(i, j))
 					}
 					v = math.Log(v) + hmms[q].logProb(j, ch.obs[tt])
+					v = math.Exp(v)
 				case j == 0 && q == 0:
 					// t>0, entry state, first model.
 					// alpha(0,0,t) = -Inf
-					continue
+					v = 0.0
 				case j == 0 && q > 0:
 					// t>0, entry state, after first model.
 					v = math.Exp(alpha.At(q-1, ns[q-1]-1, tt-1)) +
 						math.Exp(alpha.At(q-1, 0, tt)+hmms[q-1].a.At(0, ns[q-1]-1))
-					v = math.Log(v)
 				case j == exit:
 					// t>0, exit states.
 
 					for i := 1; i < exit; i++ {
 						v += math.Exp(alpha.At(q, i, tt) + hmms[q].a.At(i, exit))
 					}
-					v = math.Log(v)
 				}
-				alpha.Set(v, q, j, tt)
-				glog.V(5).Infof("q:%d, i:%d, t:%d, alpha:%f", q, j, tt, v)
+				alpha.Set(math.Log(v), q, j, tt)
+				glog.V(5).Infof("q:%d, i:%d, t:%d, alpha:%f", q, j, tt, math.Log(v))
 			}
 		}
 	}
@@ -320,9 +332,9 @@ func (ch *chain) fb() {
 		glog.V(5).Infof("q:%d, i:%d, t:%d,  beta:%f", q, 0, nobs-1, math.Log(v))
 	}
 
-	for q := nq - 1; q >= 0; q-- {
-		exit := ns[q] - 1
-		for tt := nobs - 2; tt >= 0; tt-- {
+	for tt := nobs - 2; tt >= 0; tt-- {
+		for q := nq - 1; q >= 0; q-- {
+			exit := ns[q] - 1
 			for i := exit; i >= 0; i-- {
 				var v float64
 				switch {
@@ -335,7 +347,7 @@ func (ch *chain) fb() {
 					}
 				case i == exit && q == nq-1:
 					// t<nobs-1, exit state, last model.
-					continue
+					v = 0.0
 				case i == exit && q < nq-1:
 					// t<nobs-1, exit state, before last model.
 					v = math.Exp(beta.At(q+1, 0, tt+1)) +
@@ -361,4 +373,13 @@ func (ch *chain) fb() {
 	glog.V(4).Infof("alpha-beta relative diff:%f", diff)
 
 	return
+}
+
+func isTeeModel(m *hmm) bool {
+
+	exit := m.ns - 1
+	if m.a.At(0, exit) > math.Inf(-1) {
+		return true
+	}
+	return false
 }
