@@ -8,9 +8,6 @@ Package hmm provides an implementation of hidden Markov models.
 It is designed for applications in temporal pattern recognition.
 
 The package can support any output distribution of type model.Modeler.
-The time-state trellis can be reprsented using a state-transition matrix
-or a graph.
-
 */
 package hmm
 
