@@ -69,10 +69,7 @@ type Scorer interface {
 type Labeler interface {
 
 	// Human-readable name.
-	Name() string
-
-	// Unique id.
-	Id() int
+	String() string
 
 	// Compare labels.
 	IsEqual(label Labeler) bool
@@ -82,9 +79,10 @@ type Labeler interface {
 // Each observation may have a value and a label.
 type Obs interface {
 
+	// The observation's id.
+	ID() string
 	// The observation's value.
 	Value() interface{}
-
 	// The observation's label.
 	Label() Labeler
 }
@@ -107,17 +105,19 @@ type Sampler interface {
 	SampleChan(size int) <-chan Obs
 }
 
-// FloatObs is an implementation of an Observer whose values are slices of type float64.
+// FloatObs implements the Obs interface. Values are slices of type float64.
 type FloatObs struct {
 	value []float64
 	label SimpleLabel
+	id    string
 }
 
 // NewFloatObs creates new FloatObs objects.
-func NewFloatObs(val []float64, lab SimpleLabel) Obs {
+func NewFloatObs(val []float64, lab SimpleLabel, id string) Obs {
 	return FloatObs{
 		value: val,
 		label: lab,
+		id:    id,
 	}
 }
 
@@ -127,17 +127,47 @@ func (fo FloatObs) Value() interface{} { return interface{}(fo.value) }
 // Label returns the label for the observation.
 func (fo FloatObs) Label() Labeler { return Labeler(fo.label) }
 
-// IntObs is an implementation of an Observer whose values are slices of type int.
+// ID returns the observation id.
+func (fo FloatObs) ID() string { return fo.id }
+
+// FloatObsSequence implements the Obs interface using a slice of
+// float64 slices.
+type FloatObsSequence struct {
+	value [][]float64
+	label SimpleLabel
+	id    string
+}
+
+// NewFloatObsSequence creates new FloatObsSequence objects.
+func NewFloatObsSequence(val [][]float64, lab SimpleLabel, int string) Obs {
+	return FloatObsSequence{
+		value: val,
+		label: lab,
+	}
+}
+
+// Value method returns the observed value.
+func (fo FloatObsSequence) Value() interface{} { return interface{}(fo.value) }
+
+// Label returns the label for the observation.
+func (fo FloatObsSequence) Label() Labeler { return Labeler(fo.label) }
+
+// ID returns the observation id.
+func (fo FloatObsSequence) ID() string { return fo.id }
+
+// IntObs implements Obs for integer values.
 type IntObs struct {
 	value int
 	label SimpleLabel
+	id    string
 }
 
 // NewIntObs creates new IntObs objects.
-func NewIntObs(val int, lab SimpleLabel) Obs {
+func NewIntObs(val int, lab SimpleLabel, id string) Obs {
 	return IntObs{
 		value: val,
 		label: lab,
+		id:    id,
 	}
 }
 
@@ -147,31 +177,21 @@ func (io IntObs) Value() interface{} { return interface{}(io.value) }
 // Label returns the label for the observation.
 func (io IntObs) Label() Labeler { return Labeler(io.label) }
 
+// ID returns the observation id.
+func (io IntObs) ID() string { return io.id }
+
 // SimpleLabel implements a basic Labeler interface.
-type SimpleLabel struct {
-	name string
-	id   int
-}
+type SimpleLabel string
 
-// NoLabel returns an empty label.
-// Use as a helper function for data with no label.
-func NoLabel() SimpleLabel {
-	return SimpleLabel{}
-}
-
-// Id method returns a unique id for the label.
-func (lab SimpleLabel) Id() int {
-	return lab.id
-}
-
-// Name returns a human-readable label name.
-func (lab SimpleLabel) Name() string {
-	return lab.name
+// String returns the label as a string. Multiple labels must be separated using a comma.
+func (lab SimpleLabel) String() string {
+	//	return lab.name
+	return string(lab)
 }
 
 // IsEqual compares two labels.
 func (lab SimpleLabel) IsEqual(lab2 Labeler) bool {
-	if lab.Id() == lab2.Id() {
+	if lab.String() == lab2.String() {
 		return true
 	}
 	return false
@@ -182,6 +202,7 @@ func (lab SimpleLabel) IsEqual(lab2 Labeler) bool {
 type FloatObserver struct {
 	Values [][]float64
 	Labels []SimpleLabel
+	IDs    []string
 	length int
 }
 
@@ -203,22 +224,12 @@ func (fo FloatObserver) ObsChan() (<-chan Obs, error) {
 	obsChan := make(chan Obs, 1000)
 	go func() {
 		for i := 0; i < fo.length; i++ {
-			obsChan <- NewFloatObs(fo.Values[i], fo.Labels[i])
+			obsChan <- NewFloatObs(fo.Values[i], fo.Labels[i], fo.IDs[i])
 		}
 		close(obsChan)
 	}()
 
 	return obsChan, nil
-}
-
-// ObsToF64 converts an Obs to a tuple with value []float64 and label string.
-func ObsToF64(o Obs) ([]float64, string) {
-	return o.Value().([]float64), o.Label().Name()
-}
-
-// F64ToObs converts a []float64 to Obs.
-func F64ToObs(v []float64) Obs {
-	return NewFloatObs(v, SimpleLabel{})
 }
 
 // ////////////////

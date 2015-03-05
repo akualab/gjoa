@@ -1,193 +1,180 @@
 package main
 
-import (
-	"errors"
-	"flag"
-	"fmt"
-	"os"
-	"path"
-	"path/filepath"
+// // Global constants.
+// const (
+// 	DEFAULT_CONFIG_FILE = "gjoa.yaml"
+// )
 
-	"github.com/akualab/gjoa"
-	"github.com/codegangsta/cli"
-	"github.com/golang/glog"
-)
-
-// Global constants.
-const (
-	DEFAULT_CONFIG_FILE = "gjoa.yaml"
-)
-
-// Global Vars
-var (
-	configFile string
-	eid        string
-	dir        string
-	config     *gjoa.Config
-)
+// // Global Vars
+// var (
+// 	configFile string
+// 	eid        string
+// 	dir        string
+// 	config     *gjoa.Config
+// )
 
 func main() {
 
-	// Set a defaults.
-	defaultDir, err := os.Getwd()
-	if err != nil {
-		defaultDir = os.TempDir()
-	}
-	defaultEid := path.Base(defaultDir)
-	defaultLogDir := defaultDir + string(os.PathSeparator) + "logs"
+	// 	// Set a defaults.
+	// 	defaultDir, err := os.Getwd()
+	// 	if err != nil {
+	// 		defaultDir = os.TempDir()
+	// 	}
+	// 	defaultEid := path.Base(defaultDir)
+	// 	defaultLogDir := defaultDir + string(os.PathSeparator) + "logs"
 
-	app := cli.NewApp()
-	app.Name = "gjoa"
-	app.Usage = "Statistical Modeling Toolkit"
-	app.Version = Version
-	app.Email = "info@akualab.com"
-	app.Action = func(c *cli.Context) {
-		cli.ShowAppHelp(c)
-	}
+	// 	app := cli.NewApp()
+	// 	app.Name = "gjoa"
+	// 	app.Usage = "Statistical Modeling Toolkit"
+	// 	app.Version = Version
+	// 	app.Email = "info@akualab.com"
+	// 	app.Action = func(c *cli.Context) {
+	// 		cli.ShowAppHelp(c)
+	// 	}
 
-	app.Flags = []cli.Flag{
-		cli.StringFlag{"dir, d", defaultDir, "experiment directory"},
-		cli.StringFlag{"eid, e", defaultEid, "experiment id"},
-		cli.StringFlag{"config-file, c", DEFAULT_CONFIG_FILE, "configuration file"},
-		cli.IntFlag{"debug, g", 0, "verbose level"},
-		cli.StringFlag{"log-dir, l", defaultLogDir, "log directory"},
-	}
-
-	app.Commands = []cli.Command{
-		trainCommand,
-		graphCommand,
-		decodeCommand,
-		scoreCommand,
-	}
-
-	app.Run(os.Args)
-
-	glog.Flush()
+	// 	app.Flags = []cli.Flag{
+	// 		cli.StringFlag{"dir, d", defaultDir, "experiment directory"},
+	// 		cli.StringFlag{"eid, e", defaultEid, "experiment id"},
+	// 		cli.StringFlag{"config-file, c", DEFAULT_CONFIG_FILE, "configuration file"},
+	// 		cli.IntFlag{"debug, g", 0, "verbose level"},
+	// 		cli.StringFlag{"log-dir, l", defaultLogDir, "log directory"},
 }
 
-// Common for all apps.
-func initApp(c *cli.Context) {
+// 	app.Commands = []cli.Command{
+// 		trainCommand,
+// 		graphCommand,
+// 		decodeCommand,
+// 		scoreCommand,
+// 	}
 
-	configFile = c.GlobalString("config-file")
-	dir = c.GlobalString("dir")
-	eid = c.GlobalString("eid")
+// 	app.Run(os.Args)
 
-	debugLevel := c.GlobalInt("debug")
+// 	glog.Flush()
+// }
 
-	// Also log to std error.
-	flag.Set("alsologtostderr", "true")
+// // Common for all apps.
+// func initApp(c *cli.Context) {
 
-	// Set glog debug level
-	flag.Set("v", fmt.Sprintf("%d", debugLevel))
+// 	configFile = c.GlobalString("config-file")
+// 	dir = c.GlobalString("dir")
+// 	eid = c.GlobalString("eid")
 
-	// Set logs dir.
-	logsDir := c.GlobalString("log-dir")
-	flag.Set("log_dir", logsDir)
-	if e := os.MkdirAll(logsDir, 0755); e != nil {
-		gjoa.Fatal(e)
-	}
+// 	debugLevel := c.GlobalInt("debug")
 
-	// Change working directory.
-	if e := os.Chdir(dir); e != nil {
-		gjoa.Fatal(e)
-	}
-	glog.Infof("working dir: %s", dir)
+// 	// Also log to std error.
+// 	flag.Set("alsologtostderr", "true")
 
-	// Read config file.
-	fn, e := filepath.Abs(configFile)
-	if e != nil {
-		gjoa.Fatal(e)
-	}
-	glog.Infof("config file: %s", fn)
+// 	// Set glog debug level
+// 	flag.Set("v", fmt.Sprintf("%d", debugLevel))
 
-	// If config file exists, read it.
-	// Commands must check if a config is needed.
-	exist, e := exists(fn)
-	gjoa.Fatal(e)
-	if exist {
-		config, e = gjoa.ReadConfig(fn)
-		gjoa.Fatal(e)
-	}
-}
+// 	// Set logs dir.
+// 	logsDir := c.GlobalString("log-dir")
+// 	flag.Set("log_dir", logsDir)
+// 	if e := os.MkdirAll(logsDir, 0755); e != nil {
+// 		gjoa.Fatal(e)
+// 	}
 
-// Uses command line flag if present. Otherwise uses config file param.
-// Fatal error if config file param is also missing.
-func requiredStringParam(c *cli.Context, flag string, configParam *string) {
+// 	// Change working directory.
+// 	if e := os.Chdir(dir); e != nil {
+// 		gjoa.Fatal(e)
+// 	}
+// 	glog.Infof("working dir: %s", dir)
 
-	flagValue := c.String(flag)
+// 	// Read config file.
+// 	fn, e := filepath.Abs(configFile)
+// 	if e != nil {
+// 		gjoa.Fatal(e)
+// 	}
+// 	glog.Infof("config file: %s", fn)
 
-	// Validate parameter. Command flags overwrite config file params.
-	if len(flagValue) > 0 {
+// 	// If config file exists, read it.
+// 	// Commands must check if a config is needed.
+// 	exist, e := exists(fn)
+// 	gjoa.Fatal(e)
+// 	if exist {
+// 		config, e = gjoa.ReadConfig(fn)
+// 		gjoa.Fatal(e)
+// 	}
+// }
 
-		glog.Infof("Overwriting config using flag [%s] with value [%v]", flag, flagValue)
+// // Uses command line flag if present. Otherwise uses config file param.
+// // Fatal error if config file param is also missing.
+// func requiredStringParam(c *cli.Context, flag string, configParam *string) {
 
-		// Use command flag, ignore config file.
-		*configParam = flagValue
-		return
+// 	flagValue := c.String(flag)
 
-	}
+// 	// Validate parameter. Command flags overwrite config file params.
+// 	if len(flagValue) > 0 {
 
-	if len(*configParam) == 0 {
+// 		glog.Infof("Overwriting config using flag [%s] with value [%v]", flag, flagValue)
 
-		// Value missing.
-		glog.Fatalf("missing parameter: [%s]", flag)
-	}
-}
+// 		// Use command flag, ignore config file.
+// 		*configParam = flagValue
+// 		return
 
-// Uses command line flag if present. Otherwise uses config file param.
-// Fatal error if config file param is also missing.
-func intParam(c *cli.Context, flag string, configParam *int) {
+// 	}
 
-	flagValue := c.Int(flag)
+// 	if len(*configParam) == 0 {
 
-	// Validate parameter. Command flags overwrite config file params.
-	if flagValue > 0 {
+// 		// Value missing.
+// 		glog.Fatalf("missing parameter: [%s]", flag)
+// 	}
+// }
 
-		glog.Infof("Overwriting config using flag [%s] with value [%d]", flag, flagValue)
+// // Uses command line flag if present. Otherwise uses config file param.
+// // Fatal error if config file param is also missing.
+// func intParam(c *cli.Context, flag string, configParam *int) {
 
-		// Use command flag, ignore config file.
-		*configParam = flagValue
-	}
-}
+// 	flagValue := c.Int(flag)
 
-// Missing config value.
-var NoConfigValueError = errors.New("config value not found")
+// 	// Validate parameter. Command flags overwrite config file params.
+// 	if flagValue > 0 {
 
-// Uses command line flag if present. Otherwise uses config file param.
-// Returns NoConfigValueError if no value is specified.
-func stringParam(c *cli.Context, flag string, configParam *string) error {
+// 		glog.Infof("Overwriting config using flag [%s] with value [%d]", flag, flagValue)
 
-	flagValue := c.String(flag)
+// 		// Use command flag, ignore config file.
+// 		*configParam = flagValue
+// 	}
+// }
 
-	// Validate parameter. Command flags overwrite config file params.
-	if len(flagValue) > 0 {
+// // Missing config value.
+// var NoConfigValueError = errors.New("config value not found")
 
-		glog.Infof("Overwriting config using flag [%s] with value [%v]", flag, flagValue)
+// // Uses command line flag if present. Otherwise uses config file param.
+// // Returns NoConfigValueError if no value is specified.
+// func stringParam(c *cli.Context, flag string, configParam *string) error {
 
-		// Use command flag, ignore config file.
-		*configParam = flagValue
-		return nil
+// 	flagValue := c.String(flag)
 
-	}
+// 	// Validate parameter. Command flags overwrite config file params.
+// 	if len(flagValue) > 0 {
 
-	if len(*configParam) == 0 {
+// 		glog.Infof("Overwriting config using flag [%s] with value [%v]", flag, flagValue)
 
-		// Value missing.
-		glog.Errorf("no value found for flag %s", flag)
-		return NoConfigValueError
-	}
+// 		// Use command flag, ignore config file.
+// 		*configParam = flagValue
+// 		return nil
 
-	return nil
-}
+// 	}
 
-// exists returns whether the given file or directory exists or not
-func exists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return false, err
-}
+// 	if len(*configParam) == 0 {
+
+// 		// Value missing.
+// 		glog.Errorf("no value found for flag %s", flag)
+// 		return NoConfigValueError
+// 	}
+
+// 	return nil
+// }
+
+// // exists returns whether the given file or directory exists or not
+// func exists(path string) (bool, error) {
+// 	_, err := os.Stat(path)
+// 	if err == nil {
+// 		return true, nil
+// 	}
+// 	if os.IsNotExist(err) {
+// 		return false, nil
+// 	}
+// 	return false, err
+// }

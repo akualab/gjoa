@@ -6,12 +6,9 @@
 package hmm
 
 import (
-	"flag"
 	"testing"
 
-	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/model"
-	gm "github.com/akualab/gjoa/model/gaussian"
 )
 
 type dummy struct{}
@@ -104,46 +101,46 @@ func TestNet2(t *testing.T) {
    Viterbi gives you the P(q | O,  model), that is, it maximizes of over the whole sequence.
 */
 
-func MakeNetwork(t *testing.T) *Model {
+// func MakeNetwork(t *testing.T) *Model {
 
-	// Gaussian 1.
-	mean1 := []float64{1}
-	sd1 := []float64{1}
-	g1 := gm.NewModel(1, gm.Name("g1"), gm.Mean(mean1), gm.StdDev(sd1))
+// 	// Gaussian 1.
+// 	mean1 := []float64{1}
+// 	sd1 := []float64{1}
+// 	g1 := gm.NewModel(1, gm.Name("g1"), gm.Mean(mean1), gm.StdDev(sd1))
 
-	// Gaussian 2.
-	mean2 := []float64{4}
-	sd2 := []float64{2}
-	g2 := gm.NewModel(1, gm.Name("g2"), gm.Mean(mean2), gm.StdDev(sd2))
+// 	// Gaussian 2.
+// 	mean2 := []float64{4}
+// 	sd2 := []float64{2}
+// 	g2 := gm.NewModel(1, gm.Name("g2"), gm.Mean(mean2), gm.StdDev(sd2))
 
-	//	initialStateProbs := []float64{0.8, 0.2}
-	//	transProbs := [][]float64{{0.9, 0.1}, {0.3, 0.7}}
+// 	//	initialStateProbs := []float64{0.8, 0.2}
+// 	//	transProbs := [][]float64{{0.9, 0.1}, {0.3, 0.7}}
 
-	net := NewNetwork("test")
-	s0 := net.AddEntryState()
-	s1 := net.AddState(g1)
-	s2 := net.AddState(g2)
-	s3 := net.AddExitState()
+// 	net := NewNetwork("test")
+// 	s0 := net.AddEntryState()
+// 	s1 := net.AddState(g1)
+// 	s2 := net.AddState(g2)
+// 	s3 := net.AddExitState()
 
-	net.AddArc(s0, s1, 0.8)
-	net.AddArc(s0, s2, 0.2)
-	net.AddArc(s1, s1, 0.9)
-	net.AddArc(s1, s2, 0.1)
-	net.AddArc(s2, s1, 0.3)
-	net.AddArc(s2, s2, 0.7)
+// 	net.AddArc(s0, s1, 0.8)
+// 	net.AddArc(s0, s2, 0.2)
+// 	net.AddArc(s1, s1, 0.9)
+// 	net.AddArc(s1, s2, 0.1)
+// 	net.AddArc(s2, s1, 0.3)
+// 	net.AddArc(s2, s2, 0.7)
 
-	_ = s3
-	return NewModelFromNet(net)
-}
+// 	_ = s3
+// 	return NewModelFromNet(net)
+// }
 
-func TestGraph(t *testing.T) {
+// func TestGraph(t *testing.T) {
 
-	flag.Parse()
-	hmm := MakeHMM(t)
-	_, logProb := hmm.alpha(obs0)
-	expectedLogProb := -26.4626886822436
-	gjoa.CompareFloats(t, expectedLogProb, logProb, "Error in logProb", epsilon)
-}
+// 	flag.Parse()
+// 	hmm := MakeHMM(t)
+// 	_, logProb := hmm.alpha(obs0)
+// 	expectedLogProb := -26.4626886822436
+// 	gjoa.CompareFloats(t, expectedLogProb, logProb, "Error in logProb", epsilon)
+// }
 
 func panics(fun func()) (b bool) {
 	defer func() {

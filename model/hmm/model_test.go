@@ -5,15 +5,7 @@
 
 package hmm
 
-import (
-	"flag"
-	"testing"
-
-	"github.com/akualab/gjoa"
-	"github.com/akualab/gjoa/floatx"
-	"github.com/akualab/gjoa/model"
-	gm "github.com/akualab/gjoa/model/gaussian"
-)
+import "flag"
 
 const epsilon = 0.001
 
@@ -49,87 +41,87 @@ func init() {
    Viterbi gives you the P(q | O,  model), that is, it maximizes of over the whole sequence.
 */
 
-func MakeHMM(t *testing.T) *Model {
+// func MakeHMM(t *testing.T) *Model {
 
-	// Gaussian 1.
-	mean1 := []float64{1}
-	sd1 := []float64{1}
-	g1 := gm.NewModel(1, gm.Name("g1"), gm.Mean(mean1), gm.StdDev(sd1))
+// 	// Gaussian 1.
+// 	mean1 := []float64{1}
+// 	sd1 := []float64{1}
+// 	g1 := gm.NewModel(1, gm.Name("g1"), gm.Mean(mean1), gm.StdDev(sd1))
 
-	// Gaussian 2.
-	mean2 := []float64{4}
-	sd2 := []float64{2}
-	g2 := gm.NewModel(1, gm.Name("g2"), gm.Mean(mean2), gm.StdDev(sd2))
+// 	// Gaussian 2.
+// 	mean2 := []float64{4}
+// 	sd2 := []float64{2}
+// 	g2 := gm.NewModel(1, gm.Name("g2"), gm.Mean(mean2), gm.StdDev(sd2))
 
-	initialStateProbs := []float64{0.8, 0.2}
-	transProbs := [][]float64{{0.9, 0.1}, {0.3, 0.7}}
+// 	initialStateProbs := []float64{0.8, 0.2}
+// 	transProbs := [][]float64{{0.9, 0.1}, {0.3, 0.7}}
 
-	// These are the models.
-	models := []*gm.Model{g1, g2}
+// 	// These are the models.
+// 	models := []*gm.Model{g1, g2}
 
-	// To pass an HMM we need to convert []*gm.Gaussian[]
-	// to []model.Trainer
-	// see http://golang.org/doc/faq#convert_slice_of_interface
-	m := make([]model.Modeler, len(models))
-	for i, v := range models {
-		m[i] = v
-	}
-	return NewModel(transProbs, m, InitProbs(initialStateProbs))
-}
+// 	// To pass an HMM we need to convert []*gm.Gaussian[]
+// 	// to []model.Trainer
+// 	// see http://golang.org/doc/faq#convert_slice_of_interface
+// 	m := make([]model.Modeler, len(models))
+// 	for i, v := range models {
+// 		m[i] = v
+// 	}
+// 	return NewModel(transProbs, m, InitProbs(initialStateProbs))
+// }
 
-func TestLogProb(t *testing.T) {
+// func TestLogProb(t *testing.T) {
 
-	flag.Parse()
-	hmm := MakeHMM(t)
-	_, logProb := hmm.alpha(obs0)
-	expectedLogProb := -26.4626886822436
-	gjoa.CompareFloats(t, expectedLogProb, logProb, "Error in logProb", epsilon)
-}
+// 	flag.Parse()
+// 	hmm := MakeHMM(t)
+// 	_, logProb := hmm.alpha(obs0)
+// 	expectedLogProb := -26.4626886822436
+// 	gjoa.CompareFloats(t, expectedLogProb, logProb, "Error in logProb", epsilon)
+// }
 
-func TestIndices(t *testing.T) {
+// func TestIndices(t *testing.T) {
 
-	flag.Parse()
-	hmm := MakeHMM(t)
-	m := hmm.Indices()
-	t.Logf("Indices: %+v", m)
+// 	flag.Parse()
+// 	hmm := MakeHMM(t)
+// 	m := hmm.Indices()
+// 	t.Logf("Indices: %+v", m)
 
-	gjoa.CompareSliceInt(t, []int{0, 1}, []int{m["g1"], m["g2"]}, "indices don't match")
-}
+// 	gjoa.CompareSliceInt(t, []int{0, 1}, []int{m["g1"], m["g2"]}, "indices don't match")
+// }
 
-func TestEvaluationGamma(t *testing.T) {
+// func TestEvaluationGamma(t *testing.T) {
 
-	flag.Parse()
-	hmm := MakeHMM(t)
-	alpha, _ := hmm.alpha(obs0)
-	beta := hmm.beta(obs0)
-	gamma := hmm.gamma(alpha, beta)
-	message := "Error in gamma"
-	gjoa.CompareSliceFloat(t, gamma01, floatx.Flatten2D(gamma), message, epsilon)
-}
+// 	flag.Parse()
+// 	hmm := MakeHMM(t)
+// 	alpha, _ := hmm.alpha(obs0)
+// 	beta := hmm.beta(obs0)
+// 	gamma := hmm.gamma(alpha, beta)
+// 	message := "Error in gamma"
+// 	gjoa.CompareSliceFloat(t, gamma01, floatx.Flatten2D(gamma), message, epsilon)
+// }
 
-func Convert3DSlideTo1D(s3 [][][]float64) []float64 {
-	s1 := make([]float64, 0, 100)
-	for _, v1 := range s3 {
-		for _, v2 := range v1 {
-			for _, v3 := range v2 {
-				s1 = append(s1, v3)
-			}
-		}
-	}
-	return s1
-}
+// func Convert3DSlideTo1D(s3 [][][]float64) []float64 {
+// 	s1 := make([]float64, 0, 100)
+// 	for _, v1 := range s3 {
+// 		for _, v2 := range v1 {
+// 			for _, v3 := range v2 {
+// 				s1 = append(s1, v3)
+// 			}
+// 		}
+// 	}
+// 	return s1
+// }
 
-func TestEvaluationXi(t *testing.T) {
+// func TestEvaluationXi(t *testing.T) {
 
-	flag.Parse()
-	hmm := MakeHMM(t)
-	alpha, _ := hmm.alpha(obs0)
-	beta := hmm.beta(obs0)
-	xi := hmm.xi(obs0, alpha, beta)
-	xsi1 := Convert3DSlideTo1D(xi)
-	message := "Error in xi"
-	gjoa.CompareSliceFloat(t, xsi, xsi1, message, epsilon)
-}
+// 	flag.Parse()
+// 	hmm := MakeHMM(t)
+// 	alpha, _ := hmm.alpha(obs0)
+// 	beta := hmm.beta(obs0)
+// 	xi := hmm.xi(obs0, alpha, beta)
+// 	xsi1 := Convert3DSlideTo1D(xi)
+// 	message := "Error in xi"
+// 	gjoa.CompareSliceFloat(t, xsi, xsi1, message, epsilon)
+// }
 
 // func TestWriteReadHMM(t *testing.T) {
 
