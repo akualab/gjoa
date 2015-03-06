@@ -64,144 +64,78 @@ func NewModel(options ...Option) *Model {
 
 	//	glog.Infof("New HMM. Num states = %d.", r)
 
+	if m.Set == nil {
+		glog.Fatalf("cannot create an HMM without a model set - use the OSet option to specify a model set")
+	}
 	m.generator = NewGenerator(m)
 	return m
 }
 
 // UpdateOne updates model using a single weighted sample.
-func (model *Model) UpdateOne(o model.Obs, w float64) {
+func (m *Model) UpdateOne(o model.Obs, w float64) {
 
-	chain, err := model.Set.chainFromAssigner(o, model.assigner)
+	// We create a chain of hmms to update stats for an obs sequence.
+	// The chain is released once the update is done.
+	// The assigner has the logic for mapping labels to a chain of models.
+	chain, err := m.Set.chainFromAssigner(o, m.assigner)
 	if err != nil {
 		glog.Fatalf("failed to update hmm model stats with error: %s", err)
 	}
-	glog.Info("updating hmm stats for id [%s]", o.ID())
+
+	// Use the forward-backward algorithm to compute counts.
 	chain.update()
+
+	// Print log(prob(O/model))
+	glog.Info("update hmm stats, obsid: [%10s], logProb=%10f", o.ID(), chain.beta.At(0, 0, 0))
 }
 
 // Update updates sufficient statistics using an observation stream.
-func (model *Model) Update(x model.Observer, w func(model.Obs) float64) error {
-
-	//N := hmm.NStates
-
-	/*
-		// TODO: compute γ, ζ concurrently using go routines.
-		// Can we compute ζ more efficiently using γ?
-		γ, e = hmm.gamma(α, β)
-		if e != nil {
-			return
-		}
-		ζ, e = hmm.xi(observations, α, β)
-		if e != nil {
-			return
-		}
-	*/
-	// Reestimation of state transition probabilities for one sequence.
-	//
-	//                   sum_{t=0}^{T-2} ζ(i,j, t)      [1] <== SumXi
-	// a_hat(i,j) = ----------------------------------
-	//                   sum_{t=0}^{T-2} γ(i,t)         [2] <== SumGamma [without t = T-1]
-	//
-	//
-
-	// Reestimation of initial state probabilities for one sequence.
-	// pi+hat(i) = γ(i,0)  [3]  <== SumInitProbs
-
-	// Reestimation of output probability.
-	// For state i in sequence k  weigh each observation using
-	// sum_{t=0}^{T-2} γ(i,t)
-
-	// tmp := make([]float64, T)
-	// for i, g := range γ {
-	// 	floatx.Exp(tmp[:T-1], g[:T-1])
-	// 	sumg := floats.Sum(tmp[:T-1])
-	// 	hmm.SumGamma[i] += sumg
-
-	// 	outputStatePDF := hmm.ObsModels[i].(model.Trainer)
-	// 	for t := 0; t < T; t++ {
-	// 		o := model.F64ToObs(observations[t])
-	// 		outputStatePDF.UpdateOne(o, tmp[t]) // exp(g(t))
-	// 	}
-
-	// 	hmm.SumInitProbs[i] += tmp[0] // [3]
-
-	// 	for j, x := range ζ[i] {
-	// 		floatx.Exp(tmp[:T-1], x[:T-1])
-	// 		hmm.SumXi[i][j] += floats.Sum(tmp[:T-1])
-	// 	}
-	// }
-
-	//	Sum LogProbs
-	//	hmm.SumProb += logProb
-
-	//fmt.Println(α, β, γ, ζ, logProb)
+func (m *Model) Update(x model.Observer, w func(model.Obs) float64) error {
 	return nil
 }
 
-func (model *Model) Estimate() error {
+// Estimate will update HMM parameters from counts.
+func (m *Model) Estimate() error {
 
-	// 	// Initial state probabilities.
-	// 	s := floats.Sum(hmm.SumInitProbs)
-	// 	if hmm.updateIP {
-	// 		glog.V(4).Infof("Sum Init. Probs:    %v.", hmm.SumInitProbs)
-	// 		floatx.Apply(floatx.ScaleFunc(1.0/s), hmm.SumInitProbs, hmm.InitProbs)
-	// 		floatx.Log(hmm.InitProbs, hmm.InitProbs)
-	// 	}
-
-	// 	// Transition probabilities.
-	// 	if hmm.updateTP {
-	// 		for i, sxi := range hmm.SumXi {
-	// 			sg := hmm.SumGamma[i]
-	// 			floatx.Apply(floatx.ScaleFunc(1.0/sg), sxi, hmm.TransProbs[i])
-	// 			floatx.Log(hmm.TransProbs[i], hmm.TransProbs[i])
-	// 		}
-	// 	}
-	// 	for _, m := range hmm.ObsModels {
-	// 		m.(model.Trainer).Estimate()
-	// 	}
+	// Reestimates HMM params in the model set.
+	m.Set.reestimate()
 	return nil
-	// }
-
-	// func (hmm *Model) Clear() {
-
-	// 	for _, m := range hmm.ObsModels {
-	// 		m.(model.Trainer).Clear()
-	// 	}
-	// 	floatx.Clear2D(hmm.SumXi)
-	// 	floatx.Clear(hmm.SumGamma)
-	// 	floatx.Clear(hmm.SumInitProbs)
-	// 	hmm.SumProb = 0
 }
 
-// Returns the log probability.
-func (model *Model) LogProb(observation interface{}) float64 {
+// LogProb returns the log probability.
+func (m *Model) LogProb(observation interface{}) float64 {
 
 	// TODO
 	//obs := observation.([][]float64)
 	return 0
 }
 
-// Returns the probability.
-func (model *Model) Prob(observation interface{}) float64 {
+// Prob returns the probability.
+func (m *Model) Prob(observation interface{}) float64 {
 
 	obs := observation.([][]float64)
-	return math.Exp(model.LogProb(obs))
+	return math.Exp(m.LogProb(obs))
 }
 
-func (model *Model) Random(r *rand.Rand) (interface{}, []int, error) {
+func (m *Model) Random(r *rand.Rand) (interface{}, []int, error) {
 
 	//	return model.generator.Next(model.maxGenLen)
 	return nil, nil, nil
 }
 
 // Dim is the dimensionality of the observation vector.
-func (model *Model) Dim() int {
+func (m *Model) Dim() int {
 
 	// if hmm.ObsModels[0] == nil {
 	// 	glog.Fatalf("No observation model available.")
 	// }
 	// return hmm.ObsModels[0].Dim()
 	return 0
+}
+
+// Clear accumulators.
+func (m *Model) Clear() {
+	m.Set.reset()
 }
 
 // func (os *ObsSlice) UnmarshalJSON(b []byte) error {
@@ -351,30 +285,30 @@ func (model *Model) Dim() int {
 // }
 
 // Name returns the name of the model.
-func (model *Model) Name() string {
-	return model.ModelName
+func (m *Model) Name() string {
+	return m.ModelName
 }
 
 // SetName sets a name for the model.
-func (model *Model) setName(name string) {
-	model.ModelName = name
+func (m *Model) setName(name string) {
+	m.ModelName = name
 }
 
 // Name is an option to set the model name.
 func Name(name string) Option {
-	return func(model *Model) { model.setName(name) }
+	return func(m *Model) { m.setName(name) }
 }
 
 // Seed sets a seed value for random functions.
 // Uses default seed value if omitted.
 func Seed(seed int64) Option {
-	return func(model *Model) { model.seed = seed }
+	return func(m *Model) { m.seed = seed }
 }
 
 // MaxGenLen option sets the length of the sequences
 // created by the MODEL generator. Default is 100.
 func MaxGenLen(n int) Option {
-	return func(model *Model) { model.maxGenLen = n }
+	return func(m *Model) { m.maxGenLen = n }
 }
 
 // UpdateTP option to update state transition probabilities.
@@ -387,10 +321,10 @@ func UpdateTP(flag bool) Option {
 
 // OSet is an option to set the collection of HMM networks.
 func OSet(set *Set) Option {
-	return func(model *Model) { model.Set = set }
+	return func(m *Model) { m.Set = set }
 }
 
 // OAssign is an option to set the label to model assigner.
 func OAssign(assigner Assigner) Option {
-	return func(model *Model) { model.assigner = assigner }
+	return func(m *Model) { m.assigner = assigner }
 }

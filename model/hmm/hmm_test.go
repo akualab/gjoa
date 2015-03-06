@@ -474,11 +474,12 @@ func TestAlphaBeta(t *testing.T) {
 }
 
 type scorer struct {
+	testModel
 	op []float64
 }
 
 func newScorer(model, state int) scorer {
-	sc := scorer{make([]float64, nsymb, nsymb)}
+	sc := scorer{op: make([]float64, nsymb, nsymb)}
 	for k := 0; k < nsymb; k++ {
 		sc.op[k] = outputProbs.At(model, state, k)
 	}
@@ -503,10 +504,10 @@ func initChainFB(t *testing.T) {
 	ms, _ = NewSet()
 
 	hmm0, err = ms.NewNet("model 0", narray.New(nstates[0], nstates[0]),
-		[]model.Scorer{nil, newScorer(0, 1), newScorer(0, 2), newScorer(0, 3), nil})
+		[]model.Modeler{nil, newScorer(0, 1), newScorer(0, 2), newScorer(0, 3), nil})
 	fatalIf(t, err)
 	hmm1, err = ms.NewNet("model 1", narray.New(nstates[1], nstates[1]),
-		[]model.Scorer{nil, newScorer(1, 1), newScorer(1, 2), nil})
+		[]model.Modeler{nil, newScorer(1, 1), newScorer(1, 2), nil})
 	fatalIf(t, err)
 
 	hmm0.A.Set(1, 0, 1)
@@ -535,14 +536,14 @@ func TestTeeModel(t *testing.T) {
 	ms2, e := NewSet(hmm0, hmm1)
 	fatalIf(t, e)
 	testScorer := func() scorer {
-		return scorer{[]float64{math.Log(0.4), math.Log(0.2), math.Log(0.4)}}
+		return scorer{op: []float64{math.Log(0.4), math.Log(0.2), math.Log(0.4)}}
 	}
 	hmm2, err := ms2.NewNet("model 2", narray.New(3, 3),
-		[]model.Scorer{nil, testScorer(), nil})
+		[]model.Modeler{nil, testScorer(), nil})
 	fatalIf(t, err)
 
 	hmm3, errr := ms2.NewNet("model 3", narray.New(4, 4),
-		[]model.Scorer{nil, testScorer(), testScorer(), nil})
+		[]model.Modeler{nil, testScorer(), testScorer(), nil})
 	fatalIf(t, errr)
 
 	hmm2.A.Set(1, 0, 1)
@@ -595,14 +596,14 @@ func TestLR(t *testing.T) {
 	ms2, e := NewSet(hmm0, hmm1)
 	fatalIf(t, e)
 	testScorer := func() scorer {
-		return scorer{[]float64{math.Log(0.4), math.Log(0.2), math.Log(0.4)}}
+		return scorer{op: []float64{math.Log(0.4), math.Log(0.2), math.Log(0.4)}}
 	}
 
 	hmm2, err := ms2.makeLetfToRight("model 2", 4, 0.4, 0.1,
-		[]model.Scorer{nil, testScorer(), testScorer(), nil})
+		[]model.Modeler{nil, testScorer(), testScorer(), nil})
 	fatalIf(t, err)
 	hmm3, errr := ms2.makeLetfToRight("model 3", 6, 0.3, 0.2,
-		[]model.Scorer{nil, testScorer(), testScorer(), testScorer(), testScorer(), nil})
+		[]model.Modeler{nil, testScorer(), testScorer(), testScorer(), testScorer(), nil})
 	fatalIf(t, errr)
 	hmms2, err := ms2.chainFromNets(xobs, hmm0, hmm2, hmm3, hmm0, hmm0, hmm0, hmm0, hmm2)
 	if err != nil {
@@ -631,14 +632,14 @@ func TestLRAssign(t *testing.T) {
 	//	ms2, e := NewSet()
 	fatalIf(t, e)
 	testScorer := func() scorer {
-		return scorer{[]float64{math.Log(0.4), math.Log(0.2), math.Log(0.4)}}
+		return scorer{op: []float64{math.Log(0.4), math.Log(0.2), math.Log(0.4)}}
 	}
 
 	_, err := ms2.makeLetfToRight("model 2", 4, 0.4, 0.1,
-		[]model.Scorer{nil, testScorer(), testScorer(), nil})
+		[]model.Modeler{nil, testScorer(), testScorer(), nil})
 	fatalIf(t, err)
 	_, errr := ms2.makeLetfToRight("model 3", 6, 0.3, 0.2,
-		[]model.Scorer{nil, testScorer(), testScorer(), testScorer(), testScorer(), nil})
+		[]model.Modeler{nil, testScorer(), testScorer(), testScorer(), testScorer(), nil})
 	fatalIf(t, errr)
 
 	// we need to put a label to use assigner - use same sequence as in TestLR() using the model names
@@ -680,13 +681,26 @@ func TestModelName(t *testing.T) {
 
 	ms2, _ := NewSet()
 	_, err := ms2.NewNet("XXX", narray.New(3, 3),
-		[]model.Scorer{nil, nil, nil})
+		[]model.Modeler{nil, nil, nil})
 	fatalIf(t, err)
 
 	_, errr := ms2.NewNet("XXX", narray.New(4, 4),
-		[]model.Scorer{nil, nil, nil, nil})
+		[]model.Modeler{nil, nil, nil, nil})
 
 	if errr == nil {
 		t.Fatalf("expected error, got nil for duplicate model name")
 	}
 }
+
+type testModel struct{}
+
+func (m testModel) Name() string                                             { return "" }
+func (m testModel) Dim() int                                                 { return 0 }
+func (m testModel) Update(x model.Observer, w func(model.Obs) float64) error { return nil }
+func (m testModel) UpdateOne(o model.Obs, w float64)                         {}
+func (m testModel) Estimate() error                                          { return nil }
+func (m testModel) Clear()                                                   {}
+func (m testModel) Predict(x model.Observer) ([]model.Labeler, error)        { return nil, nil }
+func (m testModel) LogProb(x model.Obs) float64                              { return 0 }
+func (m testModel) Sample() model.Obs                                        { return nil }
+func (m testModel) SampleChan(size int) <-chan model.Obs                     { return nil }

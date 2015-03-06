@@ -64,6 +64,15 @@ func (ms *Set) net(name string) (*Net, bool) {
 	return m, true
 }
 
+func (ms *Set) reset() {
+
+	glog.V(2).Infof("reset accumulators")
+	for _, h := range ms.Nets {
+		h.OccAcc.SetValue(0.0)
+		h.TrAcc.SetValue(0.0)
+	}
+}
+
 // Net is an hmm network with a single non-emmiting entry state and
 // a single non-emmiting exit state.
 type Net struct {
@@ -74,7 +83,7 @@ type Net struct {
 	// State transition probabilities.
 	A *narray.NArray
 	// Output probabilities.
-	B []model.Scorer
+	B []model.Modeler
 	// num states
 	ns int
 	// Accumulator for transition probabilities.
@@ -84,7 +93,7 @@ type Net struct {
 }
 
 // NewNet creates a new HMM network.
-func (ms *Set) NewNet(name string, a *narray.NArray, b []model.Scorer) (*Net, error) {
+func (ms *Set) NewNet(name string, a *narray.NArray, b []model.Modeler) (*Net, error) {
 
 	if len(a.Shape) != 2 || a.Shape[0] != a.Shape[1] {
 		panic("rank must be 2 and matrix should be square")
@@ -131,11 +140,11 @@ type chain struct {
 	maxNS int
 	// Num hmms in this chain.
 	nq int
-	// Slice of num states for hmms in this chain.
+	// Num states in hmms.
 	ns []int
-	// Observations.
+	// Observation.
 	obs model.Obs
-	// Observations as float vectors
+	// Raw observation data for sequence.
 	vectors [][]float64
 	// number of vectors
 	nobs int
@@ -180,10 +189,10 @@ func (ms *Set) chainFromNets(obs model.Obs, m ...*Net) (*chain, error) {
 	// Can't have models with transitions from entry to exit states
 	// at the beginning or end of a chain.
 	if isTeeModel(m[0]) {
-		return nil, fmt.Errorf("the first model in the chain can't have a transition from entry to exit states - model name is [%s] with id [%d]", m[0].Name, m[0].id)
+		return nil, fmt.Errorf("first model in chain can't have entry to exit transition - model name is [%s] with id [%d]", m[0].Name, m[0].id)
 	}
 	if isTeeModel(m[len(m)-1]) {
-		return nil, fmt.Errorf("the last model in the chain can't have a transition from entry to exit states - model name is [%s] with id [%d]", m[0].Name, m[0].id)
+		return nil, fmt.Errorf("last model in chain can't have entry to exit transition - model name is [%s] with id [%d]", m[0].Name, m[0].id)
 	}
 
 	return ch, nil
@@ -195,12 +204,14 @@ func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, erro
 	// otherwise return error.
 	labeler, ok := obs.Label().(model.SimpleLabel)
 	if !ok {
-		return nil, fmt.Errorf("labeler mas be of type model.SimpleLabel, found type %s which is not supported", reflect.TypeOf(obs.Label()))
+		return nil, fmt.Errorf("labeler mas be of type model.SimpleLabel, found type %s which is not supported",
+			reflect.TypeOf(obs.Label()))
 	}
 
 	fos, ok := obs.(model.FloatObsSequence)
 	if !ok {
-		return nil, fmt.Errorf("obs must be of type model.FloatObsSequence, found type %s which is not supported", reflect.TypeOf(obs.Value()))
+		return nil, fmt.Errorf("obs must be of type model.FloatObsSequence, found type %s which is not supported",
+			reflect.TypeOf(obs.Value()))
 	}
 
 	// Now we need to assign hmms to the chain.
@@ -263,8 +274,7 @@ func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, erro
 
 func (ch *chain) update() {
 
-	ch.fb()    // Compute forward-backward probabilities.
-	ch.reset() // reset accumulators.
+	ch.fb() // Compute forward-backward probabilities.
 	alpha := ch.alpha
 	beta := ch.beta
 
@@ -337,15 +347,6 @@ func (ms *Set) reestimate() {
 				h.A.Set(math.Log(v), i, j)
 			}
 		}
-	}
-}
-
-func (ch *chain) reset() {
-
-	glog.V(2).Infof("reset accumulators")
-	for _, h := range ch.hmms {
-		h.OccAcc.SetValue(0.0)
-		h.TrAcc.SetValue(0.0)
 	}
 }
 
@@ -526,7 +527,7 @@ func isTeeModel(m *Net) bool {
 // selfProb is the prob of the self loop with value between 0 and 1.
 // skipProb is the prob of skipping next state. Make it zero for no skips.
 func (ms *Set) makeLetfToRight(name string, ns int, selfProb,
-	skipProb float64, dists []model.Scorer) (*Net, error) {
+	skipProb float64, dists []model.Modeler) (*Net, error) {
 
 	if selfProb >= 1 || skipProb >= 1 || selfProb < 0 || skipProb < 0 {
 		panic("probabilities must have value >= 0 and < 1")
