@@ -51,6 +51,18 @@ func (ms *Set) add(m *Net) error {
 	m.id = len(ms.Nets) // asigns unique id
 	ms.Nets = append(ms.Nets, m)
 	ms.byName[m.Name] = m
+
+	if glog.V(3) {
+		ns := m.ns
+		for i := 0; i < ns; i++ {
+			for j := 0; j < ns; j++ {
+				p := math.Exp(m.A.At(i, j))
+				if p > smallNumber {
+					glog.Infof("added A id:%d, name:%s, from:%d, to:%d, prob:%5.3f", m.id, m.Name, i, j, p)
+				}
+			}
+		}
+	}
 	return nil
 }
 
@@ -65,12 +77,18 @@ func (ms *Set) net(name string) (*Net, bool) {
 }
 
 func (ms *Set) reset() {
-
 	glog.V(2).Infof("reset accumulators")
 	for _, h := range ms.Nets {
 		h.OccAcc.SetValue(0.0)
 		h.TrAcc.SetValue(0.0)
+		for i := 1; i < h.ns-1; i++ {
+			h.B[i].Clear()
+		}
 	}
+}
+
+func (ms *Set) size() int {
+	return len(ms.Nets)
 }
 
 // Net is an hmm network with a single non-emmiting entry state and
@@ -121,7 +139,7 @@ func (ms *Set) NewNet(name string, a *narray.NArray, b []model.Modeler) (*Net, e
 }
 
 func (m *Net) logProb(s int, x []float64) float64 {
-	o := model.NewIntObs(int(x[0]), model.SimpleLabel(""), "")
+	o := model.NewFloatObs(x, model.SimpleLabel(""))
 	return m.B[s].LogProb(o)
 }
 
@@ -129,7 +147,6 @@ func (ms *Set) exist(m *Net) bool {
 	if m.id >= len(ms.Nets) || ms.Nets[m.id] != m {
 		return false
 	}
-
 	return true
 }
 
@@ -198,43 +215,48 @@ func (ms *Set) chainFromNets(obs model.Obs, m ...*Net) (*chain, error) {
 	return ch, nil
 }
 
+// Use the label to create a chain of hmms.
+// If model set only has one hmm, no need to use labels, simply assign the only hmm.
 func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, error) {
 
-	// Get the labeler and check that it is of type SimpleLabeler
-	// otherwise return error.
-	labeler, ok := obs.Label().(model.SimpleLabel)
-	if !ok {
-		return nil, fmt.Errorf("labeler mas be of type model.SimpleLabel, found type %s which is not supported",
-			reflect.TypeOf(obs.Label()))
-	}
-
+	var hmms []*Net
 	fos, ok := obs.(model.FloatObsSequence)
 	if !ok {
 		return nil, fmt.Errorf("obs must be of type model.FloatObsSequence, found type %s which is not supported",
 			reflect.TypeOf(obs.Value()))
 	}
-
-	// Now we need to assign hmms to the chain.
-	// We will use teh sequence of labels to lookup the models by name.
-	labels := strings.Split(labeler.String(), ",")
-	glog.V(5).Infoln("labeler: ", labeler.String())
-	glog.V(5).Infoln("split labels: ", labels)
-	if len(labels) == 1 && len(labels[0]) == 0 {
-		return nil, fmt.Errorf("no label found, can't assign models")
-	}
-
-	modelNames := assigner.Assign(labels)
-	glog.V(5).Infoln("labels: ", labels)
-	glog.V(5).Infoln("model names: ", modelNames)
-
-	var hmms []*Net
-	for _, name := range modelNames {
-		h, ok := ms.net(name)
+	if assigner == nil && ms.size() == 1 {
+		hmms = append(hmms, ms.Nets[0])
+		glog.V(2).Infof("assigner missing but model set has only one hmm network - assigning model [%s] to chain", ms.Nets[0].Name)
+	} else if assigner == nil {
+		return nil, fmt.Errorf("need assigner to create hmm chain if model set is greater than one")
+	} else {
+		// Get the labeler and check that it is of type SimpleLabeler
+		// otherwise return error.
+		labeler, ok := obs.Label().(model.SimpleLabel)
 		if !ok {
-			return nil, fmt.Errorf("can't find model for name [%s] in set - assignment failed", name)
+			return nil, fmt.Errorf("labeler mas be of type model.SimpleLabel, found type %s which is not supported",
+				reflect.TypeOf(obs.Label()))
 		}
-		hmms = append(hmms, h)
+		// Now we need to assign hmms to the chain.
+		// We will use teh sequence of labels to lookup the models by name.
+		labels := strings.Split(labeler.String(), ",")
+		if len(labels) == 1 && len(labels[0]) == 0 {
+			return nil, fmt.Errorf("no label found, can't assign models")
+		}
+		modelNames := assigner.Assign(labels)
+		glog.V(5).Infoln("labels: ", labels)
+		glog.V(5).Infoln("model names: ", modelNames)
+
+		for _, name := range modelNames {
+			h, ok := ms.net(name)
+			if !ok {
+				return nil, fmt.Errorf("can't find model for name [%s] in set - assignment failed", name)
+			}
+			hmms = append(hmms, h)
+		}
 	}
+
 	nq := len(hmms)
 	if nq == 0 {
 		return nil, fmt.Errorf("the assigner returned no models")
@@ -275,76 +297,101 @@ func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, erro
 func (ch *chain) update() {
 
 	ch.fb() // Compute forward-backward probabilities.
-	alpha := ch.alpha
-	beta := ch.beta
 
-	logProb := beta.At(0, 0, 0)
-	glog.Infof("log prob per observation:%e", logProb/float64(ch.nobs))
-
-	// Compute occupation counts.
-	glog.Infof("compute hmm occupation counts.")
-	for q, h := range ch.hmms {
-		exit := ch.ns[q] - 1
-		for t := range ch.vectors {
-			for i := 0; i <= exit; i++ {
-				v := math.Exp(alpha.At(q, i, t) + beta.At(q, i, t))
-				if i == 0 && q < ch.nq-1 {
-					// if entry state, add direct trans to next model.
-					v += math.Exp(alpha.At(q, 0, t) +
-						h.A.At(0, exit) + beta.At(q+1, 0, t))
-				}
-				h.OccAcc.Inc(v, i)
-				glog.V(6).Infof("q:%d, t:%d, i:%d, occ:%e", q, t, i, math.Exp(v))
-			}
-		}
-	}
+	logProb := ch.beta.At(0, 0, 0)
+	glog.V(2).Infof("log prob per observation:%e", logProb/float64(ch.nobs))
 
 	// Compute state transition counts.
-	glog.Infof("compute hmm state transition counts.")
+	glog.V(2).Infof("compute hmm state transition counts.")
 	for q, h := range ch.hmms {
-		ns := ch.ns[q]
+		//		ns := ch.ns[q]
 		exit := ch.ns[q] - 1
-		for t, o := range ch.vectors {
+		for t, vec := range ch.vectors {
+			o := model.F64ToObs(vec, "")
 			for i := 0; i < exit; i++ {
-				for j := 1; j < ns; j++ {
-					var v float64
-					switch {
-					case i > 0 && j < exit && t < ch.nobs-1:
-						// Internal transitions.
-						v = alpha.At(q, i, t) + h.A.At(i, j) +
-							h.logProb(j, ch.vectors[t+1]) + beta.At(q, j, t+1)
-					case i > 0 && j == exit:
-						// From internal state to exit state.
-						v = alpha.At(q, i, t) + h.A.At(i, exit) + beta.At(q, exit, t)
-					case i == 0 && j < exit:
-						// From entry state to internal state.
-						v = alpha.At(q, 0, t) + h.A.At(0, j) +
-							h.logProb(j, o) + beta.At(q, j, t)
-					case i == 0 && j == exit && q < ch.nq-1:
-						// Direct transition from entry to exit states.
-						v = alpha.At(q, 0, t) + h.A.At(0, exit) + beta.At(q+1, 0, t)
-					default:
-						continue
-					}
-					h.TrAcc.Inc(math.Exp(v), i, j)
-					glog.V(6).Infof("q:%d, t:%d, i:%d, tracc:%f", q, t, i, h.TrAcc.At(i, j))
+				w := ch.doOccAcc(q, t, i, h)
+				ch.doTrAcc(q, t, i, h, vec)
+				if i > 0 {
+					h.B[i].UpdateOne(o, w) // TODO prove!
 				}
 			}
 		}
 	}
 }
 
+func (ch *chain) doOccAcc(q, t, i int, h *Net) float64 {
+
+	exit := ch.ns[q] - 1
+	v := math.Exp(ch.alpha.At(q, i, t) + ch.beta.At(q, i, t))
+	if i == 0 && q < ch.nq-1 {
+		// if entry state, add direct trans to next model.
+		v += math.Exp(ch.alpha.At(q, 0, t) +
+			h.A.At(0, exit) + ch.beta.At(q+1, 0, t))
+	}
+	h.OccAcc.Inc(v, i)
+	glog.V(6).Infof("q:%d, t:%d, i:%d, occ:%e", q, t, i, math.Exp(v))
+	return v
+}
+
+func (ch *chain) doTrAcc(q, t, i int, h *Net, o []float64) {
+	ns := ch.ns[q]
+	exit := ch.ns[q] - 1
+	for j := 1; j < ns; j++ {
+		var v float64
+		switch {
+		case i > 0 && j < exit && t < ch.nobs-1:
+			// Internal transitions.
+			v = ch.alpha.At(q, i, t) + h.A.At(i, j) +
+				h.logProb(j, ch.vectors[t+1]) + ch.beta.At(q, j, t+1)
+		case i > 0 && j == exit:
+			// From internal state to exit state.
+			v = ch.alpha.At(q, i, t) + h.A.At(i, exit) + ch.beta.At(q, exit, t)
+		case i == 0 && j < exit:
+			// From entry state to internal state.
+			v = ch.alpha.At(q, 0, t) + h.A.At(0, j) +
+				h.logProb(j, o) + ch.beta.At(q, j, t)
+		case i == 0 && j == exit && q < ch.nq-1:
+			// Direct transition from entry to exit states.
+			v = ch.alpha.At(q, 0, t) + h.A.At(0, exit) + ch.beta.At(q+1, 0, t)
+		default:
+			continue
+		}
+		h.TrAcc.Inc(math.Exp(v), i, j)
+		glog.V(6).Infof("q:%d, t:%d, i:%d, tracc:%f", q, t, i, h.TrAcc.At(i, j))
+	}
+}
+
 func (ms *Set) reestimate() {
 
-	glog.Infof("reestimate state transition probabilities")
+	glog.V(2).Infof("reestimate state transition probabilities")
 	for id, h := range ms.Nets {
 		ns := h.ns
 		for i := 0; i < ns; i++ {
+			if i > 0 && i < ns-1 {
+				err := h.B[i].Estimate()
+				if err != nil {
+					glog.Errorf("model estimation error: %s", err)
+				}
+			}
 			for j := 0; j < ns; j++ {
 				v := h.TrAcc.At(i, j) / h.OccAcc.At(i)
 				glog.V(5).Infof("id:%d, i:%d, j:%d, old:%f, new:%f",
 					id, i, j, math.Exp(h.A.At(i, j)), v)
 				h.A.Set(math.Log(v), i, j)
+			}
+		}
+	}
+
+	if glog.V(3) {
+		for id, h := range ms.Nets {
+			ns := h.ns
+			for i := 0; i < ns; i++ {
+				for j := 0; j < ns; j++ {
+					p := math.Exp(h.A.At(i, j))
+					if p > smallNumber {
+						glog.Infof("reest A id:%d, name:%s, from:%d, to:%d, prob:%5.3f", id, h.Name, i, j, p)
+					}
+				}
 			}
 		}
 	}
@@ -505,10 +552,10 @@ func (ch *chain) fb() {
 	}
 
 	betaLogProb := beta.At(0, 0, 0)
-	glog.V(4).Infof("beta total prob:%f, avg per obs:%f", betaLogProb, betaLogProb/float64(nobs))
+	glog.V(2).Infof("beta total prob:%f, avg per obs:%f", betaLogProb, betaLogProb/float64(nobs))
 
 	diff := (alphaLogProb - betaLogProb) / float64(nobs)
-	glog.V(4).Infof("alpha-beta relative diff:%f", diff)
+	glog.V(2).Infof("alpha-beta relative diff:%f", diff)
 
 	return
 }
@@ -538,29 +585,33 @@ func (ms *Set) makeLetfToRight(name string, ns int, selfProb,
 	if len(dists) != ns {
 		panic("length of dists must match number of states")
 	}
-	hmm, err := ms.NewNet(name, narray.New(ns, ns), dists)
-	if err != nil {
-		return nil, err
-	}
+
 	p := selfProb
 	q := skipProb
 	r := 1.0 - p - q
 
+	h := narray.New(ns, ns)
+
 	// state 0
-	hmm.A.Set(1-q, 0, 1) // entry
-	hmm.A.Set(q, 0, 2)   // skip first emmiting state
+	h.Set(1-q, 0, 1) // entry
+	h.Set(q, 0, 2)   // skip first emmiting state
 
 	// states 1..ns-3
 	for i := 1; i < ns-2; i++ {
-		hmm.A.Set(p, i, i)   // self loop
-		hmm.A.Set(r, i, i+1) // to right
-		hmm.A.Set(q, i, i+2) // skip
+		h.Set(p, i, i)   // self loop
+		h.Set(r, i, i+1) // to right
+		h.Set(q, i, i+2) // skip
 	}
 	// state ns-2
-	hmm.A.Set(p, ns-2, ns-2)   // self
-	hmm.A.Set(1-p, ns-2, ns-1) // to exit (no skip)
+	h.Set(p, ns-2, ns-2)   // self
+	h.Set(1-p, ns-2, ns-1) // to exit (no skip)
 
 	// convert to log.
-	hmm.A = narray.Log(nil, hmm.A.Copy())
+	h = narray.Log(nil, h.Copy())
+
+	hmm, err := ms.NewNet(name, h, dists)
+	if err != nil {
+		return nil, err
+	}
 	return hmm, nil
 }

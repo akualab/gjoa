@@ -117,7 +117,7 @@ func (g *Model) Sample() model.Obs {
 	if e != nil {
 		glog.Fatal(e)
 	}
-	return model.NewFloatObs(obs, model.SimpleLabel{})
+	return model.NewFloatObs(obs, model.SimpleLabel(""))
 }
 
 // SampleChan returns a channel with "size" samples drawn from teh model.
@@ -168,7 +168,7 @@ func (g *Model) prob(obs []float64) float64 {
 func (g *Model) UpdateOne(o model.Obs, w float64) {
 
 	/* Update sufficient statistics. */
-	obs, _ := model.ObsToF64(o)
+	obs, _, _ := model.ObsToF64(o)
 	floatx.Apply(floatx.ScaleFunc(w), obs, g.tmpArray)
 	floats.Add(g.Sumx, g.tmpArray)
 	floatx.Sq(g.tmpArray, obs)

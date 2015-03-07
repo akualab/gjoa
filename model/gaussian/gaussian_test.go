@@ -75,7 +75,7 @@ func TestTrainGaussian(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.UpdateOne(model.F64ToObs(rv), 1.0)
+		g.UpdateOne(model.F64ToObs(rv, ""), 1.0)
 	}
 	g.Estimate()
 	t.Logf("Mean: \n%+v", g.Mean)
@@ -152,7 +152,7 @@ func TestCloneGaussian(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		g.UpdateOne(model.F64ToObs(rv), 1.0)
+		g.UpdateOne(model.F64ToObs(rv, ""), 1.0)
 	}
 	g.Estimate()
 
@@ -208,7 +208,7 @@ func BenchmarkTrain(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		for i := 0; i < 2000000; i++ {
-			g.UpdateOne(model.F64ToObs(buf[i]), 1.0)
+			g.UpdateOne(model.F64ToObs(buf[i], ""), 1.0)
 		}
 		g.Estimate()
 		g.Clear()

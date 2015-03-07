@@ -5,7 +5,14 @@
 
 package hmm
 
-import "flag"
+import (
+	"flag"
+	"testing"
+
+	"github.com/akualab/gjoa/model"
+	gm "github.com/akualab/gjoa/model/gaussian"
+	"github.com/akualab/narray"
+)
 
 const epsilon = 0.001
 
@@ -41,33 +48,45 @@ func init() {
    Viterbi gives you the P(q | O,  model), that is, it maximizes of over the whole sequence.
 */
 
-// func MakeHMM(t *testing.T) *Model {
+func MakeHMM(t *testing.T) *Model {
 
-// 	// Gaussian 1.
-// 	mean1 := []float64{1}
-// 	sd1 := []float64{1}
-// 	g1 := gm.NewModel(1, gm.Name("g1"), gm.Mean(mean1), gm.StdDev(sd1))
+	// Gaussian 1.
+	mean1 := []float64{1}
+	sd1 := []float64{1}
+	g1 := gm.NewModel(1, gm.Name("g1"), gm.Mean(mean1), gm.StdDev(sd1))
 
-// 	// Gaussian 2.
-// 	mean2 := []float64{4}
-// 	sd2 := []float64{2}
-// 	g2 := gm.NewModel(1, gm.Name("g2"), gm.Mean(mean2), gm.StdDev(sd2))
+	// Gaussian 2.
+	mean2 := []float64{4}
+	sd2 := []float64{2}
+	g2 := gm.NewModel(1, gm.Name("g2"), gm.Mean(mean2), gm.StdDev(sd2))
 
-// 	initialStateProbs := []float64{0.8, 0.2}
-// 	transProbs := [][]float64{{0.9, 0.1}, {0.3, 0.7}}
+	//	initialStateProbs := []float64{0.8, 0.2}
+	//	transProbs := [][]float64{{0.9, 0.1}, {0.3, 0.7}}
 
-// 	// These are the models.
-// 	models := []*gm.Model{g1, g2}
+	var err error
+	h0 := narray.New(4, 4)
+	h0.Set(.8, 0, 1)
+	h0.Set(.2, 0, 2)
+	h0.Set(.9, 1, 1)
+	h0.Set(.1, 1, 2)
+	h0.Set(.7, 2, 2)
+	h0.Set(.3, 2, 3)
+	h0 = narray.Log(nil, h0.Copy())
 
-// 	// To pass an HMM we need to convert []*gm.Gaussian[]
-// 	// to []model.Trainer
-// 	// see http://golang.org/doc/faq#convert_slice_of_interface
-// 	m := make([]model.Modeler, len(models))
-// 	for i, v := range models {
-// 		m[i] = v
-// 	}
-// 	return NewModel(transProbs, m, InitProbs(initialStateProbs))
-// }
+	ms, _ = NewSet()
+	hmm0, err = ms.NewNet("hmm0", h0,
+		[]model.Modeler{nil, g1, g2, nil})
+	fatalIf(t, err)
+
+	return NewModel(OSet(ms))
+}
+
+func TestTrain(t *testing.T) {
+
+	m := MakeHMM(t)
+	obs := model.NewFloatObsSequence(obs0, model.SimpleLabel(""), "")
+	m.UpdateOne(obs, 1.0)
+}
 
 // func TestLogProb(t *testing.T) {
 

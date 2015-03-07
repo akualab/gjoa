@@ -113,11 +113,10 @@ type FloatObs struct {
 }
 
 // NewFloatObs creates new FloatObs objects.
-func NewFloatObs(val []float64, lab SimpleLabel, id string) Obs {
+func NewFloatObs(val []float64, lab SimpleLabel) Obs {
 	return FloatObs{
 		value: val,
 		label: lab,
-		id:    id,
 	}
 }
 
@@ -202,7 +201,6 @@ func (lab SimpleLabel) IsEqual(lab2 Labeler) bool {
 type FloatObserver struct {
 	Values [][]float64
 	Labels []SimpleLabel
-	IDs    []string
 	length int
 }
 
@@ -224,12 +222,22 @@ func (fo FloatObserver) ObsChan() (<-chan Obs, error) {
 	obsChan := make(chan Obs, 1000)
 	go func() {
 		for i := 0; i < fo.length; i++ {
-			obsChan <- NewFloatObs(fo.Values[i], fo.Labels[i], fo.IDs[i])
+			obsChan <- NewFloatObs(fo.Values[i], fo.Labels[i])
 		}
 		close(obsChan)
 	}()
 
 	return obsChan, nil
+}
+
+// ObsToF64 converts an Obs to a tuple: []float64, label, id.
+func ObsToF64(o Obs) ([]float64, string, string) {
+	return o.Value().([]float64), o.Label().String(), o.ID()
+}
+
+// F64ToObs converts a []float64 to Obs.
+func F64ToObs(v []float64, label string) Obs {
+	return NewFloatObs(v, SimpleLabel(label))
 }
 
 // ////////////////

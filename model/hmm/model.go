@@ -65,7 +65,10 @@ func NewModel(options ...Option) *Model {
 	//	glog.Infof("New HMM. Num states = %d.", r)
 
 	if m.Set == nil {
-		glog.Fatalf("cannot create an HMM without a model set - use the OSet option to specify a model set")
+		glog.Fatalf("need model set to create HMM model - use the OSet option to specify a model set")
+	}
+	if m.Set.size() > 1 && m.assigner == nil {
+		glog.Fatalf("need assigner to create an HMM model with more than one network - use OAssign option to specify assigner")
 	}
 	m.generator = NewGenerator(m)
 	return m
@@ -86,7 +89,7 @@ func (m *Model) UpdateOne(o model.Obs, w float64) {
 	chain.update()
 
 	// Print log(prob(O/model))
-	glog.Info("update hmm stats, obsid: [%10s], logProb=%10f", o.ID(), chain.beta.At(0, 0, 0))
+	glog.Infof("update hmm stats, obsid: [%s], logProb:%f", o.ID(), chain.beta.At(0, 0, 0))
 }
 
 // Update updates sufficient statistics using an observation stream.

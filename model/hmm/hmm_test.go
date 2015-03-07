@@ -37,8 +37,9 @@ import (
 */
 
 const (
-	nq    = 2 // num models
-	small = 0.000001
+	nq           = 2 // num models
+	small        = 0.000001
+	expectedProb = -33.575758
 )
 
 var (
@@ -61,7 +62,7 @@ func TestMain(m *testing.M) {
 	// configure glog.
 	flag.Set("alsologtostderr", "true")
 	flag.Set("log_dir", "/tmp/log")
-	//	flag.Set("v", "5")
+	flag.Set("v", "3")
 	flag.Parse()
 	glog.Info("Logging configured")
 
@@ -487,7 +488,7 @@ func newScorer(model, state int) scorer {
 }
 
 func (s scorer) LogProb(o model.Obs) float64 {
-	return s.op[o.Value().(int)]
+	return s.op[int(o.Value().([]float64)[0])]
 }
 
 func printLog(t *testing.T, name string, q, i, tt int, a *narray.NArray) {
@@ -501,33 +502,35 @@ func (m *Net) testLogProb(s, o int) float64 {
 func initChainFB(t *testing.T) {
 
 	var err error
-	ms, _ = NewSet()
+	h0 := narray.New(nstates[0], nstates[0])
+	h1 := narray.New(nstates[1], nstates[1])
 
-	hmm0, err = ms.NewNet("model 0", narray.New(nstates[0], nstates[0]),
+	h0.Set(1, 0, 1)
+	h0.Set(.5, 1, 1)
+	h0.Set(.5, 1, 2)
+	h0.Set(.3, 2, 2)
+	h0.Set(.6, 2, 3)
+	h0.Set(.1, 2, 4)
+	h0.Set(.7, 3, 3)
+	h0.Set(.3, 3, 4)
+
+	h1.Set(1, 0, 1)
+	h1.Set(.3, 1, 1)
+	h1.Set(.2, 1, 2)
+	h1.Set(.5, 1, 3)
+	h1.Set(.6, 2, 2)
+	h1.Set(.4, 2, 3)
+
+	h0 = narray.Log(nil, h0.Copy())
+	h1 = narray.Log(nil, h1.Copy())
+
+	ms, _ = NewSet()
+	hmm0, err = ms.NewNet("model 0", h0,
 		[]model.Modeler{nil, newScorer(0, 1), newScorer(0, 2), newScorer(0, 3), nil})
 	fatalIf(t, err)
-	hmm1, err = ms.NewNet("model 1", narray.New(nstates[1], nstates[1]),
+	hmm1, err = ms.NewNet("model 1", h1,
 		[]model.Modeler{nil, newScorer(1, 1), newScorer(1, 2), nil})
 	fatalIf(t, err)
-
-	hmm0.A.Set(1, 0, 1)
-	hmm0.A.Set(.5, 1, 1)
-	hmm0.A.Set(.5, 1, 2)
-	hmm0.A.Set(.3, 2, 2)
-	hmm0.A.Set(.6, 2, 3)
-	hmm0.A.Set(.1, 2, 4)
-	hmm0.A.Set(.7, 3, 3)
-	hmm0.A.Set(.3, 3, 4)
-
-	hmm1.A.Set(1, 0, 1)
-	hmm1.A.Set(.3, 1, 1)
-	hmm1.A.Set(.2, 1, 2)
-	hmm1.A.Set(.5, 1, 3)
-	hmm1.A.Set(.6, 2, 2)
-	hmm1.A.Set(.4, 2, 3)
-
-	hmm0.A = narray.Log(nil, hmm0.A.Copy())
-	hmm1.A = narray.Log(nil, hmm1.A.Copy())
 }
 
 func TestTeeModel(t *testing.T) {
@@ -538,27 +541,31 @@ func TestTeeModel(t *testing.T) {
 	testScorer := func() scorer {
 		return scorer{op: []float64{math.Log(0.4), math.Log(0.2), math.Log(0.4)}}
 	}
-	hmm2, err := ms2.NewNet("model 2", narray.New(3, 3),
+
+	h2 := narray.New(3, 3)
+	h3 := narray.New(4, 4)
+
+	h2.Set(1, 0, 1)
+	h2.Set(0.5, 1, 1)
+	h2.Set(0.5, 1, 2)
+
+	h3.Set(.9, 0, 1)
+	h3.Set(.1, 0, 3) // entry to exit transition.
+	h3.Set(0.5, 1, 1)
+	h3.Set(0.5, 1, 2)
+	h3.Set(0.5, 2, 2)
+	h3.Set(0.5, 2, 3)
+
+	h2 = narray.Log(nil, h2.Copy())
+	h3 = narray.Log(nil, h3.Copy())
+
+	hmm2, err := ms2.NewNet("model 2", h2,
 		[]model.Modeler{nil, testScorer(), nil})
 	fatalIf(t, err)
 
-	hmm3, errr := ms2.NewNet("model 3", narray.New(4, 4),
+	hmm3, errr := ms2.NewNet("model 3", h3,
 		[]model.Modeler{nil, testScorer(), testScorer(), nil})
 	fatalIf(t, errr)
-
-	hmm2.A.Set(1, 0, 1)
-	hmm2.A.Set(0.5, 1, 1)
-	hmm2.A.Set(0.5, 1, 2)
-
-	hmm3.A.Set(.9, 0, 1)
-	hmm3.A.Set(.1, 0, 3) // entry to exit transition.
-	hmm3.A.Set(0.5, 1, 1)
-	hmm3.A.Set(0.5, 1, 2)
-	hmm3.A.Set(0.5, 2, 2)
-	hmm3.A.Set(0.5, 2, 3)
-
-	hmm2.A = narray.Log(nil, hmm2.A.Copy())
-	hmm3.A = narray.Log(nil, hmm3.A.Copy())
 
 	hmms2, err := ms2.chainFromNets(xobs, hmm0, hmm2, hmm3, hmm0, hmm0, hmm0, hmm0, hmm2)
 	if err != nil {
@@ -575,7 +582,7 @@ func TestTeeModel(t *testing.T) {
 
 	// check log prob per obs calculated with alpha and beta
 	delta := math.Abs(alpha2-beta2) / float64(nobs)
-	if delta > 0.00001 {
+	if delta > smallNumber {
 		t.Fatalf("alphaLogProb:%f does not match betaLogProb:%f", alpha2, beta2)
 	}
 
@@ -620,16 +627,19 @@ func TestLR(t *testing.T) {
 
 	// check log prob per obs calculated with alpha and beta
 	delta := math.Abs(alpha2-beta2) / float64(nobs)
-	if delta > 0.00001 {
+	if delta > smallNumber {
 		t.Fatalf("alphaLogProb:%f does not match betaLogProb:%f", alpha2, beta2)
 	}
+	if math.Abs(alpha2-expectedProb) > smallNumber {
+		t.Fatalf("alphaLogProb:%f, expected:%f", alpha2, expectedProb)
+	}
+
 }
 
 func TestLRAssign(t *testing.T) {
 
 	initChainFB(t)
 	ms2, e := NewSet(hmm0, hmm1)
-	//	ms2, e := NewSet()
 	fatalIf(t, e)
 	testScorer := func() scorer {
 		return scorer{op: []float64{math.Log(0.4), math.Log(0.2), math.Log(0.4)}}
@@ -665,9 +675,51 @@ func TestLRAssign(t *testing.T) {
 
 	// check log prob per obs calculated with alpha and beta
 	delta := math.Abs(alpha2-beta2) / float64(nobs)
-	if delta > 0.00001 {
+	if delta > smallNumber {
 		t.Fatalf("alphaLogProb:%f does not match betaLogProb:%f", alpha2, beta2)
 	}
+	if math.Abs(alpha2-expectedProb) > smallNumber {
+		t.Fatalf("alphaLogProb:%f, expected:%f", alpha2, expectedProb)
+	}
+}
+
+func TestHMMModel(t *testing.T) {
+
+	initChainFB(t)
+	modelSet, e := NewSet(hmm0, hmm1)
+	fatalIf(t, e)
+	testScorer := func() scorer {
+		return scorer{op: []float64{math.Log(0.4), math.Log(0.2), math.Log(0.4)}}
+	}
+
+	_, err := modelSet.makeLetfToRight("model 2", 4, 0.4, 0.1,
+		[]model.Modeler{nil, testScorer(), testScorer(), nil})
+	fatalIf(t, err)
+	_, errr := modelSet.makeLetfToRight("model 3", 6, 0.3, 0.2,
+		[]model.Modeler{nil, testScorer(), testScorer(), testScorer(), testScorer(), nil})
+	fatalIf(t, errr)
+
+	// we need to put a label to use assigner - use same sequence as in TestLR() using the model names
+	simplelab := model.SimpleLabel("model 0,model 2,model 3,model 0,model 0,model 0,model 0,model 2")
+	oo := model.NewFloatObsSequence(xobs.Value().([][]float64), simplelab, "")
+
+	// read it back
+	var assigner DirectAssigner
+	hmm := NewModel(OSet(modelSet), OAssign(assigner))
+	hmm.UpdateOne(oo, model.NoWeight(oo))
+	hmm.Estimate()
+
+	hmm.Clear()
+	hmm.UpdateOne(oo, model.NoWeight(oo))
+	hmm.Estimate()
+
+	hmm.Clear()
+	hmm.UpdateOne(oo, model.NoWeight(oo))
+	hmm.Estimate()
+
+	hmm.Clear()
+	hmm.UpdateOne(oo, model.NoWeight(oo))
+	hmm.Estimate()
 }
 
 func fatalIf(t *testing.T, err error) {
