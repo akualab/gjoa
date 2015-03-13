@@ -5,93 +5,218 @@
 
 package hmm
 
-// func MakeGmm(t *testing.T, mean, sd [][]float64, weights []float64) *gmm.Model {
+import (
+	"math/rand"
+	"testing"
+	"time"
 
-// 	dim := len(mean[0])
-// 	ncomp := len(weights)
+	"github.com/akualab/gjoa/model"
+	gm "github.com/akualab/gjoa/model/gaussian"
+	"github.com/akualab/gjoa/model/gmm"
+	"github.com/akualab/narray"
+)
 
-// 	g0 := gm.NewModel(ncomp, gm.Name("g0"), gm.Mean(mean[0]), gm.StdDev(sd[0]))
-// 	g1 := gm.NewModel(ncomp, gm.Name("g1"), gm.Mean(mean[1]), gm.StdDev(sd[1]))
-// 	components := []*gm.Model{g0, g1}
-// 	return gmm.NewModel(dim, ncomp, gmm.Components(components), gmm.Weights(weights))
-// }
+func makeGmm(mean, sd [][]float64, weights []float64) *gmm.Model {
 
-// func MakeHmmGmm(t *testing.T) *Model {
+	dim := len(mean[0])
+	ncomp := len(weights)
 
-// 	mean0 := [][]float64{{1, 2}, {5, 5}}
-// 	sd0 := [][]float64{{0.5, 0.5}, {0.5, 0.5}}
-// 	mean1 := [][]float64{{-1, -2}, {-6, -5}}
-// 	sd1 := [][]float64{{0.5, 0.5}, {0.5, 0.5}}
-// 	weight0 := []float64{0.6, 0.4}
-// 	weight1 := []float64{0.3, 0.7}
-// 	gmm0 := MakeGmm(t, mean0, sd0, weight0)
-// 	gmm1 := MakeGmm(t, mean1, sd1, weight1)
-// 	initialStateProbs := []float64{0.3, 0.7}
-// 	transProbs := [][]float64{{0.6, 0.4}, {0.5, 0.5}}
-// 	models := []*gmm.Model{gmm0, gmm1}
-// 	m := make([]model.Modeler, len(models))
-// 	for i, v := range models {
-// 		m[i] = v
-// 	}
-// 	return NewModel(transProbs, m, InitProbs(initialStateProbs))
-// }
+	g0 := gm.NewModel(ncomp, gm.Name("g0"), gm.Mean(mean[0]), gm.StdDev(sd[0]))
+	g1 := gm.NewModel(ncomp, gm.Name("g1"), gm.Mean(mean[1]), gm.StdDev(sd[1]))
+	components := []*gm.Model{g0, g1}
+	return gmm.NewModel(dim, ncomp, gmm.Components(components), gmm.Weights(weights))
+}
 
-// func MakeRandomHmmGmm(t *testing.T, seed int64) *Model {
-// 	mean := [][]float64{{2.5, 3}, {-2.5, -3}}
-// 	sd := [][]float64{{0.7, 0.7}, {0.7, 0.7}}
+func makeHmmGmm(t *testing.T) *Model {
 
-// 	gmm0 := gmm.RandomModel(mean[0], sd[0], 2, "gmm0", seed)
-// 	gmm1 := gmm.RandomModel(mean[1], sd[1], 2, "gmm1", seed)
+	mean1 := [][]float64{{1, 2}, {5, 5}}
+	sd1 := [][]float64{{0.5, 0.5}, {0.5, 0.5}}
+	mean2 := [][]float64{{-1, -2}, {-6, -5}}
+	sd2 := [][]float64{{0.5, 0.5}, {0.5, 0.5}}
+	weight1 := []float64{0.6, 0.4}
+	weight2 := []float64{0.3, 0.7}
+	gmm1 := makeGmm(mean1, sd1, weight1)
+	gmm2 := makeGmm(mean2, sd2, weight2)
 
-// 	r := rand.New(rand.NewSource(seed))
-// 	ran0 := r.Float64()
-// 	ran1 := r.Float64()
-// 	ran2 := r.Float64()
-// 	initialStateProbs := []float64{ran0, 1 - ran0}
-// 	transProbs := [][]float64{{ran1, 1 - ran1}, {ran2, 1 - ran2}}
-// 	models := []*gmm.Model{gmm0, gmm1}
-// 	m := make([]model.Modeler, len(models))
-// 	for i, v := range models {
-// 		m[i] = v
-// 	}
-// 	return NewModel(transProbs, m, InitProbs(initialStateProbs))
-// }
+	var err error
+	h0 := narray.New(4, 4)
+	h0.Set(.8, 0, 1)
+	h0.Set(.2, 0, 2)
+	h0.Set(.9, 1, 1)
+	h0.Set(.1, 1, 2)
+	h0.Set(.7, 2, 2)
+	h0.Set(.3, 2, 3)
+	h0 = narray.Log(nil, h0.Copy())
 
-// func TestTrainHmmGmm(t *testing.T) {
-// 	var seed int64 = 31
-// 	hmm0 := MakeHmmGmm(t)
-// 	hmm := MakeRandomHmmGmm(t, seed)
-// 	iter := 6
-// 	// size of the generated sequence
-// 	n := 100
-// 	// number of sequences
-// 	m := 1000
-// 	eps := 0.03
-// 	t0 := time.Now() // Start timer.
-// 	for i := 0; i < iter; i++ {
-// 		t.Logf("iter [%d]", i)
+	ms, _ = NewSet()
+	hmm0, err = ms.NewNet("hmm0", h0,
+		[]model.Modeler{nil, gmm1, gmm2, nil})
+	fatalIf(t, err)
 
-// 		// Reset all counters.
-// 		hmm.Clear()
+	return NewModel(OSet(ms))
+}
 
-// 		// fix the seed to get the same sequence
-// 		gen := NewGenerator(hmm0)
-// 		for j := 0; j < m; j++ {
-// 			obs, _, err := gen.Next(n)
-// 			if err != nil {
-// 				t.Fatal(err)
-// 			}
-// 			hmm.UpdateOne(obs, 1.0)
-// 		}
-// 		hmm.Estimate()
-// 	}
-// 	dur := time.Now().Sub(t0)
-// 	CompareHMMs(t, hmm0, hmm, eps)
-// 	// Print time stats.
-// 	t.Logf("Total time: %v", dur)
-// 	t.Logf("Time per iteration: %v", dur/time.Duration(iter))
-// 	t.Logf("Time per frame: %v", dur/time.Duration(iter*n*m))
-// }
+func makeRandomHmmGmm(t *testing.T, seed int64) *Model {
+	mean := [][]float64{{2.5, 3}, {-2.5, -3}}
+	sd := [][]float64{{0.7, 0.7}, {0.7, 0.7}}
+	gmm1 := gmm.RandomModel(mean[0], sd[0], 2, "gmm1", seed)
+	gmm2 := gmm.RandomModel(mean[1], sd[1], 2, "gmm2", seed)
+
+	r := rand.New(rand.NewSource(seed))
+	ran0 := r.Float64()
+	ran1 := r.Float64()
+	ran2 := r.Float64()
+
+	var err error
+	h0 := narray.New(4, 4)
+	h0.Set(ran0, 0, 1)
+	h0.Set(1-ran0, 0, 2)
+	h0.Set(ran1, 1, 1)
+	h0.Set(1-ran1, 1, 2)
+	h0.Set(ran2, 2, 2)
+	h0.Set(1-ran2, 2, 3)
+	h0 = narray.Log(nil, h0.Copy())
+
+	ms, _ = NewSet()
+	_, err = ms.NewNet("random hmm", h0,
+		[]model.Modeler{nil, gmm1, gmm2, nil})
+	fatalIf(t, err)
+
+	return NewModel(OSet(ms))
+}
+
+func TestTrainHmmGaussian(t *testing.T) {
+
+	// Create reference HMM to generate observations.
+
+	g01 := gm.NewModel(1, gm.Name("g01"), gm.Mean([]float64{0}), gm.StdDev([]float64{1}))
+	g02 := gm.NewModel(1, gm.Name("g02"), gm.Mean([]float64{6}), gm.StdDev([]float64{2}))
+
+	h0 := narray.New(4, 4)
+	//	h0.Set(.6, 0, 1)
+	h0.Set(1, 0, 1)
+	//	h0.Set(.4, 0, 2)
+	h0.Set(.9, 1, 1)
+	h0.Set(.1, 1, 2)
+	h0.Set(.7, 2, 2)
+	h0.Set(.3, 2, 3)
+	h0 = narray.Log(nil, h0.Copy())
+
+	ms0, _ := NewSet()
+	net0, e0 := ms0.NewNet("hmm0", h0,
+		[]model.Modeler{nil, g01, g02, nil})
+	fatalIf(t, e0)
+	hmm0 := NewModel(OSet(ms0))
+	_ = hmm0
+
+	// Create random HMM and estimate params from obs.
+
+	g1 := gm.NewModel(1, gm.Name("g1"), gm.Mean([]float64{-1}), gm.StdDev([]float64{2}))
+	g2 := gm.NewModel(1, gm.Name("g2"), gm.Mean([]float64{10}), gm.StdDev([]float64{4}))
+
+	h := narray.New(4, 4)
+	h.Set(1, 0, 1)
+	//	h.Set(.5, 0, 2)
+	h.Set(.5, 1, 1)
+	h.Set(.5, 1, 2)
+	h.Set(.5, 2, 2)
+	h.Set(.5, 2, 3)
+	h = narray.Log(nil, h.Copy())
+
+	ms, _ = NewSet()
+	net, e := ms.NewNet("hmm", h,
+		[]model.Modeler{nil, g1, g2, nil})
+	fatalIf(t, e)
+	hmm := NewModel(OSet(ms))
+
+	iter := 6
+	// number of sequences
+	m := 1000
+	//	eps := 0.03
+	numFrames := 0
+	t0 := time.Now() // Start timer.
+	for i := 0; i < iter; i++ {
+		t.Logf("iter [%d]", i)
+
+		// Reset all counters.
+		hmm.Clear()
+
+		// fix the seed to get the same sequence
+		//		gen := newGenerator(hmm0.Set.Nets[0])
+		gen := newGenerator(net0)
+		for j := 0; j < m; j++ {
+			obs, states := gen.next()
+			numFrames += len(states) - 2
+			hmm.UpdateOne(obs, 1.0)
+		}
+		hmm.Estimate()
+	}
+	dur := time.Now().Sub(t0)
+	//	CompareHMMs(t, hmm0, hmm, eps)
+	//	h0 := hmm0.Set.Nets[0]
+	//	h := hmm.Set.Nets[0]
+	tp0 := narray.Exp(nil, h0.Copy())
+	tp := narray.Exp(nil, net.A.Copy())
+	ns := tp.Shape[0]
+	for i := 0; i < ns; i++ {
+		for j := 0; j < ns; j++ {
+			p0 := tp0.At(i, j)
+			p := tp.At(i, j)
+			if p > smallNumber || p0 > smallNumber {
+				t.Logf("TP: %d=>%d, p0:%5.2f, p:%5.2f", i, j, p0, p)
+			}
+		}
+	}
+
+	t.Log("")
+	t.Logf("hmm0 g1:%+v, g2:%+v", net0.B[1], net0.B[2])
+	t.Logf("hmm  g1: %+v, g2:%+v", net.B[1], net.B[2])
+
+	// Print time stats.
+	t.Log("")
+	t.Logf("Total time: %v", dur)
+	t.Logf("Time per iteration: %v", dur/time.Duration(iter))
+	t.Logf("Time per frame: %v", dur/time.Duration(iter*numFrames*m))
+}
+
+func TestTrainHmmGmm(t *testing.T) {
+	var seed int64 = 31
+	hmm0 := makeHmmGmm(t)
+	hmm := makeRandomHmmGmm(t, seed)
+	iter := 1
+	// size of the generated sequence
+	n := 100
+	// number of sequences
+	m := 1000
+	//	eps := 0.03
+	t0 := time.Now() // Start timer.
+	for i := 0; i < iter; i++ {
+		t.Logf("iter [%d]", i)
+
+		// Reset all counters.
+		hmm.Clear()
+
+		// fix the seed to get the same sequence
+		gen := newGenerator(hmm0.Set.Nets[0])
+		for j := 0; j < m; j++ {
+			obs, states := gen.next()
+			_ = states
+			hmm.UpdateOne(obs, 1.0)
+		}
+		hmm.Estimate()
+	}
+	dur := time.Now().Sub(t0)
+	//	CompareHMMs(t, hmm0, hmm, eps)
+	h0 := hmm0.Set.Nets[0]
+	h := hmm.Set.Nets[0]
+
+	t.Logf("hmm0 - A:%+v, B[0]:%+v, B[1]:%+v", h0.A.Data, h0.B[0], h0.B[1])
+	t.Logf("hmm  - A:%+v, B[0]:%+v, B[1]:%+v", h.A.Data, h.B[0], h.B[1])
+	// Print time stats.
+	t.Logf("Total time: %v", dur)
+	t.Logf("Time per iteration: %v", dur/time.Duration(iter))
+	t.Logf("Time per frame: %v", dur/time.Duration(iter*n*m))
+}
 
 // func CompareHMMs(t *testing.T, hmm0 *Model, hmm *Model, eps float64) {
 // 	gjoa.CompareSliceFloat(t, hmm0.TransProbs[0], hmm.TransProbs[0],

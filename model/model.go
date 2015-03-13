@@ -138,10 +138,11 @@ type FloatObsSequence struct {
 }
 
 // NewFloatObsSequence creates new FloatObsSequence objects.
-func NewFloatObsSequence(val [][]float64, lab SimpleLabel, int string) Obs {
+func NewFloatObsSequence(val [][]float64, lab SimpleLabel, id string) Obs {
 	return FloatObsSequence{
 		value: val,
 		label: lab,
+		id:    id,
 	}
 }
 
@@ -153,6 +154,13 @@ func (fo FloatObsSequence) Label() Labeler { return Labeler(fo.label) }
 
 // ID returns the observation id.
 func (fo FloatObsSequence) ID() string { return fo.id }
+
+// Add adds a FloatObs to the sequence.
+func (fo *FloatObsSequence) Add(obs FloatObs, lab string) {
+	fo.value = append(fo.value, obs.value)
+	x := string(fo.label) + "," + string(lab)
+	fo.label = SimpleLabel(x)
+}
 
 // IntObs implements Obs for integer values.
 type IntObs struct {

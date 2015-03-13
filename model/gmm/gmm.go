@@ -109,7 +109,7 @@ func (gmm *Model) logProbInternal(obs, probs []float64) float64 {
 
 	/* Compute log probabilities for this observation. */
 	for i, c := range gmm.Components {
-		o := model.F64ToObs(obs)
+		o := model.F64ToObs(obs, "")
 		v1 := c.LogProb(o)
 		v2 := gmm.LogWeights[i]
 		v := v1 + v2
@@ -136,7 +136,7 @@ func (gmm *Model) LogProb(obs model.Obs) float64 {
 
 // Returns the probability.
 func (gmm *Model) prob(obs []float64) float64 {
-	return math.Exp(gmm.LogProb(model.F64ToObs(obs)))
+	return math.Exp(gmm.LogProb(model.F64ToObs(obs, "")))
 }
 
 // Predict returns a hypothesis given the observation.
@@ -158,7 +158,7 @@ func (gmm *Model) Predict(x model.Observer) ([]model.Labeler, error) {
 // Estimate computes model parameters using sufficient statistics.
 func (gmm *Model) UpdateOne(o model.Obs, w float64) {
 
-	obs, _ := model.ObsToF64(o)
+	obs, _, _ := model.ObsToF64(o)
 	maxProb := gmm.logProbInternal(obs, gmm.tmpProbs)
 	gmm.Likelihood += maxProb
 	floatx.Apply(floatx.AddScalarFunc(-maxProb+math.Log(w)), gmm.tmpProbs, nil)
@@ -223,10 +223,7 @@ func (gmm *Model) Clear() {
 // Sample returns a GMM sample.
 func (gmm *Model) Sample() model.Obs {
 	// Choose a component using weights
-	comp, err := model.RandIntFromDist(gmm.Weights, gmm.rand)
-	if err != nil {
-		glog.Fatalf("Couldn't generate sample. Error: %s", err)
-	}
+	comp := model.RandIntFromDist(gmm.Weights, gmm.rand)
 	// Get a random vector from that component
 	return gmm.Components[comp].Sample()
 }

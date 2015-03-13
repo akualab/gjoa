@@ -8,6 +8,7 @@ package hmm
 import (
 	"fmt"
 	"math"
+	"math/rand"
 	"reflect"
 	"strings"
 
@@ -80,7 +81,9 @@ func (ms *Set) reset() {
 	glog.V(2).Infof("reset accumulators")
 	for _, h := range ms.Nets {
 		h.OccAcc.SetValue(0.0)
+		h.OccAccMax.SetValue(math.Inf(-1))
 		h.TrAcc.SetValue(0.0)
+		h.TrAccMax.SetValue(math.Inf(-1))
 		for i := 1; i < h.ns-1; i++ {
 			h.B[i].Clear()
 		}
@@ -105,9 +108,11 @@ type Net struct {
 	// num states
 	ns int
 	// Accumulator for transition probabilities.
-	TrAcc *narray.NArray
+	TrAcc    *narray.NArray
+	TrAccMax *narray.NArray
 	// Accumulator for global occupation counts.
-	OccAcc *narray.NArray
+	OccAcc    *narray.NArray
+	OccAccMax *narray.NArray
 }
 
 // NewNet creates a new HMM network.
@@ -123,12 +128,14 @@ func (ms *Set) NewNet(name string, a *narray.NArray, b []model.Modeler) (*Net, e
 	}
 
 	net := &Net{
-		Name:   name,
-		A:      a,
-		B:      b,
-		TrAcc:  narray.New(numStates, numStates),
-		OccAcc: narray.New(numStates),
-		ns:     numStates,
+		Name:      name,
+		A:         a,
+		B:         b,
+		TrAcc:     narray.New(numStates, numStates),
+		TrAccMax:  narray.New(numStates, numStates),
+		OccAcc:    narray.New(numStates),
+		OccAccMax: narray.New(numStates),
+		ns:        numStates,
 	}
 	err := ms.add(net)
 	if err != nil {
@@ -148,6 +155,12 @@ func (ms *Set) exist(m *Net) bool {
 		return false
 	}
 	return true
+}
+
+func (m *Net) nextState(s int, r *rand.Rand) int {
+
+	dist := m.A.SubArray(s, -1)
+	return model.RandIntFromLogDist(dist.Data, r)
 }
 
 type chain struct {
@@ -201,6 +214,11 @@ func (ms *Set) chainFromNets(obs model.Obs, m ...*Net) (*chain, error) {
 	ch.alpha = narray.New(ch.nq, ch.maxNS, ch.nobs)
 	ch.beta = narray.New(ch.nq, ch.maxNS, ch.nobs)
 
+	if glog.V(6) {
+		glog.Info("lab: ", ch.obs.Label())
+		glog.Info("obs: ", ch.obs.Value())
+	}
+
 	// Validate.
 
 	// Can't have models with transitions from entry to exit states
@@ -227,7 +245,7 @@ func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, erro
 	}
 	if assigner == nil && ms.size() == 1 {
 		hmms = append(hmms, ms.Nets[0])
-		glog.V(2).Infof("assigner missing but model set has only one hmm network - assigning model [%s] to chain", ms.Nets[0].Name)
+		glog.Warningf("assigner missing but model set has only one hmm network - assigning model [%s] to chain", ms.Nets[0].Name)
 	} else if assigner == nil {
 		return nil, fmt.Errorf("need assigner to create hmm chain if model set is greater than one")
 	} else {
@@ -280,6 +298,11 @@ func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, erro
 	ch.alpha = narray.New(ch.nq, ch.maxNS, ch.nobs)
 	ch.beta = narray.New(ch.nq, ch.maxNS, ch.nobs)
 
+	if glog.V(6) {
+		glog.Info("lab: ", ch.obs.Label())
+		glog.Info("obs: ", ch.obs.Value())
+	}
+
 	// Validate.
 
 	// Can't have models with transitions from entry to exit states
@@ -294,77 +317,94 @@ func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, erro
 	return ch, nil
 }
 
-func (ch *chain) update() {
+func (ch *chain) update() error {
 
 	ch.fb() // Compute forward-backward probabilities.
 
 	logProb := ch.beta.At(0, 0, 0)
+	totalProb := math.Exp(logProb)
+	if logProb == math.Inf(-1) {
+		return fmt.Errorf("log prob is -Inf, skipping training sequence")
+	}
 	glog.V(2).Infof("log prob per observation:%e", logProb/float64(ch.nobs))
 
 	// Compute state transition counts.
 	glog.V(2).Infof("compute hmm state transition counts.")
 	for q, h := range ch.hmms {
-		//		ns := ch.ns[q]
 		exit := ch.ns[q] - 1
 		for t, vec := range ch.vectors {
-			o := model.F64ToObs(vec, "")
 			for i := 0; i < exit; i++ {
-				w := ch.doOccAcc(q, t, i, h)
-				ch.doTrAcc(q, t, i, h, vec)
+				w := ch.doOccAcc(q, t, i, totalProb) / totalProb
+				ch.doTrAcc(q, t, i, totalProb)
 				if i > 0 {
+					o := model.F64ToObs(vec, "")
 					h.B[i].UpdateOne(o, w) // TODO prove!
 				}
 			}
 		}
 	}
+	return nil
 }
 
-func (ch *chain) doOccAcc(q, t, i int, h *Net) float64 {
+func (ch *chain) doOccAcc(q, t, i int, tp float64) float64 {
 
+	h := ch.hmms[q]
 	exit := ch.ns[q] - 1
-	v := math.Exp(ch.alpha.At(q, i, t) + ch.beta.At(q, i, t))
+	vv := ch.alpha.At(q, i, t) + ch.beta.At(q, i, t)
+	v := math.Exp(vv)
+
 	if i == 0 && q < ch.nq-1 {
 		// if entry state, add direct trans to next model.
-		v += math.Exp(ch.alpha.At(q, 0, t) +
-			h.A.At(0, exit) + ch.beta.At(q+1, 0, t))
+		w := ch.alpha.At(q, 0, t) + h.A.At(0, exit) + ch.beta.At(q+1, 0, t)
+		v += math.Exp(w)
+		if w > vv {
+			vv = w
+		}
 	}
-	h.OccAcc.Inc(v, i)
-	glog.V(6).Infof("q:%d, t:%d, i:%d, occ:%e", q, t, i, math.Exp(v))
+	h.OccAcc.Inc(v/tp, i)
+	h.OccAccMax.MaxElem(vv-math.Log(tp), i)
+	glog.V(6).Infof("q:%d, t:%d, i:%d, occ:%.0f", q, t, i, math.Log(v))
 	return v
 }
 
-func (ch *chain) doTrAcc(q, t, i int, h *Net, o []float64) {
+func (ch *chain) doTrAcc(q, t, i int, tp float64) {
+
+	h := ch.hmms[q]
 	ns := ch.ns[q]
 	exit := ch.ns[q] - 1
+	op0 := ch.vectors[t]
 	for j := 1; j < ns; j++ {
 		var v float64
 		switch {
 		case i > 0 && j < exit && t < ch.nobs-1:
 			// Internal transitions.
+			op1 := ch.vectors[t+1]
 			v = ch.alpha.At(q, i, t) + h.A.At(i, j) +
-				h.logProb(j, ch.vectors[t+1]) + ch.beta.At(q, j, t+1)
+				h.logProb(j, op1) + ch.beta.At(q, j, t+1)
 		case i > 0 && j == exit:
 			// From internal state to exit state.
 			v = ch.alpha.At(q, i, t) + h.A.At(i, exit) + ch.beta.At(q, exit, t)
 		case i == 0 && j < exit:
 			// From entry state to internal state.
 			v = ch.alpha.At(q, 0, t) + h.A.At(0, j) +
-				h.logProb(j, o) + ch.beta.At(q, j, t)
+				h.logProb(j, op0) + ch.beta.At(q, j, t)
 		case i == 0 && j == exit && q < ch.nq-1:
 			// Direct transition from entry to exit states.
 			v = ch.alpha.At(q, 0, t) + h.A.At(0, exit) + ch.beta.At(q+1, 0, t)
 		default:
 			continue
 		}
-		h.TrAcc.Inc(math.Exp(v), i, j)
-		glog.V(6).Infof("q:%d, t:%d, i:%d, tracc:%f", q, t, i, h.TrAcc.At(i, j))
+		h.TrAcc.Inc(math.Exp(v)/tp, i, j)
+		h.TrAccMax.MaxElem(v-math.Log(tp), i, j)
+		glog.V(6).Infof("q:%d, t:%d, i:%d, j:%d, tracc:%.0f",
+			q, t, i, j, v)
 	}
 }
 
 func (ms *Set) reestimate() {
 
 	glog.V(2).Infof("reestimate state transition probabilities")
-	for id, h := range ms.Nets {
+	for _, h := range ms.Nets {
 		ns := h.ns
 		for i := 0; i < ns; i++ {
 			if i > 0 && i < ns-1 {
@@ -375,8 +415,8 @@ func (ms *Set) reestimate() {
 			}
 			for j := 0; j < ns; j++ {
 				v := h.TrAcc.At(i, j) / h.OccAcc.At(i)
-				glog.V(5).Infof("id:%d, i:%d, j:%d, old:%f, new:%f",
-					id, i, j, math.Exp(h.A.At(i, j)), v)
+				//				vv := h.TrAccMax.At(i, j) - h.OccAccMax.At(i)
+				//				glog.V(6).Infof("reest A from:%d, to:%d, tracc:%e, occacc:%e, logp:%.0f, p:%5.3f, maxp:%5.3f", i, j, h.TrAcc.At(i, j), h.OccAcc.At(i), math.Log(v), v, math.Exp(vv))
 				h.A.Set(math.Log(v), i, j)
 			}
 		}
@@ -386,10 +426,12 @@ func (ms *Set) reestimate() {
 		for id, h := range ms.Nets {
 			ns := h.ns
 			for i := 0; i < ns; i++ {
+				glog.Infof("i:%d, total_occacc:%e (%.0f), , total_occaccmax:%.0f", i, h.OccAcc.At(i), math.Log(h.OccAcc.At(i)), h.OccAccMax.At(i))
 				for j := 0; j < ns; j++ {
+					glog.Infof("i:%d, j:%d, total_tracc:%e (%.0f), total_traccmax:%.0f", i, j, h.TrAcc.At(i, j), math.Log(h.TrAcc.At(i, j)), h.TrAccMax.At(i, j))
 					p := math.Exp(h.A.At(i, j))
 					if p > smallNumber {
-						glog.Infof("reest A id:%d, name:%s, from:%d, to:%d, prob:%5.3f", id, h.Name, i, j, p)
+						glog.Infof("reest A id:%d, name:%s, from:%d, to:%d, prob:%5.2f", id, h.Name, i, j, p)
 					}
 				}
 			}
@@ -414,13 +456,13 @@ func (ch *chain) fb() {
 
 	// t=0, entry state, first model.
 	alpha.Set(0.0, 0, 0, 0)
-	glog.V(5).Infof("q:%d, i:%d, t:%d, alpha:%f", 0, 0, 0, 0.0)
+	glog.V(5).Infof("q:%d, i:%d, t:%d, alpha:%.0f", 0, 0, 0, 0.0)
 
 	// t=0, entry state, after first model.
 	for q := 1; q < nq; q++ {
 		v := alpha.At(q-1, 0, 0) + hmms[q-1].A.At(0, ns[q-1]-1)
 		alpha.Set(v, q, 0, 0)
-		glog.V(5).Infof("q:%d, i:%d, t:%d, alpha:%f", q, 0, 0, v)
+		glog.V(5).Infof("q:%d, i:%d, t:%d, alpha:%.0f", q, 0, 0, v)
 	}
 
 	// t=0, emitting states.
@@ -428,7 +470,8 @@ func (ch *chain) fb() {
 		for j := 1; j < ns[q]-1; j++ {
 			v := alpha.At(q, 0, 0) + hmms[q].A.At(0, j) + hmms[q].logProb(j, ch.vectors[0])
 			alpha.Set(v, q, j, 0)
-			glog.V(5).Infof("q:%d, i:%d, t:%d, alpha:%f", q, j, 0, v)
+			glog.V(5).Infof("q:%d, j:%d, t:%d, alpha:%.0f", q, j, 0, v)
+			glog.V(5).Infof("0>>> q:%d, j:%d, t:%d, t1:%.0f, t2:%.0f, t3:%.0f", q, j, 0, alpha.At(q, 0, 0), hmms[q].A.At(0, j), hmms[q].logProb(j, ch.vectors[0])) //debug
 		}
 	}
 
@@ -440,7 +483,7 @@ func (ch *chain) fb() {
 			v += math.Exp(alpha.At(q, i, 0) + hmms[q].A.At(i, exit))
 		}
 		alpha.Set(math.Log(v), q, exit, 0)
-		glog.V(5).Infof("q:%d, i:%d, t:%d, alpha:%f", q, exit, 0, math.Log(v))
+		glog.V(5).Infof("q:%d, i:%d, t:%d, alpha:%.0f", q, exit, 0, math.Log(v))
 	}
 
 	for tt := 1; tt < nobs; tt++ {
@@ -451,11 +494,15 @@ func (ch *chain) fb() {
 				switch {
 				case j > 0 && j < exit:
 					// t>0, emitting states.
-					v = math.Exp(alpha.At(q, 0, tt) + hmms[q].A.At(0, j))
+					w := math.Exp(alpha.At(q, 0, tt) + hmms[q].A.At(0, j))
+					glog.V(5).Infof("1>>> q:%d, j:%d, t:%d, t1:%.0f, t2:%.0f", q, j, tt, alpha.At(q, 0, tt), hmms[q].A.At(0, j)) //debug
 					for i := 1; i <= j; i++ {
-						v += math.Exp(alpha.At(q, i, tt-1) + hmms[q].A.At(i, j))
+						w += math.Exp(alpha.At(q, i, tt-1) + hmms[q].A.At(i, j))
+						glog.V(5).Infof("2>>> q:%d, i:%d, j:%d, t:%d, alpha:%.0f,logA:%.0f, A:%5.3f", q, i, j, tt, alpha.At(q, i, tt-1), hmms[q].A.At(i, j), math.Exp(hmms[q].A.At(i, j))) //debug
 					}
-					v = math.Log(v) + hmms[q].logProb(j, ch.vectors[tt])
+					v = math.Log(w) + hmms[q].logProb(j, ch.vectors[tt])
+					glog.V(5).Infof("3>>> q:%d, j:%d, t:%d, alpha:%.0f, logB:%.0f", q, j, tt, v, hmms[q].logProb(j, ch.vectors[tt])) //debug
+					glog.V(5).Infof("4>>> q:%d, j:%d, t:%d, vector:%v", q, j, tt, ch.vectors[tt])                                    //debug
 					v = math.Exp(v)
 				case j == 0 && q == 0:
 					// t>0, entry state, first model.
@@ -473,13 +520,13 @@ func (ch *chain) fb() {
 					}
 				}
 				alpha.Set(math.Log(v), q, j, tt)
-				glog.V(5).Infof("q:%d, i:%d, t:%d, alpha:%f", q, j, tt, math.Log(v))
+				glog.V(5).Infof("q:%d, i:%d, t:%d, alpha:%.0f", q, j, tt, math.Log(v))
 			}
 		}
 	}
 
 	alphaLogProb := alpha.At(nq-1, ch.ns[nq-1]-1, nobs-1)
-	glog.V(2).Infof("alpha total prob:%f, avg per obs:%f",
+	glog.V(2).Infof("alpha total prob:%.0f, avg per obs:%.0f",
 		alphaLogProb, alphaLogProb/float64(nobs))
 
 	// Compute beta.
@@ -488,13 +535,13 @@ func (ch *chain) fb() {
 
 	// t=nobs-1, exit state, last model.
 	beta.Set(0, nq-1, ns[nq-1]-1, nobs-1)
-	glog.V(5).Infof("q:%d, i:%d, t:%d,  beta:%f", nq-1, ns[nq-1]-1, nobs-1, 0.0)
+	glog.V(5).Infof("q:%d, i:%d, t:%d,  beta:%.0f", nq-1, ns[nq-1]-1, nobs-1, 0.0)
 
 	// t=nobs-1, exit state, before last model.
 	for q := nq - 2; q >= 0; q-- {
 		v := beta.At(q+1, ns[q+1]-1, nobs-1) + hmms[q+1].A.At(0, ns[q+1]-1)
 		beta.Set(v, q, ns[q]-1, nobs-1)
-		glog.V(5).Infof("q:%d, i:%d, t:%d,  beta:%f", q, ns[q]-1, nobs-1, v)
+		glog.V(5).Infof("q:%d, i:%d, t:%d,  beta:%.0f", q, ns[q]-1, nobs-1, v)
 	}
 
 	// t=nobs-1, emitting states.
@@ -502,7 +549,7 @@ func (ch *chain) fb() {
 		for i := ns[q] - 2; i > 0; i-- {
 			v := hmms[q].A.At(i, ns[q]-1) + beta.At(q, ns[q]-1, nobs-1)
 			beta.Set(v, q, i, nobs-1)
-			glog.V(5).Infof("q:%d, i:%d, t:%d,  beta:%f", q, i, nobs-1, v)
+			glog.V(5).Infof("q:%d, i:%d, t:%d,  beta:%.0f", q, i, nobs-1, v)
 		}
 	}
 
@@ -514,7 +561,7 @@ func (ch *chain) fb() {
 				hmms[q].logProb(j, ch.vectors[nobs-1]) + beta.At(q, j, nobs-1))
 		}
 		beta.Set(math.Log(v), q, 0, nobs-1)
-		glog.V(5).Infof("q:%d, i:%d, t:%d,  beta:%f", q, 0, nobs-1, math.Log(v))
+		glog.V(5).Infof("q:%d, i:%d, t:%d,  beta:%.0f", q, 0, nobs-1, math.Log(v))
 	}
 
 	for tt := nobs - 2; tt >= 0; tt-- {
@@ -546,16 +593,16 @@ func (ch *chain) fb() {
 					}
 				}
 				beta.Set(math.Log(v), q, i, tt)
-				glog.V(5).Infof("q:%d, i:%d, t:%d,  beta:%f", q, i, tt, math.Log(v))
+				glog.V(5).Infof("q:%d, i:%d, t:%d,  beta:%.0f", q, i, tt, math.Log(v))
 			}
 		}
 	}
 
 	betaLogProb := beta.At(0, 0, 0)
-	glog.V(2).Infof("beta total prob:%f, avg per obs:%f", betaLogProb, betaLogProb/float64(nobs))
+	glog.V(2).Infof("beta total prob:%.0f, avg per obs:%.0f", betaLogProb, betaLogProb/float64(nobs))
 
 	diff := (alphaLogProb - betaLogProb) / float64(nobs)
-	glog.V(2).Infof("alpha-beta relative diff:%f", diff)
+	glog.V(2).Infof("alpha-beta relative diff:%e", diff)
 
 	return
 }

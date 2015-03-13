@@ -5,54 +5,55 @@
 
 package hmm
 
-import "math/rand"
+import (
+	"math/rand"
+	"strconv"
 
-type Generator struct {
-	hmm *Model
+	"github.com/akualab/gjoa/model"
+)
+
+const seed = 33
+
+// Generator generates random observations using an hmm model.
+type generator struct {
+	hmm *Net
 	r   *rand.Rand
 }
 
-func NewGenerator(hmm *Model) (gen *Generator) {
-	r := rand.New(rand.NewSource(hmm.seed))
-	gen = &Generator{
+// NewGenerator returns an hmm data generator.
+func newGenerator(hmm *Net) *generator {
+	r := rand.New(rand.NewSource(seed))
+	return &generator{
 		hmm: hmm,
 		r:   r,
 	}
-	return gen
 }
 
-// Given n, the length of the seq, generates random sequence
-// for a given hmm.
-// func (gen *Generator) Next(n int) ([][]float64, []int, error) {
+// Next returns the next observation sequence.
+func (gen *generator) next() (model.FloatObsSequence, []int) {
 
-// 	obs := make([][]float64, n)
-// 	states := make([]int, n)
-// 	r := gen.r
-// 	logDist := gen.hmm.InitProbs
-// 	state0, err0 := model.RandIntFromLogDist(logDist, r)
-// 	if err0 != nil {
-// 		return nil, nil, fmt.Errorf("Error calling RandIntFromLogDist")
-// 	}
-// 	for i := 0; i < n; i++ {
-// 		states[i] = state0
-// 		g := gen.hmm.ObsModels[state0]
+	var data [][]float64
+	states := []int{0}
+	r := gen.r
+	seq := model.NewFloatObsSequence(data, "", "").(model.FloatObsSequence)
+	s := gen.hmm.nextState(0, r) // entry state
+	states = append(states, s)
+	for {
+		g := gen.hmm.B[s]
+		gs, ok := g.(model.Sampler)
+		if !ok {
+			panic("output PDF does not implement the sampler interface")
+		}
 
-// 		gs, ok := g.(model.Sampler)
-// 		if !ok {
-// 			return nil, nil, fmt.Errorf("mixture component does not implement the sampler interface")
-// 		}
-
-// 		x := gs.Sample()
-// 		obs[i] = x.Value().([]float64)
-// 		if err0 != nil {
-// 			return nil, nil, fmt.Errorf("Error generating Random model")
-// 		}
-// 		dist := gen.hmm.TransProbs[state0]
-// 		state, err := model.RandIntFromLogDist(dist, r)
-// 		if err != nil {
-// 			return nil, nil, fmt.Errorf("Error calling RandIntFromLogDist")
-// 		}
-// 		state0 = state
-// 	}
-// 	return obs, states, nil
-// }
+		x := gs.Sample().(model.FloatObs)
+		lab := gen.hmm.Name + "-" + strconv.FormatInt(int64(s), 10)
+		seq.Add(x, lab)
+		s = gen.hmm.nextState(s, r)
+		states = append(states, s)
+		if s == gen.hmm.ns-1 {
+			// Reached exit state.
+			break
+		}
+	}
+	return seq, states
+}

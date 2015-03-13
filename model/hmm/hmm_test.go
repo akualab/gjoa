@@ -62,7 +62,7 @@ func TestMain(m *testing.M) {
 	// configure glog.
 	flag.Set("alsologtostderr", "true")
 	flag.Set("log_dir", "/tmp/log")
-	flag.Set("v", "3")
+	flag.Set("v", "6")
 	flag.Parse()
 	glog.Info("Logging configured")
 
@@ -447,7 +447,10 @@ func TestAlphaBeta(t *testing.T) {
 
 	t.Log("")
 	t.Log("compute fb using package")
-	hmms.update()
+	err = hmms.update()
+	if err != nil {
+		t.Log(err)
+	}
 	alpha2 := hmms.alpha.At(nq-1, nstates[nq-1]-1, nobs-1)
 	beta2 := hmms.beta.At(0, 0, 0)
 

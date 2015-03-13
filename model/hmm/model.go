@@ -37,11 +37,13 @@ type Model struct {
 	Set *Set `json:"hmm_set"`
 
 	// Train HMM params.
-	assigner  Assigner
-	generator *Generator
+	assigner Assigner
+	//	generator *Generator
 	maxGenLen int
 	seed      int64
 	updateTP  bool
+
+	logProb float64
 }
 
 // Option type is used to pass options to NewModel().
@@ -70,7 +72,7 @@ func NewModel(options ...Option) *Model {
 	if m.Set.size() > 1 && m.assigner == nil {
 		glog.Fatalf("need assigner to create an HMM model with more than one network - use OAssign option to specify assigner")
 	}
-	m.generator = NewGenerator(m)
+	//	m.generator = NewGenerator(m)
 	return m
 }
 
@@ -86,10 +88,16 @@ func (m *Model) UpdateOne(o model.Obs, w float64) {
 	}
 
 	// Use the forward-backward algorithm to compute counts.
-	chain.update()
+	err = chain.update()
+	if err != nil {
+		glog.Warning(err)
+		return
+	}
 
-	// Print log(prob(O/model))
-	glog.Infof("update hmm stats, obsid: [%s], logProb:%f", o.ID(), chain.beta.At(0, 0, 0))
+	// Print log(prob(O/model))\
+	p := chain.beta.At(0, 0, 0)
+	m.logProb += p
+	glog.Infof("update hmm stats, obsid: [%s], logProb:%.2f total:%.2f", o.ID(), p, m.logProb)
 }
 
 // Update updates sufficient statistics using an observation stream.
@@ -138,6 +146,7 @@ func (m *Model) Dim() int {
 
 // Clear accumulators.
 func (m *Model) Clear() {
+	m.logProb = 0
 	m.Set.reset()
 }
 

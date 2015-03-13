@@ -113,10 +113,7 @@ func (g *Model) Predict(x model.Observer) ([]model.Labeler, error) {
 
 // Sample returns a Gaussian sample.
 func (g *Model) Sample() model.Obs {
-	obs, e := model.RandNormalVector(g.Mean, g.StdDev, g.rand)
-	if e != nil {
-		glog.Fatal(e)
-	}
+	obs := model.RandNormalVector(g.Mean, g.StdDev, g.rand)
 	return model.NewFloatObs(obs, model.SimpleLabel(""))
 }
 
@@ -167,6 +164,8 @@ func (g *Model) prob(obs []float64) float64 {
 // UpdateOne updates sufficient statistics using one observation.
 func (g *Model) UpdateOne(o model.Obs, w float64) {
 
+	glog.V(6).Infof("gaussian update, name:%s, obs:%v, weight:%e", g.ModelName, o, w)
+
 	/* Update sufficient statistics. */
 	obs, _, _ := model.ObsToF64(o)
 	floatx.Apply(floatx.ScaleFunc(w), obs, g.tmpArray)
@@ -198,6 +197,7 @@ func (g *Model) Estimate() error {
 	} else {
 
 		/* Not enough training sample. */
+		glog.Warningf("not enough training samples, name [%s], num samples [%e]", g.ModelName, g.NSamples)
 		floatx.Apply(floatx.SetValueFunc(smallVar), g.variance, nil)
 		floatx.Apply(floatx.SetValueFunc(0), g.Mean, nil)
 	}
@@ -207,6 +207,7 @@ func (g *Model) Estimate() error {
 	floatx.Log(g.tmpArray, g.variance)
 	g.const2 = g.const1 - floats.Sum(g.tmpArray)/2.0
 
+	glog.V(6).Infof("gaussian reest, name:%s, mean:%v, sd:%v", g.ModelName, g.Mean, g.StdDev)
 	return nil
 }
 

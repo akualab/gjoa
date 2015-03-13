@@ -6,7 +6,6 @@
 package hmm
 
 import (
-	"flag"
 	"testing"
 
 	"github.com/akualab/gjoa/model"
@@ -16,10 +15,10 @@ import (
 
 const epsilon = 0.001
 
-func init() {
-	flag.Set("logtostderr", "true")
-	flag.Set("v", "4")
-}
+// func init() {
+// 	flag.Set("logtostderr", "true")
+// 	flag.Set("v", "6")
+// }
 
 // Tests
 
@@ -48,7 +47,7 @@ func init() {
    Viterbi gives you the P(q | O,  model), that is, it maximizes of over the whole sequence.
 */
 
-func MakeHMM(t *testing.T) *Model {
+func makeHMM(t *testing.T) *Model {
 
 	// Gaussian 1.
 	mean1 := []float64{1}
@@ -65,27 +64,58 @@ func MakeHMM(t *testing.T) *Model {
 
 	var err error
 	h0 := narray.New(4, 4)
-	h0.Set(.8, 0, 1)
-	h0.Set(.2, 0, 2)
-	h0.Set(.9, 1, 1)
-	h0.Set(.1, 1, 2)
+	//	h0.Set(.8, 0, 1)
+	h0.Set(1, 0, 1)
+	//	h0.Set(.2, 0, 2)
+	h0.Set(.5, 1, 1)
+	h0.Set(.5, 1, 2)
 	h0.Set(.7, 2, 2)
 	h0.Set(.3, 2, 3)
 	h0 = narray.Log(nil, h0.Copy())
 
 	ms, _ = NewSet()
-	hmm0, err = ms.NewNet("hmm0", h0,
+	_, err = ms.NewNet("hmm0", h0,
 		[]model.Modeler{nil, g1, g2, nil})
 	fatalIf(t, err)
 
 	return NewModel(OSet(ms))
 }
 
-func TestTrain(t *testing.T) {
+func TestTrainBasic(t *testing.T) {
 
-	m := MakeHMM(t)
-	obs := model.NewFloatObsSequence(obs0, model.SimpleLabel(""), "")
+	//	data := [][]float64{{0.1}, {0.3}, {1.1}, {1.2}, {1.5}, {0.3}, {0.2}, {1.3},
+	//		{0.7}, {0.7}, {5.5}, {7.8}, {10.0}, {5.2}, {4.1}, {3.3}, {6.2}, {8.3}}
+
+	data := [][]float64{{0.1}, {0.3}, {1.1}, {5.5}, {7.8}, {10.0}, {5.2}, {4.1}, {3.3}, {6.2}, {8.3}}
+
+	m := makeHMM(t)
+	h := m.Set.Nets[0]
+	tp0 := narray.Exp(nil, h.A.Copy())
+	//	obs := model.NewFloatObsSequence(obs0, model.SimpleLabel(""), "")
+	obs := model.NewFloatObsSequence(data, model.SimpleLabel(""), "")
+
+	m.Clear()
 	m.UpdateOne(obs, 1.0)
+	m.Estimate()
+
+	m.Clear()
+	m.UpdateOne(obs, 1.0)
+	m.Estimate()
+
+	tp := narray.Exp(nil, h.A.Copy())
+	ns := tp.Shape[0]
+	for i := 0; i < ns; i++ {
+		for j := 0; j < ns; j++ {
+			p0 := tp0.At(i, j)
+			p := tp.At(i, j)
+			if p > smallNumber || p0 > smallNumber {
+				t.Logf("TP: %d=>%d, p0:%5.2f, p:%5.2f", i, j, p0, p)
+			}
+		}
+	}
+
+	t.Log("")
+	t.Logf("hmm  g1: %+v, g2:%+v", h.B[1], h.B[2])
 }
 
 // func TestLogProb(t *testing.T) {
