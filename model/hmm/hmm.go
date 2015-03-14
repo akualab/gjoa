@@ -413,7 +413,7 @@ func (ms *Set) reestimate() {
 					glog.Errorf("model estimation error: %s", err)
 				}
 			}
-			for j := 0; j < ns; j++ {
+			for j := i; j < ns && i < ns-1; j++ {
 				v := h.TrAcc.At(i, j) / h.OccAcc.At(i)
 				//				vv := h.TrAccMax.At(i, j) - h.OccAccMax.At(i)
 				//				glog.V(6).Infof("reest A from:%d, to:%d, tracc:%e, occacc:%e, logp:%.0f, p:%5.3f, maxp:%5.3f", i, j, h.TrAcc.At(i, j), h.OccAcc.At(i), math.Log(v), v, math.Exp(vv))
@@ -471,7 +471,6 @@ func (ch *chain) fb() {
 			v := alpha.At(q, 0, 0) + hmms[q].A.At(0, j) + hmms[q].logProb(j, ch.vectors[0])
 			alpha.Set(v, q, j, 0)
 			glog.V(5).Infof("q:%d, j:%d, t:%d, alpha:%.0f", q, j, 0, v)
-			glog.V(5).Infof("0>>> q:%d, j:%d, t:%d, t1:%.0f, t2:%.0f, t3:%.0f", q, j, 0, alpha.At(q, 0, 0), hmms[q].A.At(0, j), hmms[q].logProb(j, ch.vectors[0])) //debug
 		}
 	}
 
@@ -495,14 +494,10 @@ func (ch *chain) fb() {
 				case j > 0 && j < exit:
 					// t>0, emitting states.
 					w := math.Exp(alpha.At(q, 0, tt) + hmms[q].A.At(0, j))
-					glog.V(5).Infof("1>>> q:%d, j:%d, t:%d, t1:%.0f, t2:%.0f", q, j, tt, alpha.At(q, 0, tt), hmms[q].A.At(0, j)) //debug
 					for i := 1; i <= j; i++ {
 						w += math.Exp(alpha.At(q, i, tt-1) + hmms[q].A.At(i, j))
-						glog.V(5).Infof("2>>> q:%d, i:%d, j:%d, t:%d, alpha:%.0f,logA:%.0f, A:%5.3f", q, i, j, tt, alpha.At(q, i, tt-1), hmms[q].A.At(i, j), math.Exp(hmms[q].A.At(i, j))) //debug
 					}
 					v = math.Log(w) + hmms[q].logProb(j, ch.vectors[tt])
-					glog.V(5).Infof("3>>> q:%d, j:%d, t:%d, alpha:%.0f, logB:%.0f", q, j, tt, v, hmms[q].logProb(j, ch.vectors[tt])) //debug
-					glog.V(5).Infof("4>>> q:%d, j:%d, t:%d, vector:%v", q, j, tt, ch.vectors[tt])                                    //debug
 					v = math.Exp(v)
 				case j == 0 && q == 0:
 					// t>0, entry state, first model.

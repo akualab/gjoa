@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/model"
 	gm "github.com/akualab/gjoa/model/gaussian"
 	"github.com/akualab/gjoa/model/gmm"
@@ -93,9 +94,8 @@ func TestTrainHmmGaussian(t *testing.T) {
 	g02 := gm.NewModel(1, gm.Name("g02"), gm.Mean([]float64{6}), gm.StdDev([]float64{2}))
 
 	h0 := narray.New(4, 4)
-	//	h0.Set(.6, 0, 1)
-	h0.Set(1, 0, 1)
-	//	h0.Set(.4, 0, 2)
+	h0.Set(.6, 0, 1)
+	h0.Set(.4, 0, 2)
 	h0.Set(.9, 1, 1)
 	h0.Set(.1, 1, 2)
 	h0.Set(.7, 2, 2)
@@ -116,7 +116,7 @@ func TestTrainHmmGaussian(t *testing.T) {
 
 	h := narray.New(4, 4)
 	h.Set(1, 0, 1)
-	//	h.Set(.5, 0, 2)
+	h.Set(.5, 0, 2)
 	h.Set(.5, 1, 1)
 	h.Set(.5, 1, 2)
 	h.Set(.5, 2, 2)
@@ -129,10 +129,9 @@ func TestTrainHmmGaussian(t *testing.T) {
 	fatalIf(t, e)
 	hmm := NewModel(OSet(ms))
 
-	iter := 6
+	iter := 4
 	// number of sequences
-	m := 1000
-	//	eps := 0.03
+	m := 300
 	numFrames := 0
 	t0 := time.Now() // Start timer.
 	for i := 0; i < iter; i++ {
@@ -152,18 +151,17 @@ func TestTrainHmmGaussian(t *testing.T) {
 		hmm.Estimate()
 	}
 	dur := time.Now().Sub(t0)
-	//	CompareHMMs(t, hmm0, hmm, eps)
-	//	h0 := hmm0.Set.Nets[0]
-	//	h := hmm.Set.Nets[0]
 	tp0 := narray.Exp(nil, h0.Copy())
 	tp := narray.Exp(nil, net.A.Copy())
 	ns := tp.Shape[0]
 	for i := 0; i < ns; i++ {
 		for j := 0; j < ns; j++ {
 			p0 := tp0.At(i, j)
+			logp0 := h0.At(i, j)
 			p := tp.At(i, j)
+			logp := h.At(i, j)
 			if p > smallNumber || p0 > smallNumber {
-				t.Logf("TP: %d=>%d, p0:%5.2f, p:%5.2f", i, j, p0, p)
+				t.Logf("TP: %d=>%d, p0:%5.2f, p:%5.2f, logp0:%8.5f, logp:%8.5f", i, j, p0, p, logp0, logp)
 			}
 		}
 	}
@@ -177,6 +175,12 @@ func TestTrainHmmGaussian(t *testing.T) {
 	t.Logf("Total time: %v", dur)
 	t.Logf("Time per iteration: %v", dur/time.Duration(iter))
 	t.Logf("Time per frame: %v", dur/time.Duration(iter*numFrames*m))
+
+	gjoa.CompareSliceFloat(t, tp.Data, tp0.Data,
+		"error in Trans Probs [0]", .03)
+
+	CompareGaussians(t, net0.B[1].(*gm.Model), net.B[1].(*gm.Model), 0.03)
+	CompareGaussians(t, net0.B[2].(*gm.Model), net.B[2].(*gm.Model), 0.03)
 }
 
 func TestTrainHmmGmm(t *testing.T) {
@@ -218,8 +222,14 @@ func TestTrainHmmGmm(t *testing.T) {
 	t.Logf("Time per frame: %v", dur/time.Duration(iter*n*m))
 }
 
+func CompareGaussians(t *testing.T, g1 *gm.Model, g2 *gm.Model, eps float64) {
+	gjoa.CompareSliceFloat(t, g1.Mean, g2.Mean, "Wrong Mean", eps)
+	gjoa.CompareSliceFloat(t, g1.StdDev, g2.StdDev, "Wrong SD", eps)
+}
+
 // func CompareHMMs(t *testing.T, hmm0 *Model, hmm *Model, eps float64) {
-// 	gjoa.CompareSliceFloat(t, hmm0.TransProbs[0], hmm.TransProbs[0],
+
+// 	gjoa.CompareSliceFloat(t, hmm0.Set.Nets[0], hmm.TransProbs[0],
 // 		"error in TransProbs[0]", eps)
 // 	gjoa.CompareSliceFloat(t, hmm0.TransProbs[1], hmm.TransProbs[1],
 // 		"error in TransProbs[1]", eps)
