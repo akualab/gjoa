@@ -129,9 +129,9 @@ func TestTrainHmmGaussian(t *testing.T) {
 	fatalIf(t, e)
 	hmm := NewModel(OSet(ms))
 
-	iter := 4
+	iter := 6
 	// number of sequences
-	m := 300
+	m := 500
 	numFrames := 0
 	t0 := time.Now() // Start timer.
 	for i := 0; i < iter; i++ {

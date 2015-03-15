@@ -81,9 +81,7 @@ func (ms *Set) reset() {
 	glog.V(2).Infof("reset accumulators")
 	for _, h := range ms.Nets {
 		h.OccAcc.SetValue(0.0)
-		h.OccAccMax.SetValue(math.Inf(-1))
 		h.TrAcc.SetValue(0.0)
-		h.TrAccMax.SetValue(math.Inf(-1))
 		for i := 1; i < h.ns-1; i++ {
 			h.B[i].Clear()
 		}
@@ -108,11 +106,9 @@ type Net struct {
 	// num states
 	ns int
 	// Accumulator for transition probabilities.
-	TrAcc    *narray.NArray
-	TrAccMax *narray.NArray
+	TrAcc *narray.NArray
 	// Accumulator for global occupation counts.
-	OccAcc    *narray.NArray
-	OccAccMax *narray.NArray
+	OccAcc *narray.NArray
 }
 
 // NewNet creates a new HMM network.
@@ -128,14 +124,12 @@ func (ms *Set) NewNet(name string, a *narray.NArray, b []model.Modeler) (*Net, e
 	}
 
 	net := &Net{
-		Name:      name,
-		A:         a,
-		B:         b,
-		TrAcc:     narray.New(numStates, numStates),
-		TrAccMax:  narray.New(numStates, numStates),
-		OccAcc:    narray.New(numStates),
-		OccAccMax: narray.New(numStates),
-		ns:        numStates,
+		Name:   name,
+		A:      a,
+		B:      b,
+		TrAcc:  narray.New(numStates, numStates),
+		OccAcc: narray.New(numStates),
+		ns:     numStates,
 	}
 	err := ms.add(net)
 	if err != nil {
@@ -362,8 +356,7 @@ func (ch *chain) doOccAcc(q, t, i int, tp float64) float64 {
 		}
 	}
 	h.OccAcc.Inc(v/tp, i)
-	h.OccAccMax.MaxElem(vv-math.Log(tp), i)
-	glog.V(6).Infof("q:%d, t:%d, i:%d, occ:%.0f", q, t, i, math.Log(v))
+	glog.V(6).Infof("q:%d, t:%d, i:%d, occ:%.0f", q, t, i, vv)
 	return v
 }
 
@@ -395,9 +388,7 @@ func (ch *chain) doTrAcc(q, t, i int, tp float64) {
 			continue
 		}
 		h.TrAcc.Inc(math.Exp(v)/tp, i, j)
-		h.TrAccMax.MaxElem(v-math.Log(tp), i, j)
-		glog.V(6).Infof("q:%d, t:%d, i:%d, j:%d, tracc:%.0f",
-			q, t, i, j, v)
+		glog.V(6).Infof("q:%d, t:%d, i:%d, j:%d, tracc:%.0f", q, t, i, j, v)
 	}
 }
 
@@ -415,23 +406,27 @@ func (ms *Set) reestimate() {
 			}
 			for j := i; j < ns && i < ns-1; j++ {
 				v := h.TrAcc.At(i, j) / h.OccAcc.At(i)
-				//				vv := h.TrAccMax.At(i, j) - h.OccAccMax.At(i)
-				//				glog.V(6).Infof("reest A from:%d, to:%d, tracc:%e, occacc:%e, logp:%.0f, p:%5.3f, maxp:%5.3f", i, j, h.TrAcc.At(i, j), h.OccAcc.At(i), math.Log(v), v, math.Exp(vv))
 				h.A.Set(math.Log(v), i, j)
+				glog.V(6).Infof("reest add A %d=>%d, tracc:%6.4f, occacc:%6.4f, p:%5.3f", i, j, h.TrAcc.At(i, j), h.OccAcc.At(i), v)
+
 			}
 		}
 	}
 
+	// Traces.
 	if glog.V(3) {
 		for id, h := range ms.Nets {
 			ns := h.ns
 			for i := 0; i < ns; i++ {
-				glog.Infof("i:%d, total_occacc:%e (%.0f), , total_occaccmax:%.0f", i, h.OccAcc.At(i), math.Log(h.OccAcc.At(i)), h.OccAccMax.At(i))
+				glog.Infof("i:%d, total_occacc:%e (%.0f)",
+					i, h.OccAcc.At(i), math.Log(h.OccAcc.At(i)))
 				for j := 0; j < ns; j++ {
-					glog.Infof("i:%d, j:%d, total_tracc:%e (%.0f), total_traccmax:%.0f", i, j, h.TrAcc.At(i, j), math.Log(h.TrAcc.At(i, j)), h.TrAccMax.At(i, j))
+					glog.Infof("i:%d, j:%d, total_tracc:%e (%.0f)",
+						i, j, h.TrAcc.At(i, j), math.Log(h.TrAcc.At(i, j)))
 					p := math.Exp(h.A.At(i, j))
 					if p > smallNumber {
-						glog.Infof("reest A id:%d, name:%s, from:%d, to:%d, prob:%5.2f", id, h.Name, i, j, p)
+						glog.Infof("reest A id:%d, name:%s, from:%d, to:%d, prob:%5.2f",
+							id, h.Name, i, j, p)
 					}
 				}
 			}
