@@ -33,9 +33,9 @@ func InsertNodes(g *graph.Graph, weight float64) (ng *graph.Graph, e error) {
 		value := map[string]interface{}{"inserted": false}
 		ng.Set(from.Key(), value)
 
-		// Get succesors.
-		succesors := from.GetSuccesors()
-		for to, weight := range succesors {
+		// Get successors.
+		successors := from.GetSuccessors()
+		for to, weight := range successors {
 
 			// Skip if self-transition.
 			if from == to {

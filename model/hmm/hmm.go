@@ -168,6 +168,8 @@ type chain struct {
 	ns []int
 	// Observation.
 	obs model.Obs
+	// Likelihoods p(obs/state)
+	likelihoods *narray.NArray
 	// Raw observation data for sequence.
 	vectors [][]float64
 	// number of vectors
@@ -212,6 +214,8 @@ func (ms *Set) chainFromNets(obs model.Obs, m ...*Net) (*chain, error) {
 		glog.Info("lab: ", ch.obs.Label())
 		glog.Info("obs: ", ch.obs.Value())
 	}
+
+	ch.computeLikelihoods()
 
 	// Validate.
 
@@ -297,6 +301,8 @@ func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, erro
 		glog.Info("obs: ", ch.obs.Value())
 	}
 
+	ch.computeLikelihoods()
+
 	// Validate.
 
 	// Can't have models with transitions from entry to exit states
@@ -309,6 +315,20 @@ func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, erro
 	}
 
 	return ch, nil
+}
+
+func (ch *chain) computeLikelihoods() {
+
+	ch.likelihoods = narray.New(ch.nq, ch.maxNS, ch.nobs)
+	for q, h := range ch.hmms {
+		for i := 1; i < ch.ns[q]-1; i++ {
+			for t, v := range ch.vectors {
+				ll := h.logProb(i, v)
+				ch.likelihoods.Set(ll, q, i, t)
+				glog.V(6).Infof("q:%d, i:%d, t:%d, likelihood:%8.3f", q, i, t, ll)
+			}
+		}
+	}
 }
 
 func (ch *chain) update() error {
@@ -328,8 +348,8 @@ func (ch *chain) update() error {
 		exit := ch.ns[q] - 1
 		for t, vec := range ch.vectors {
 			for i := 0; i < exit; i++ {
-				w := ch.doOccAcc(q, t, i, totalProb) / totalProb
-				ch.doTrAcc(q, t, i, totalProb)
+				w := ch.doOccAcc(q, i, t, totalProb) / totalProb
+				ch.doTrAcc(q, i, t, totalProb)
 				if i > 0 {
 					o := model.F64ToObs(vec, "")
 					h.B[i].UpdateOne(o, w) // TODO prove!
@@ -340,7 +360,7 @@ func (ch *chain) update() error {
 	return nil
 }
 
-func (ch *chain) doOccAcc(q, t, i int, tp float64) float64 {
+func (ch *chain) doOccAcc(q, i, t int, tp float64) float64 {
 
 	h := ch.hmms[q]
 	exit := ch.ns[q] - 1
@@ -360,27 +380,26 @@ func (ch *chain) doOccAcc(q, t, i int, tp float64) float64 {
 	return v
 }
 
-func (ch *chain) doTrAcc(q, t, i int, tp float64) {
+func (ch *chain) doTrAcc(q, i, t int, tp float64) {
 
 	h := ch.hmms[q]
 	ns := ch.ns[q]
 	exit := ch.ns[q] - 1
-	op0 := ch.vectors[t]
+	//	op0 := ch.vectors[t]
 	for j := 1; j < ns; j++ {
 		var v float64
 		switch {
 		case i > 0 && j < exit && t < ch.nobs-1:
 			// Internal transitions.
-			op1 := ch.vectors[t+1]
 			v = ch.alpha.At(q, i, t) + h.A.At(i, j) +
-				h.logProb(j, op1) + ch.beta.At(q, j, t+1)
+				ch.likelihoods.At(q, j, t+1) + ch.beta.At(q, j, t+1)
 		case i > 0 && j == exit:
 			// From internal state to exit state.
 			v = ch.alpha.At(q, i, t) + h.A.At(i, exit) + ch.beta.At(q, exit, t)
 		case i == 0 && j < exit:
 			// From entry state to internal state.
 			v = ch.alpha.At(q, 0, t) + h.A.At(0, j) +
-				h.logProb(j, op0) + ch.beta.At(q, j, t)
+				ch.likelihoods.At(q, j, t) + ch.beta.At(q, j, t)
 		case i == 0 && j == exit && q < ch.nq-1:
 			// Direct transition from entry to exit states.
 			v = ch.alpha.At(q, 0, t) + h.A.At(0, exit) + ch.beta.At(q+1, 0, t)
@@ -463,7 +482,7 @@ func (ch *chain) fb() {
 	// t=0, emitting states.
 	for q := 0; q < nq; q++ {
 		for j := 1; j < ns[q]-1; j++ {
-			v := alpha.At(q, 0, 0) + hmms[q].A.At(0, j) + hmms[q].logProb(j, ch.vectors[0])
+			v := alpha.At(q, 0, 0) + hmms[q].A.At(0, j) + ch.likelihoods.At(q, j, 0)
 			alpha.Set(v, q, j, 0)
 			glog.V(5).Infof("q:%d, j:%d, t:%d, alpha:%.0f", q, j, 0, v)
 		}
@@ -492,11 +511,10 @@ func (ch *chain) fb() {
 					for i := 1; i <= j; i++ {
 						w += math.Exp(alpha.At(q, i, tt-1) + hmms[q].A.At(i, j))
 					}
-					v = math.Log(w) + hmms[q].logProb(j, ch.vectors[tt])
+					v = math.Log(w) + ch.likelihoods.At(q, j, tt)
 					v = math.Exp(v)
 				case j == 0 && q == 0:
 					// t>0, entry state, first model.
-					// alpha(0,0,t) = -Inf
 					v = 0.0
 				case j == 0 && q > 0:
 					// t>0, entry state, after first model.
@@ -504,7 +522,6 @@ func (ch *chain) fb() {
 						math.Exp(alpha.At(q-1, 0, tt)+hmms[q-1].A.At(0, ns[q-1]-1))
 				case j == exit:
 					// t>0, exit states.
-
 					for i := 1; i < exit; i++ {
 						v += math.Exp(alpha.At(q, i, tt) + hmms[q].A.At(i, exit))
 					}
@@ -548,7 +565,8 @@ func (ch *chain) fb() {
 		var v float64
 		for j := 1; j < ns[q]-1; j++ {
 			v += math.Exp(hmms[q].A.At(0, j) +
-				hmms[q].logProb(j, ch.vectors[nobs-1]) + beta.At(q, j, nobs-1))
+				ch.likelihoods.At(q, j, nobs-1) + beta.At(q, j, nobs-1))
+
 		}
 		beta.Set(math.Log(v), q, 0, nobs-1)
 		glog.V(5).Infof("q:%d, i:%d, t:%d,  beta:%.0f", q, 0, nobs-1, math.Log(v))
@@ -565,7 +583,7 @@ func (ch *chain) fb() {
 					v = math.Exp(hmms[q].A.At(i, exit) + beta.At(q, exit, tt))
 					for j := i; j < exit; j++ {
 						v += math.Exp(hmms[q].A.At(i, j) +
-							hmms[q].logProb(j, ch.vectors[tt+1]) + beta.At(q, j, tt+1))
+							ch.likelihoods.At(q, j, tt+1) + beta.At(q, j, tt+1))
 					}
 				case i == exit && q == nq-1:
 					// t<nobs-1, exit state, last model.
@@ -579,7 +597,7 @@ func (ch *chain) fb() {
 					// t<nobs-1, entry states.
 					for j := 1; j < exit; j++ {
 						v += math.Exp(hmms[q].A.At(0, j) +
-							hmms[q].logProb(j, ch.vectors[tt]) + beta.At(q, j, tt))
+							ch.likelihoods.At(q, j, tt) + beta.At(q, j, tt))
 					}
 				}
 				beta.Set(math.Log(v), q, i, tt)

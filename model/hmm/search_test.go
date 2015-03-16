@@ -8,7 +8,7 @@ type vvalue struct {
 
 // Implements the Viterbier interface.
 func (v vvalue) ScoreFunction(n int, node *graph.Node) float64 {
-	return v.f(n, node)
+	return v.f(n)
 }
 
 // func TestViterbi(t *testing.T) {

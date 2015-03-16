@@ -1,9 +1,50 @@
-/*
+// Copyright (c) 2015 AKUALAB INC., All rights reserved.
+//
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-Search graph.
-
-*/
 package hmm
+
+import (
+	"math"
+	"strconv"
+
+	"github.com/akualab/gjoa/model"
+	"github.com/akualab/graph"
+)
+
+// Value is the value type associated with graph nodes. Must implement the
+// graph.Viterbier interface.
+type nodeValue struct {
+	scorer      model.Modeler
+	entry, exit bool
+	net         *Net
+}
+
+// MakeGraph creates a graph based on a set of HMM networks.
+func MakeGraph(set *Set) *graph.Graph {
+
+	return nil
+}
+
+// Graph converts an HMM Net object to a graph where states are nodes. Like
+// an HMM net, the graph contains a single entry and exit non-emmiting state.
+func (m *Net) Graph() *graph.Graph {
+
+	g := graph.New()
+	for i := 0; i < m.ns; i++ {
+		fromKey := m.Name + strconv.FormatInt(int64(i), 10)
+		nv := nodeValue{scorer: m.B[i], net: m}
+		g.Set(fromKey, nv)
+		for j := i; j < m.ns; j++ {
+			if m.A.At(i, j) > math.Inf(-1) {
+				toKey := m.Name + strconv.FormatInt(int64(j), 10)
+				g.Connect(fromKey, toKey, m.A.At(i, j))
+			}
+		}
+	}
+	return g
+}
 
 // The viterbi algorithm computes the probable sequence of states for an HMM.
 // These are the equations in log scale:
