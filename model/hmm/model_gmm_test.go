@@ -14,6 +14,7 @@ import (
 	"github.com/akualab/gjoa/model"
 	gm "github.com/akualab/gjoa/model/gaussian"
 	"github.com/akualab/gjoa/model/gmm"
+	"github.com/akualab/graph"
 	"github.com/akualab/narray"
 )
 
@@ -129,10 +130,11 @@ func TestTrainHmmGaussian(t *testing.T) {
 	fatalIf(t, e)
 	hmm := NewModel(OSet(ms))
 
-	iter := 6
+	iter := 4
 	// number of sequences
 	m := 500
 	numFrames := 0
+	gen := newGenerator(net0)
 	t0 := time.Now() // Start timer.
 	for i := 0; i < iter; i++ {
 		t.Logf("iter [%d]", i)
@@ -141,8 +143,6 @@ func TestTrainHmmGaussian(t *testing.T) {
 		hmm.Clear()
 
 		// fix the seed to get the same sequence
-		//		gen := newGenerator(hmm0.Set.Nets[0])
-		gen := newGenerator(net0)
 		for j := 0; j < m; j++ {
 			obs, states := gen.next()
 			numFrames += len(states) - 2
@@ -179,8 +179,28 @@ func TestTrainHmmGaussian(t *testing.T) {
 	gjoa.CompareSliceFloat(t, tp.Data, tp0.Data,
 		"error in Trans Probs [0]", .03)
 
-	CompareGaussians(t, net0.B[1].(*gm.Model), net.B[1].(*gm.Model), 0.03)
-	CompareGaussians(t, net0.B[2].(*gm.Model), net.B[2].(*gm.Model), 0.03)
+	CompareGaussians(t, net0.B[1].(*gm.Model), net.B[1].(*gm.Model), 0.05)
+	CompareGaussians(t, net0.B[2].(*gm.Model), net.B[2].(*gm.Model), 0.05)
+
+	// Recognize.
+
+	// Generate a sequence.
+	obs, states := gen.next()
+	t.Log(states)
+	g := ms.SearchGraph()
+	t.Log(g)
+
+	dec, e := graph.NewDecoder(g)
+	if e != nil {
+		t.Fatal(e)
+	}
+
+	// Find the optimnal sequence.
+	token := dec.Decode(obs.ValueAsSlice())
+
+	// The token has the backtrace to find the optimal path.
+	t.Logf(">>>> backtrace: %s", token)
+
 }
 
 func TestTrainHmmGmm(t *testing.T) {

@@ -149,6 +149,15 @@ func NewFloatObsSequence(val [][]float64, lab SimpleLabel, id string) Obs {
 // Value method returns the observed value.
 func (fo FloatObsSequence) Value() interface{} { return interface{}(fo.value) }
 
+// ValueAsSlice returns the observed value as a slice of interfaces.
+func (fo FloatObsSequence) ValueAsSlice() []interface{} {
+	res := make([]interface{}, len(fo.value), len(fo.value))
+	for k, v := range fo.value {
+		res[k] = v
+	}
+	return res
+}
+
 // Label returns the label for the observation.
 func (fo FloatObsSequence) Label() Labeler { return Labeler(fo.label) }
 
