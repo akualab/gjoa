@@ -71,10 +71,7 @@ func TestTrainGaussian(t *testing.T) {
 
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < 2000000; i++ {
-		rv, err := model.RandNormalVector(mean, std, r)
-		if err != nil {
-			t.Fatal(err)
-		}
+		rv := model.RandNormalVector(mean, std, r)
 		g.UpdateOne(model.F64ToObs(rv, ""), 1.0)
 	}
 	g.Estimate()
@@ -110,10 +107,7 @@ func TestTrainGaussian2(t *testing.T) {
 
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < numSamp; i++ {
-		rv, err := model.RandNormalVector(mean, std, r)
-		if err != nil {
-			t.Fatal(err)
-		}
+		rv := model.RandNormalVector(mean, std, r)
 		values[i] = rv
 	}
 
@@ -148,10 +142,7 @@ func TestCloneGaussian(t *testing.T) {
 
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < 2000; i++ {
-		rv, err := model.RandNormalVector(mean, std, r)
-		if err != nil {
-			t.Fatal(err)
-		}
+		rv := model.RandNormalVector(mean, std, r)
 		g.UpdateOne(model.F64ToObs(rv, ""), 1.0)
 	}
 	g.Estimate()
@@ -199,10 +190,7 @@ func BenchmarkTrain(b *testing.B) {
 	r := rand.New(rand.NewSource(33))
 	buf := make([][]float64, 2000000, 2000000)
 	for i := 0; i < 2000000; i++ {
-		rv, err := model.RandNormalVector(mean, std, r)
-		if err != nil {
-			b.Fatal(err)
-		}
+		rv := model.RandNormalVector(mean, std, r)
 		buf[i] = rv
 	}
 
@@ -233,10 +221,7 @@ func BenchmarkTrain2(b *testing.B) {
 
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < numSamp; i++ {
-		rv, err := model.RandNormalVector(mean, std, r)
-		if err != nil {
-			b.Fatal(err)
-		}
+		rv := model.RandNormalVector(mean, std, r)
 		fs.Values[i] = rv
 	}
 	for i := 0; i < b.N; i++ {
