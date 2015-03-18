@@ -51,7 +51,6 @@ var (
 	ns, nobs                      int
 	r                             = rand.New(rand.NewSource(33))
 	outputProbs                   *narray.NArray
-	nchain                        Chain
 	hmms                          *chain
 	hmm0, hmm1                    *Net
 	ms                            *Set
@@ -62,7 +61,7 @@ func TestMain(m *testing.M) {
 	// configure glog.
 	flag.Set("alsologtostderr", "true")
 	flag.Set("log_dir", "/tmp/log")
-	flag.Set("v", "6")
+	flag.Set("v", "3")
 	flag.Parse()
 	glog.Info("Logging configured")
 

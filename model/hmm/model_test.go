@@ -6,46 +6,17 @@
 package hmm
 
 import (
+	"math/rand"
 	"testing"
+	"time"
 
+	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/model"
 	gm "github.com/akualab/gjoa/model/gaussian"
+	"github.com/akualab/gjoa/model/gmm"
+	"github.com/akualab/graph"
 	"github.com/akualab/narray"
 )
-
-const epsilon = 0.001
-
-// func init() {
-// 	flag.Set("logtostderr", "true")
-// 	flag.Set("v", "6")
-// }
-
-// Tests
-
-/*
-   DISCUSSION:
-   We created a simple 2-state HMM for testing.
-
-   If you look at the sample data and model params. I manufactured the
-   data as if it was emitted with the following sequence:
-
-   t:  0   1   2   3   4   5   6   7   8   9   10  11
-   q:  s0  s0  s0  s0  s0  s0  s1  s1  s1  s1  s0  s0
-   o:  0.1 0.3 1.1 1.2 0.7 0.7 5.5 7.8 10  5.2 1.1 1.3 <=
-   data I created given the Gaussians [1,1] and [4,4]
-
-   I got the following gamma:
-
-   γ0: -0.01 -0.00 -0.01 -0.01 -0.02 -0.11 -9.00 -23 -38 -7.8 -0.18 -0.08
-   γ1: -4.59 -5.15 -4.78 -4.58 -4.11 -2.26 -0.00 -0  -0  -0   -1.80 -2.60
-
-   As you can see choosing the gamma with highest prob for each state give
-   us the hidden sequence of states.
-
-   gamma gives you the most likely state at time t. In this case the result is what we expect.
-
-   Viterbi gives you the P(q | O,  model), that is, it maximizes of over the whole sequence.
-*/
 
 func makeHMM(t *testing.T) *Model {
 
@@ -83,9 +54,6 @@ func makeHMM(t *testing.T) *Model {
 
 func TestTrainBasic(t *testing.T) {
 
-	//	data := [][]float64{{0.1}, {0.3}, {1.1}, {1.2}, {1.5}, {0.3}, {0.2}, {1.3},
-	//		{0.7}, {0.7}, {5.5}, {7.8}, {10.0}, {5.2}, {4.1}, {3.3}, {6.2}, {8.3}}
-
 	data := [][]float64{{0.1}, {0.3}, {1.1}, {5.5}, {7.8}, {10.0}, {5.2}, {4.1}, {3.3}, {6.2}, {8.3}}
 
 	m := makeHMM(t)
@@ -118,210 +86,288 @@ func TestTrainBasic(t *testing.T) {
 	t.Logf("hmm  g1: %+v, g2:%+v", h.B[1], h.B[2])
 }
 
-// func TestLogProb(t *testing.T) {
+func makeGmm(mean, sd [][]float64, weights []float64) *gmm.Model {
 
-// 	flag.Parse()
-// 	hmm := MakeHMM(t)
-// 	_, logProb := hmm.alpha(obs0)
-// 	expectedLogProb := -26.4626886822436
-// 	gjoa.CompareFloats(t, expectedLogProb, logProb, "Error in logProb", epsilon)
+	dim := len(mean[0])
+	ncomp := len(weights)
+
+	g0 := gm.NewModel(ncomp, gm.Name("g0"), gm.Mean(mean[0]), gm.StdDev(sd[0]))
+	g1 := gm.NewModel(ncomp, gm.Name("g1"), gm.Mean(mean[1]), gm.StdDev(sd[1]))
+	components := []*gm.Model{g0, g1}
+	return gmm.NewModel(dim, ncomp, gmm.Components(components), gmm.Weights(weights))
+}
+
+func makeHmmGmm(t *testing.T) *Model {
+
+	mean1 := [][]float64{{1, 2}, {5, 5}}
+	sd1 := [][]float64{{0.5, 0.5}, {0.5, 0.5}}
+	mean2 := [][]float64{{-1, -2}, {-6, -5}}
+	sd2 := [][]float64{{0.5, 0.5}, {0.5, 0.5}}
+	weight1 := []float64{0.6, 0.4}
+	weight2 := []float64{0.3, 0.7}
+	gmm1 := makeGmm(mean1, sd1, weight1)
+	gmm2 := makeGmm(mean2, sd2, weight2)
+
+	var err error
+	h0 := narray.New(4, 4)
+	h0.Set(.8, 0, 1)
+	h0.Set(.2, 0, 2)
+	h0.Set(.9, 1, 1)
+	h0.Set(.1, 1, 2)
+	h0.Set(.7, 2, 2)
+	h0.Set(.3, 2, 3)
+	h0 = narray.Log(nil, h0.Copy())
+
+	ms, _ = NewSet()
+	hmm0, err = ms.NewNet("hmm0", h0,
+		[]model.Modeler{nil, gmm1, gmm2, nil})
+	fatalIf(t, err)
+
+	return NewModel(OSet(ms))
+}
+
+func makeRandomHmmGmm(t *testing.T, seed int64) *Model {
+	mean := [][]float64{{2.5, 3}, {-2.5, -3}}
+	sd := [][]float64{{0.7, 0.7}, {0.7, 0.7}}
+	gmm1 := gmm.RandomModel(mean[0], sd[0], 2, "gmm1", seed)
+	gmm2 := gmm.RandomModel(mean[1], sd[1], 2, "gmm2", seed)
+
+	r := rand.New(rand.NewSource(seed))
+	ran0 := r.Float64()
+	ran1 := r.Float64()
+	ran2 := r.Float64()
+
+	var err error
+	h0 := narray.New(4, 4)
+	h0.Set(ran0, 0, 1)
+	h0.Set(1-ran0, 0, 2)
+	h0.Set(ran1, 1, 1)
+	h0.Set(1-ran1, 1, 2)
+	h0.Set(ran2, 2, 2)
+	h0.Set(1-ran2, 2, 3)
+	h0 = narray.Log(nil, h0.Copy())
+
+	ms, _ = NewSet()
+	_, err = ms.NewNet("random hmm", h0,
+		[]model.Modeler{nil, gmm1, gmm2, nil})
+	fatalIf(t, err)
+
+	return NewModel(OSet(ms))
+}
+
+func TestTrainHmmGaussian(t *testing.T) {
+
+	// Create reference HMM to generate observations.
+
+	g01 := gm.NewModel(1, gm.Name("g01"), gm.Mean([]float64{0}), gm.StdDev([]float64{1}))
+	g02 := gm.NewModel(1, gm.Name("g02"), gm.Mean([]float64{6}), gm.StdDev([]float64{2}))
+
+	h0 := narray.New(4, 4)
+	h0.Set(.6, 0, 1)
+	h0.Set(.4, 0, 2)
+	h0.Set(.9, 1, 1)
+	h0.Set(.1, 1, 2)
+	h0.Set(.7, 2, 2)
+	h0.Set(.3, 2, 3)
+	h0 = narray.Log(nil, h0.Copy())
+
+	ms0, _ := NewSet()
+	net0, e0 := ms0.NewNet("hmm0", h0,
+		[]model.Modeler{nil, g01, g02, nil})
+	fatalIf(t, e0)
+	hmm0 := NewModel(OSet(ms0))
+	_ = hmm0
+
+	// Create random HMM and estimate params from obs.
+
+	g1 := gm.NewModel(1, gm.Name("g1"), gm.Mean([]float64{-1}), gm.StdDev([]float64{2}))
+	g2 := gm.NewModel(1, gm.Name("g2"), gm.Mean([]float64{10}), gm.StdDev([]float64{4}))
+
+	h := narray.New(4, 4)
+	h.Set(1, 0, 1)
+	h.Set(.5, 0, 2)
+	h.Set(.5, 1, 1)
+	h.Set(.5, 1, 2)
+	h.Set(.5, 2, 2)
+	h.Set(.5, 2, 3)
+	h = narray.Log(nil, h.Copy())
+
+	ms, _ = NewSet()
+	net, e := ms.NewNet("hmm", h,
+		[]model.Modeler{nil, g1, g2, nil})
+	fatalIf(t, e)
+	hmm := NewModel(OSet(ms))
+
+	iter := 4
+	// number of sequences
+	m := 500
+	numFrames := 0
+	gen := newGenerator(net0)
+	t0 := time.Now() // Start timer.
+	for i := 0; i < iter; i++ {
+		t.Logf("iter [%d]", i)
+
+		// Reset all counters.
+		hmm.Clear()
+
+		// fix the seed to get the same sequence
+		for j := 0; j < m; j++ {
+			obs, states := gen.next()
+			numFrames += len(states) - 2
+			hmm.UpdateOne(obs, 1.0)
+		}
+		hmm.Estimate()
+	}
+	dur := time.Now().Sub(t0)
+	tp0 := narray.Exp(nil, h0.Copy())
+	tp := narray.Exp(nil, net.A.Copy())
+	ns := tp.Shape[0]
+	for i := 0; i < ns; i++ {
+		for j := 0; j < ns; j++ {
+			p0 := tp0.At(i, j)
+			logp0 := h0.At(i, j)
+			p := tp.At(i, j)
+			logp := h.At(i, j)
+			if p > smallNumber || p0 > smallNumber {
+				t.Logf("TP: %d=>%d, p0:%5.2f, p:%5.2f, logp0:%8.5f, logp:%8.5f", i, j, p0, p, logp0, logp)
+			}
+		}
+	}
+
+	t.Log("")
+	t.Logf("hmm0 g1:%+v, g2:%+v", net0.B[1], net0.B[2])
+	t.Logf("hmm  g1: %+v, g2:%+v", net.B[1], net.B[2])
+
+	// Print time stats.
+	t.Log("")
+	t.Logf("Total time: %v", dur)
+	t.Logf("Time per iteration: %v", dur/time.Duration(iter))
+	t.Logf("Time per frame: %v", dur/time.Duration(iter*numFrames*m))
+
+	gjoa.CompareSliceFloat(t, tp.Data, tp0.Data,
+		"error in Trans Probs [0]", .03)
+
+	CompareGaussians(t, net0.B[1].(*gm.Model), net.B[1].(*gm.Model), 0.05)
+	CompareGaussians(t, net0.B[2].(*gm.Model), net.B[2].(*gm.Model), 0.05)
+
+	// Recognize.
+
+	// Generate a sequence.
+	obs, states := gen.next()
+	t.Log(states)
+	g := ms.SearchGraph()
+	t.Log(g)
+
+	dec, e := graph.NewDecoder(g)
+	if e != nil {
+		t.Fatal(e)
+	}
+
+	// Find the optimnal sequence.
+	token := dec.Decode(obs.ValueAsSlice())
+
+	// The token has the backtrace to find the optimal path.
+	t.Logf(">>>> backtrace: %s", token)
+
+}
+
+func TestTrainHmmGmm(t *testing.T) {
+	var seed int64 = 31
+	hmm0 := makeHmmGmm(t)
+	hmm := makeRandomHmmGmm(t, seed)
+	iter := 1
+	// size of the generated sequence
+	n := 100
+	// number of sequences
+	m := 1000
+	//	eps := 0.03
+	t0 := time.Now() // Start timer.
+	for i := 0; i < iter; i++ {
+		t.Logf("iter [%d]", i)
+
+		// Reset all counters.
+		hmm.Clear()
+
+		// fix the seed to get the same sequence
+		gen := newGenerator(hmm0.Set.Nets[0])
+		for j := 0; j < m; j++ {
+			obs, states := gen.next()
+			_ = states
+			hmm.UpdateOne(obs, 1.0)
+		}
+		hmm.Estimate()
+	}
+	dur := time.Now().Sub(t0)
+	//	CompareHMMs(t, hmm0, hmm, eps)
+	h0 := hmm0.Set.Nets[0]
+	h := hmm.Set.Nets[0]
+
+	t.Logf("hmm0 - A:%+v, B[0]:%+v, B[1]:%+v", h0.A.Data, h0.B[0], h0.B[1])
+	t.Logf("hmm  - A:%+v, B[0]:%+v, B[1]:%+v", h.A.Data, h.B[0], h.B[1])
+	// Print time stats.
+	t.Logf("Total time: %v", dur)
+	t.Logf("Time per iteration: %v", dur/time.Duration(iter))
+	t.Logf("Time per frame: %v", dur/time.Duration(iter*n*m))
+}
+
+func CompareGaussians(t *testing.T, g1 *gm.Model, g2 *gm.Model, eps float64) {
+	gjoa.CompareSliceFloat(t, g1.Mean, g2.Mean, "Wrong Mean", eps)
+	gjoa.CompareSliceFloat(t, g1.StdDev, g2.StdDev, "Wrong SD", eps)
+}
+
+// func CompareHMMs(t *testing.T, hmm0 *Model, hmm *Model, eps float64) {
+
+// 	gjoa.CompareSliceFloat(t, hmm0.Set.Nets[0], hmm.TransProbs[0],
+// 		"error in TransProbs[0]", eps)
+// 	gjoa.CompareSliceFloat(t, hmm0.TransProbs[1], hmm.TransProbs[1],
+// 		"error in TransProbs[1]", eps)
+// 	gjoa.CompareSliceFloat(t, hmm0.InitProbs, hmm.InitProbs,
+// 		"error in logInitProbs", eps)
+// 	mA := hmm0.ObsModels[0].(*gmm.Model)
+// 	mB := hmm0.ObsModels[1].(*gmm.Model)
+// 	m0 := hmm.ObsModels[0].(*gmm.Model)
+// 	m1 := hmm.ObsModels[1].(*gmm.Model)
+// 	if DistanceGmm2(t, mA, m0) < DistanceGmm2(t, mA, m1) {
+// 		CompareGMMs(t, mA, m0, eps)
+// 		CompareGMMs(t, mB, m1, eps)
+// 	} else {
+// 		CompareGMMs(t, mA, m1, eps)
+// 		CompareGMMs(t, mB, m0, eps)
+// 	}
 // }
 
-// func TestIndices(t *testing.T) {
-
-// 	flag.Parse()
-// 	hmm := MakeHMM(t)
-// 	m := hmm.Indices()
-// 	t.Logf("Indices: %+v", m)
-
-// 	gjoa.CompareSliceInt(t, []int{0, 1}, []int{m["g1"], m["g2"]}, "indices don't match")
-// }
-
-// func TestEvaluationGamma(t *testing.T) {
-
-// 	flag.Parse()
-// 	hmm := MakeHMM(t)
-// 	alpha, _ := hmm.alpha(obs0)
-// 	beta := hmm.beta(obs0)
-// 	gamma := hmm.gamma(alpha, beta)
-// 	message := "Error in gamma"
-// 	gjoa.CompareSliceFloat(t, gamma01, floatx.Flatten2D(gamma), message, epsilon)
-// }
-
-// func Convert3DSlideTo1D(s3 [][][]float64) []float64 {
-// 	s1 := make([]float64, 0, 100)
-// 	for _, v1 := range s3 {
-// 		for _, v2 := range v1 {
-// 			for _, v3 := range v2 {
-// 				s1 = append(s1, v3)
-// 			}
-// 		}
-// 	}
-// 	return s1
-// }
-
-// func TestEvaluationXi(t *testing.T) {
-
-// 	flag.Parse()
-// 	hmm := MakeHMM(t)
-// 	alpha, _ := hmm.alpha(obs0)
-// 	beta := hmm.beta(obs0)
-// 	xi := hmm.xi(obs0, alpha, beta)
-// 	xsi1 := Convert3DSlideTo1D(xi)
-// 	message := "Error in xi"
-// 	gjoa.CompareSliceFloat(t, xsi, xsi1, message, epsilon)
-// }
-
-// func TestWriteReadHMM(t *testing.T) {
-
-// 	hmm := MakeHMM(t)
-
-// 	fn := os.TempDir() + "hmm.json"
-// 	hmm.WriteFile(fn)
-
-// 	hmm0 := EmptyHMM()
-// 	x, e1 := hmm0.ReadFile(fn)
-// 	if e1 != nil {
-// 		t.Fatal(e1)
-// 	}
-// 	hmm1 := x.(*HMM)
-// 	for i, v := range hmm.ObsModels {
-// 		m := v.(*gm.Gaussian)
-// 		m1 := hmm1.ObsModels[i].(*gm.Gaussian)
-// 		CompareGaussians(t, m, m1, 0.01)
-// 	}
-// 	for i := 0; i < hmm1.NStates; i++ {
-// 		b := hmm1.ObsModels[i].LogProb(obs0[0])
-// 		t.Logf("LogProb: %f", b)
+// func CompareGMMs(t *testing.T, g1 *gmm.Model, g2 *gmm.Model, eps float64) {
+// 	d0 := DistanceGaussian(t, g1.Components[0], g2.Components[0])
+// 	d1 := DistanceGaussian(t, g1.Components[0], g2.Components[1])
+// 	t.Logf("distance between gaussians: %f %f", d0, d1)
+// 	if d0 < d1 {
+// 		CompareGaussians(t, g1.Components[0], g2.Components[0], eps)
+// 		CompareGaussians(t, g1.Components[1], g2.Components[1], eps)
+// 		gjoa.CompareSliceFloat(t, g1.Weights, g2.Weights, "Wrong Weights", eps)
+// 	} else {
+// 		CompareGaussians(t, g1.Components[0], g2.Components[1], eps)
+// 		CompareGaussians(t, g1.Components[1], g2.Components[0], eps)
+// 		w := []float64{g1.Weights[1], g1.Weights[0]}
+// 		gjoa.CompareSliceFloat(t, w, g2.Weights, "Wrong Weights", eps)
 // 	}
 // }
 
-// func TestWriteReadHMMCollection(t *testing.T) {
-
-// 	hmm1 := MakeHMM(t)
-// 	hmm2 := MakeHMM(t)
-// 	hmm3 := MakeHMM(t)
-
-// 	hmm1.ModelName = "H1"
-// 	hmm2.ModelName = "H2"
-// 	hmm3.ModelName = "H3"
-
-// 	hmms := make(map[string]*HMM)
-// 	hmms["H1"] = hmm1
-// 	hmms["H2"] = hmm2
-// 	hmms["H3"] = hmm3
-
-// 	fn := os.TempDir() + "hmmcoll.json"
-// 	t.Logf("Write hmm collection to: %s", fn)
-// 	e := WriteHMMCollection(hmms, fn)
-// 	if e != nil {
-// 		t.Fatal(e)
-// 	}
-
-// 	hmmsx, e2 := ReadHMMCollection(fn)
-// 	if e2 != nil {
-// 		t.Fatal(e2)
-// 	}
-// 	t.Logf("read hmm collection:")
-// 	for _, name := range []string{"H1", "H2", "H3"} {
-// 		if hmms[name].ModelName != hmmsx[name].ModelName {
-// 			t.Fatalf("model names don't match [%s] vs. [%s]", hmms[name].ModelName, hmmsx[name].ModelName)
-// 		}
-// 		t.Logf("\n%s\n:", name)
-// 		t.Logf("\n%+v\n:", hmmsx[name])
-// 	}
+// // distance for GMM with two components
+// func DistanceGmm2(t *testing.T, g1 *gmm.Model, g2 *gmm.Model) float64 {
+// 	distance0 := DistanceGaussian(t, g1.Components[0], g2.Components[0])
+// 	distance0 += DistanceGaussian(t, g1.Components[1], g2.Components[1])
+// 	distance1 := DistanceGaussian(t, g1.Components[0], g2.Components[1])
+// 	distance1 += DistanceGaussian(t, g1.Components[1], g2.Components[0])
+// 	return math.Min(distance0, distance1)
 // }
 
-var (
-	obs0 = [][]float64{{0.1}, {0.3}, {1.1}, {1.2},
-		{0.7}, {0.7}, {5.5}, {7.8},
-		{10.0}, {5.2}, {1.1}, {1.3}}
-	alpha01 = []float64{
-		-1.54708208451888,
-		-2.80709238811418,
-		-3.83134003758912,
-		-4.86850442594034,
-		-5.92973730403429,
-		-6.99328952650412,
-		-18.1370692144982,
-		-36.3195887463382,
-		-57.4758051059185,
-		-32.2645657649804,
-		-25.5978716740632,
-		-26.5391830081456,
-		-5.12277362619872,
-		-6.99404330419337,
-		-7.67194890763762,
-		-8.58593275227677,
-		-9.98735773434079,
-		-11.0914094981902,
-		-11.0792560557189,
-		-14.8528937698143,
-		-21.3216544274498,
-		-23.4704150851531,
-		-26.4904040834703,
-		-29.0712307616184}
-	beta01 = []float64{
-		-24.9258011954291,
-		-23.661415171904,
-		-22.6397641116887,
-		-21.6045197079498,
-		-20.549461075003,
-		-19.579339900188,
-		-17.3294657178329,
-		-13.5557050615525,
-		-7.07931720879328,
-		-2.06607429111337,
-		-1.04620524392834,
-		0,
-		-25.9309053603105,
-		-24.6182012641994,
-		-23.5726285099546,
-		-22.4540945910146,
-		-20.5873818254665,
-		-17.6335597285231,
-		-15.3835555701327,
-		-11.6097949124971,
-		-5.14103425479379,
-		-2.99265648819389,
-		-1.76872378444132,
-		0}
-	gamma01 = []float64{
-		-0.0101945977044363,
-		-0.00581887777458709,
-		-0.00841546703429051,
-		-0.0103354516465726,
-		-0.0165096967936958,
-		-0.10994074444856,
-		-9.00384625008746,
-		-23.4126051256471,
-		-38.0924336324682,
-		-7.86795137385019,
-		-0.181388235747997,
-		-0.076494325902054,
-		-4.59099030426571,
-		-5.14955588614921,
-		-4.78188873534866,
-		-4.5773386610478,
-		-4.11205087756371,
-		-2.2622805444697,
-		-0.000122943608043396,
-		-6.79257761172257e-11,
-		0,
-		-0.000382891103450269,
-		-1.79643918566812,
-		-2.60854207937483}
-	xsi = []float64{
-		-0.0151076230417916, -0.0134668664218517, -0.0174701121578483, -0.0245758675622469,
-		-0.11568757084122, -9.00936561095593, -29.3743846426695, -58.4605163217504,
-		-42.9234897636508, -7.87738137552765, -0.204482040682161, 0,
-		-5.32851547323339, -4.88295302258388, -4.71741675311881, -4.26911837592192,
-		-2.37652915707246, -0.110077221151965, -9.0038462515104, -23.4126051256471,
-		-38.1004437186275, -12.5365216739368, -3.96110379857833, 0,
-		-4.68941145338974, -5.29903007116915, -4.95669127087446, -4.84061648256679,
-		-5.27192028981584, -14.2060978713101, -23.4151837725584, -38.0924336338947,
-		-7.86795137385019, -0.181842984368506, -2.1956267387574, 0,
-		-6.95829686585791, -7.12399378960776, -6.612115474112, -6.04063655320304,
-		-4.48823943832366, -2.26228704378271, -0.000122943675802531, -6.79259981618307e-11,
-		-0.000382891103450158, -1.79646084505424, -2.90772605893015, 0}
-)
+// // L_inf distance between gaussian means
+// func DistanceGaussian(t *testing.T, g1 *gm.Model, g2 *gm.Model) float64 {
+// 	arr0 := g1.Mean
+// 	arr1 := g2.Mean
+// 	err := 0.0
+// 	for i, _ := range arr0 {
+// 		err = math.Max(err, math.Abs(arr0[i]-arr1[i]))
+// 	}
+// 	return err
+// }

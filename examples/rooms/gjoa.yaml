@@ -1,8 +1,0 @@
-model: hmm
-data_set: train-24001.yaml
-model_out: out/hmm0.json
-vectors: {features: [wifi], class: [room]}
-hmm:
-  graph_in: out/topology-24001-self.json
-  output_distribution: gaussian
-  use_alignments: true
