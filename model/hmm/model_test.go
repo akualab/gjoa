@@ -7,6 +7,7 @@ package hmm
 
 import (
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -172,7 +173,7 @@ func TestTrainHmmGaussian(t *testing.T) {
 	h0 = narray.Log(nil, h0.Copy())
 
 	ms0, _ := NewSet()
-	net0, e0 := ms0.NewNet("hmm0", h0,
+	net0, e0 := ms0.NewNet("hmm", h0,
 		[]model.Modeler{nil, g01, g02, nil})
 	fatalIf(t, e0)
 	hmm0 := NewModel(OSet(ms0))
@@ -255,6 +256,7 @@ func TestTrainHmmGaussian(t *testing.T) {
 	// Generate a sequence.
 	obs, states := gen.next()
 	t.Log(states)
+	refLabels := strings.Split(string(obs.Label().(model.SimpleLabel)), ",")
 	g := ms.SearchGraph()
 	t.Log(g)
 
@@ -267,8 +269,20 @@ func TestTrainHmmGaussian(t *testing.T) {
 	token := dec.Decode(obs.ValueAsSlice())
 
 	// The token has the backtrace to find the optimal path.
-	t.Logf(">>>> backtrace: %s", token)
+	t.Logf(">>>> backtrace: %s", token.PrintBacktrace())
 
+	// Get the best hyp.
+	best := token.Best()
+
+	for _, v := range best {
+		t.Logf("best: %+v", v)
+	}
+
+	// Put the labels is a slice, exclude null nodes.
+	hypLabels := best.Labels(true)
+
+	t.Log("ref: ", refLabels)
+	t.Log("hyp: ", hypLabels)
 }
 
 func TestTrainHmmGmm(t *testing.T) {

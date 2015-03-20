@@ -61,7 +61,7 @@ func TestMain(m *testing.M) {
 	// configure glog.
 	flag.Set("alsologtostderr", "true")
 	flag.Set("log_dir", "/tmp/log")
-	flag.Set("v", "3")
+	flag.Set("v", "6")
 	flag.Parse()
 	glog.Info("Logging configured")
 

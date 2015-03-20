@@ -92,19 +92,21 @@ func (ms *Set) size() int {
 	return len(ms.Nets)
 }
 
-// Net is an hmm network with a single non-emmiting entry state and
-// a single non-emmiting exit state.
+// Net is an hmm network with a single non-emmiting entry state (index 0) and
+// a single non-emmiting exit state (index ns-1) where ns is the total number
+// of states. The HMMs must have a left-to-right topology. That is, transitions
+// can only go from state i to state j where j >= i.
 type Net struct {
 	// Model name.
 	Name string
-	// Unique id.
-	id int
-	// State transition probabilities.
-	A *narray.NArray
-	// Output probabilities.
-	B []model.Modeler
 	// num states
 	ns int
+	// Unique id.
+	id int
+	// State transition probabilities. (ns x ns matrix)
+	A *narray.NArray
+	// Output probabilities. (ns x 1 vector)
+	B []model.Modeler
 	// Accumulator for transition probabilities.
 	TrAcc *narray.NArray
 	// Accumulator for global occupation counts.
@@ -157,6 +159,9 @@ func (m *Net) nextState(s int, r *rand.Rand) int {
 	return model.RandIntFromLogDist(dist.Data, r)
 }
 
+// chain is used to concatenate hmms during training based on the labels.
+// For example, in speech a chain would represent a sequence of words based
+// on an orthographic transcription of the training utterance.
 type chain struct {
 	// Composite hmm.
 	hmms []*Net

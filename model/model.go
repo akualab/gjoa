@@ -166,8 +166,13 @@ func (fo FloatObsSequence) ID() string { return fo.id }
 
 // Add adds a FloatObs to the sequence.
 func (fo *FloatObsSequence) Add(obs FloatObs, lab string) {
+	var x string
 	fo.value = append(fo.value, obs.value)
-	x := string(fo.label) + "," + string(lab)
+	if len(fo.label) == 0 {
+		x = string(lab) // no sperator
+	} else {
+		x = string(fo.label) + "," + string(lab)
+	}
 	fo.label = SimpleLabel(x)
 }
 

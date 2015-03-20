@@ -13,13 +13,13 @@
 
 ## Status
 
-Under development, frequent API changes expected.
+Under development, frequent API changes expected, no top level cmd and docs yet.
 
 Contributiosn welcomed!
 
 ## Basics
 
-Install: `go install github.com/akualab/gjoa/gjoa`
+Install: `git clone git@github.com:akualab/gjoa.git`
 
 Print log to stderr. [Learn how to use glog](http://google-glog.googlecode.com/svn/trunk/doc/glog.html)
 ```
