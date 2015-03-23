@@ -203,7 +203,8 @@ func TestTrainHmmGaussian(t *testing.T) {
 	// number of sequences
 	m := 500
 	numFrames := 0
-	gen := newGenerator(net0)
+	r := rand.New(rand.NewSource(33))
+	gen := newGenerator(r, net0)
 	t0 := time.Now() // Start timer.
 	for i := 0; i < iter; i++ {
 		t.Logf("iter [%d]", i)
@@ -327,7 +328,8 @@ func TestTrainHmmGmm(t *testing.T) {
 		hmm.Clear()
 
 		// fix the seed to get the same sequence
-		gen := newGenerator(hmm0.Set.Nets[0])
+		r := rand.New(rand.NewSource(33))
+		gen := newGenerator(r, hmm0.Set.Nets[0])
 		for j := 0; j < m; j++ {
 			obs, states := gen.next()
 			_ = states
