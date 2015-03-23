@@ -264,7 +264,13 @@ func TestTrainHmmGaussian(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	for i := 0; i < 1000; i++ {
+	testDecoder(t, gen, dec, 1000)
+}
+
+func testDecoder(t *testing.T, gen *generator, dec *graph.Decoder, numIterations int) {
+
+	for i := 0; i < numIterations; i++ {
+
 		// Generate a sequence.
 		obs, states := gen.next()
 		t.Log("generated states: ", states)
@@ -308,6 +314,7 @@ func TestTrainHmmGaussian(t *testing.T) {
 			t.FailNow()
 		}
 	}
+
 }
 
 func TestTrainHmmGmm(t *testing.T) {
