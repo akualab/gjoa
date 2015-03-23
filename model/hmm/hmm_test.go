@@ -58,10 +58,11 @@ var (
 
 func TestMain(m *testing.M) {
 
-	// configure glog.
+	// Configure glog. Example to set debug level 6 for file viterbi.go:
+	// go test -v  -run TestTrainHmmGau -vmodule=viterbi=6 > /tmp/zzz
 	flag.Set("alsologtostderr", "true")
 	flag.Set("log_dir", "/tmp/log")
-	flag.Set("v", "6")
+	flag.Set("v", "1")
 	flag.Parse()
 	glog.Info("Logging configured")
 

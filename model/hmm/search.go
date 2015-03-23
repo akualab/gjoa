@@ -88,6 +88,7 @@ func (set *Set) SearchGraph() *graph.Graph {
 	// TODO
 
 	glog.Infof("search graph created - num nodes: %d", g.Len())
+	glog.V(3).Info("search graph:\n", g)
 	return g
 }
 

@@ -6,15 +6,12 @@
 package gjoa
 
 import (
+	"math"
 	"testing"
 )
 
 func Comparef64(f1, f2, epsilon float64) bool {
-	err := f2 - f1
-	if err < 0 {
-		err = -err
-	}
-	if err < epsilon {
+	if math.Abs(f2-f1) < epsilon {
 		return true
 	}
 	return false

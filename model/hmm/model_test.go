@@ -161,7 +161,7 @@ func TestTrainHmmGaussian(t *testing.T) {
 	// Create reference HMM to generate observations.
 
 	g01 := gm.NewModel(1, gm.Name("g01"), gm.Mean([]float64{0}), gm.StdDev([]float64{1}))
-	g02 := gm.NewModel(1, gm.Name("g02"), gm.Mean([]float64{6}), gm.StdDev([]float64{2}))
+	g02 := gm.NewModel(1, gm.Name("g02"), gm.Mean([]float64{16}), gm.StdDev([]float64{2}))
 
 	h0 := narray.New(4, 4)
 	h0.Set(.6, 0, 1)
@@ -182,7 +182,7 @@ func TestTrainHmmGaussian(t *testing.T) {
 	// Create random HMM and estimate params from obs.
 
 	g1 := gm.NewModel(1, gm.Name("g1"), gm.Mean([]float64{-1}), gm.StdDev([]float64{2}))
-	g2 := gm.NewModel(1, gm.Name("g2"), gm.Mean([]float64{10}), gm.StdDev([]float64{4}))
+	g2 := gm.NewModel(1, gm.Name("g2"), gm.Mean([]float64{18}), gm.StdDev([]float64{4}))
 
 	h := narray.New(4, 4)
 	h.Set(1, 0, 1)
@@ -199,7 +199,7 @@ func TestTrainHmmGaussian(t *testing.T) {
 	fatalIf(t, e)
 	hmm := NewModel(OSet(ms))
 
-	iter := 4
+	iter := 20
 	// number of sequences
 	m := 500
 	numFrames := 0
@@ -245,44 +245,68 @@ func TestTrainHmmGaussian(t *testing.T) {
 	t.Logf("Time per iteration: %v", dur/time.Duration(iter))
 	t.Logf("Time per frame: %v", dur/time.Duration(iter*numFrames*m))
 
-	gjoa.CompareSliceFloat(t, tp.Data, tp0.Data,
-		"error in Trans Probs [0]", .03)
+	gjoa.CompareSliceFloat(t, tp0.Data, tp.Data,
+		"error in Trans Probs [0]", .05)
 
 	CompareGaussians(t, net0.B[1].(*gm.Model), net.B[1].(*gm.Model), 0.05)
 	CompareGaussians(t, net0.B[2].(*gm.Model), net.B[2].(*gm.Model), 0.05)
 
-	// Recognize.
+	if t.Failed() {
+		t.FailNow()
+	}
 
-	// Generate a sequence.
-	obs, states := gen.next()
-	t.Log(states)
-	refLabels := strings.Split(string(obs.Label().(model.SimpleLabel)), ",")
+	// Recognize.
 	g := ms.SearchGraph()
-	t.Log(g)
 
 	dec, e := graph.NewDecoder(g)
 	if e != nil {
 		t.Fatal(e)
 	}
 
-	// Find the optimnal sequence.
-	token := dec.Decode(obs.ValueAsSlice())
+	for i := 0; i < 1000; i++ {
+		// Generate a sequence.
+		obs, states := gen.next()
+		t.Log("generated states: ", states)
+		refLabels := strings.Split(string(obs.Label().(model.SimpleLabel)), ",")
 
-	// The token has the backtrace to find the optimal path.
-	t.Logf(">>>> backtrace: %s", token.PrintBacktrace())
+		// Find the optimnal sequence.
+		token := dec.Decode(obs.ValueAsSlice())
 
-	// Get the best hyp.
-	best := token.Best()
+		// The token has the backtrace to find the optimal path.
+		if token == nil {
+			t.Fatalf(">>>> got nil token for ref: %s", refLabels)
+		} else {
+			t.Logf(">>>> backtrace: %s", token.PrintBacktrace())
+		}
 
-	for _, v := range best {
-		t.Logf("best: %+v", v)
+		// Get the best hyp.
+		best := token.Best()
+
+		for _, v := range best {
+			t.Logf("best: %+v", v)
+		}
+
+		// Put the labels is a slice, exclude null nodes.
+		hypLabels := best.Labels(true)
+
+		t.Log("ref: ", refLabels)
+		t.Log("hyp: ", hypLabels)
+
+		// Compare labels
+		if len(refLabels) != len(hypLabels) {
+			t.Errorf("ref/hyp length mismath")
+		} else {
+			for k, lab := range refLabels {
+				if lab != hypLabels[k] {
+					t.Error("label mismath")
+					continue
+				}
+			}
+		}
+		if t.Failed() {
+			t.FailNow()
+		}
 	}
-
-	// Put the labels is a slice, exclude null nodes.
-	hypLabels := best.Labels(true)
-
-	t.Log("ref: ", refLabels)
-	t.Log("hyp: ", hypLabels)
 }
 
 func TestTrainHmmGmm(t *testing.T) {

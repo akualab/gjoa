@@ -248,7 +248,9 @@ func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, erro
 	}
 	if assigner == nil && ms.size() == 1 {
 		hmms = append(hmms, ms.Nets[0])
-		glog.Warningf("assigner missing but model set has only one hmm network - assigning model [%s] to chain", ms.Nets[0].Name)
+		if glog.V(3) {
+			glog.Warningf("assigner missing but model set has only one hmm network - assigning model [%s] to chain", ms.Nets[0].Name)
+		}
 	} else if assigner == nil {
 		return nil, fmt.Errorf("need assigner to create hmm chain if model set is greater than one")
 	} else {
