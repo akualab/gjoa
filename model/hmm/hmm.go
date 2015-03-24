@@ -241,11 +241,17 @@ func (ms *Set) chainFromNets(obs model.Obs, m ...*Net) (*chain, error) {
 func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, error) {
 
 	var hmms []*Net
-	fos, ok := obs.(model.FloatObsSequence)
-	if !ok {
+	var fos model.FloatObsSequence
+	switch o := obs.(type) {
+	case model.FloatObsSequence:
+		fos = o
+	case *model.FloatObsSequence:
+		fos = *o
+	default:
 		return nil, fmt.Errorf("obs must be of type model.FloatObsSequence, found type %s which is not supported",
-			reflect.TypeOf(obs.Value()))
+			reflect.TypeOf(obs))
 	}
+
 	if assigner == nil && ms.size() == 1 {
 		hmms = append(hmms, ms.Nets[0])
 		if glog.V(3) {

@@ -8,7 +8,6 @@ package hmm
 import (
 	"math/rand"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -205,7 +204,7 @@ func TestTrainHmmGaussian(t *testing.T) {
 	m := 500
 	numFrames := 0
 	r := rand.New(rand.NewSource(33))
-	gen := newGenerator(r, net0)
+	gen := newGenerator(r, false, net0)
 	t0 := time.Now() // Start timer.
 	for i := 0; i < iter; i++ {
 		t.Logf("iter [%d]", i)
@@ -279,6 +278,21 @@ func randomGaussian(r *rand.Rand, id string, dim int) *gm.Model {
 	return gm.NewModel(dim, gm.Name(id), gm.Mean(mean), gm.StdDev(sd))
 }
 
+// creates a random gaussian by adding a perturbation to an existing gaussian.
+func initGaussian(r *rand.Rand, m model.Modeler) *gm.Model {
+
+	g := m.(*gm.Model)
+	var mean, sd []float64
+	for i := 0; i < g.ModelDim; i++ {
+		a := float64(r.Intn(4)) + 0.5
+		b := float64(r.Intn(6))
+		c := float64(r.Intn(1)) + 0.5
+		mean = append(mean, g.Mean[i]*a+b)
+		sd = append(sd, g.StdDev[i]*c)
+	}
+	return gm.NewModel(g.ModelDim, gm.Name(g.ModelName), gm.Mean(mean), gm.StdDev(sd))
+}
+
 func addRandomNet(r *rand.Rand, ms *Set, id string, ns, dim int) (*Net, error) {
 
 	m := []model.Modeler{nil}
@@ -297,15 +311,39 @@ func addRandomNet(r *rand.Rand, ms *Set, id string, ns, dim int) (*Net, error) {
 	return net, nil
 }
 
+func initRandomSet(r *rand.Rand, in *Set) (*Set, error) {
+
+	out, _ := NewSet()
+
+	for q, h := range in.Nets {
+		m := []model.Modeler{nil}
+		for i := 1; i < h.ns-1; i++ {
+			g := initGaussian(r, h.B[i])
+			m = append(m, g)
+		}
+		m = append(m, nil)
+		hn := randTrans(r, h.ns)
+		id := "m" + strconv.FormatInt(int64(q), 10)
+		_, e := out.NewNet(id, hn, m)
+		if e != nil {
+			return nil, e
+		}
+	}
+
+	return out, nil
+}
+
 func TestTrainHmmChain(t *testing.T) {
 
 	r := rand.New(rand.NewSource(33))
 	numModels := 10
 	dim := 2
+	maxNumStates := 6
 
+	// Create reference HMM to generate random sequences.
 	ms0, _ := NewSet()
 	for q := 0; q < numModels; q++ {
-		ns := int(r.Intn(4) + 3)
+		ns := int(r.Intn(maxNumStates-2) + 3)
 		id := "m" + strconv.FormatInt(int64(q), 10)
 		net, e := addRandomNet(r, ms0, id, ns, dim)
 		if e != nil {
@@ -313,7 +351,40 @@ func TestTrainHmmChain(t *testing.T) {
 		}
 		_ = net
 	}
+	hmm0 := NewModel(OSet(ms0), OAssign(DirectAssigner{}))
+	_ = hmm0
 
+	// Create random HMM and estimate params using the randomly generated sequences.
+	ms, e := initRandomSet(r, ms0)
+	if e != nil {
+		t.Fatal(e)
+	}
+	hmm := NewModel(OSet(ms), OAssign(DirectAssigner{}))
+	_ = hmm
+
+	iter := 4
+	m := 20
+	numFrames := 0
+	gen := newChainGen(r, true, ms.Nets...)
+	t0 := time.Now() // Start timer.
+	for i := 0; i < iter; i++ {
+		t.Logf("iter [%d]", i)
+
+		// Reset all counters.
+		hmm.Clear()
+
+		// fix the seed to get the same sequence
+		for j := 0; j < m; j++ {
+			obs, states := gen.next()
+			t.Log(states)
+			t.Log(obs.Label())
+			numFrames += len(states) - 2
+			hmm.UpdateOne(obs, 1.0)
+		}
+		hmm.Estimate()
+	}
+	dur := time.Now().Sub(t0)
+	t.Log("dur: ", dur)
 }
 
 func testDecoder(t *testing.T, gen *generator, dec *graph.Decoder, numIterations int) {
@@ -323,7 +394,11 @@ func testDecoder(t *testing.T, gen *generator, dec *graph.Decoder, numIterations
 		// Generate a sequence.
 		obs, states := gen.next()
 		t.Log("generated states: ", states)
-		refLabels := strings.Split(string(obs.Label().(model.SimpleLabel)), ",")
+		var refLabels []string
+		for i := 1; i < len(states)-1; i++ {
+			sid := states[i]
+			refLabels = append(refLabels, sid)
+		}
 
 		// Find the optimnal sequence.
 		token := dec.Decode(obs.ValueAsSlice())
@@ -385,7 +460,7 @@ func TestTrainHmmGmm(t *testing.T) {
 
 		// fix the seed to get the same sequence
 		r := rand.New(rand.NewSource(33))
-		gen := newGenerator(r, hmm0.Set.Nets[0])
+		gen := newGenerator(r, false, hmm0.Set.Nets[0])
 		for j := 0; j < m; j++ {
 			obs, states := gen.next()
 			_ = states

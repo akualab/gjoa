@@ -166,14 +166,42 @@ func (fo FloatObsSequence) ID() string { return fo.id }
 
 // Add adds a FloatObs to the sequence.
 func (fo *FloatObsSequence) Add(obs FloatObs, lab string) {
-	var x string
 	fo.value = append(fo.value, obs.value)
-	if len(fo.label) == 0 {
-		x = string(lab) // no sperator
-	} else {
-		x = string(fo.label) + "," + string(lab)
+	switch {
+	case len(lab) > 0 && len(fo.label) == 0:
+		x := string(lab) // no sperator
+		fo.label = SimpleLabel(x)
+	case len(lab) > 0 && len(fo.label) > 0:
+		x := string(fo.label) + "," + string(lab)
+		fo.label = SimpleLabel(x)
 	}
-	fo.label = SimpleLabel(x)
+}
+
+// Join joins various FloatObsSequence objects into a new sequence.
+func JoinFloatObsSequence(inputs ...*FloatObsSequence) Obs {
+	var val [][]float64
+	var lab SimpleLabel
+	var id string
+
+	for k, fos := range inputs {
+		for _, vec := range fos.value {
+			val = append(val, vec)
+		}
+
+		if k == 0 {
+			id = fos.id
+			lab = fos.label
+		} else {
+			id = id + "," + fos.id
+			lab = lab + "," + fos.label
+		}
+	}
+
+	return &FloatObsSequence{
+		value: val,
+		label: lab,
+		id:    id,
+	}
 }
 
 // IntObs implements Obs for integer values.

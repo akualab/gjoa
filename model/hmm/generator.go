@@ -17,78 +17,88 @@ const seed = 33
 
 // Generator generates random observations using an hmm model.
 type generator struct {
-	hmm *Net
-	r   *rand.Rand
+	hmm    *Net
+	r      *rand.Rand
+	noNull bool
 }
 
 // NewGenerator returns an hmm data generator.
-func newGenerator(r *rand.Rand, hmm *Net) *generator {
+func newGenerator(r *rand.Rand, noNull bool, hmm *Net) *generator {
 	return &generator{
-		hmm: hmm,
-		r:   r,
+		hmm:    hmm,
+		r:      r,
+		noNull: noNull,
 	}
 }
 
 // Next returns the next observation sequence.
-func (gen *generator) next() (model.FloatObsSequence, []int) {
+func (gen *generator) next() (model.FloatObsSequence, []string) {
 
 	var data [][]float64
-	states := []int{0}
+	name := gen.hmm.Name
+	states := []string{name + "-0"}
 	r := gen.r
-	seq := model.NewFloatObsSequence(data, "", "").(model.FloatObsSequence)
+	seq := model.NewFloatObsSequence(data, model.SimpleLabel(name), "").(model.FloatObsSequence)
 	s := gen.hmm.nextState(0, r) // entry state
-	states = append(states, s)
+	states = append(states, name+"-"+strconv.FormatInt(int64(s), 10))
 	for {
 		g := gen.hmm.B[s]
 		gs, ok := g.(model.Sampler)
 		if !ok {
 			panic("output PDF does not implement the sampler interface")
 		}
-
 		x := gs.Sample().(model.FloatObs)
-		lab := gen.hmm.Name + "-" + strconv.FormatInt(int64(s), 10)
-		seq.Add(x, lab)
+		seq.Add(x, "")
 		s = gen.hmm.nextState(s, r)
-		states = append(states, s)
+		states = append(states, name+"-"+strconv.FormatInt(int64(s), 10))
 		if s == gen.hmm.ns-1 {
 			// Reached exit state.
 			break
 		}
+	}
+	if gen.noNull {
+		states = states[1 : len(states)-1]
 	}
 	return seq, states
 }
 
 // Generator generates random observations using a chain of hmm model.
 type chainGen struct {
-	hmms []*Net
-	r    *rand.Rand
-	q    int
+	hmms   []*Net
+	r      *rand.Rand
+	q      int
+	noNull bool
 }
 
-func newChainGen(r *rand.Rand, nets ...*Net) *chainGen {
+func newChainGen(r *rand.Rand, noNull bool, nets ...*Net) *chainGen {
 
 	return &chainGen{
-		hmms: nets,
-		r:    r,
+		hmms:   nets,
+		r:      r,
+		noNull: noNull,
 	}
 }
 
 // next returns the next chain of observation sequences.
-// The outpur is organized as a slice of obs and a slice of state
+// The output is organized as a slice of obs and a slice of state
 // sequences. Each element of the slice corresponds to a model
 // in the input chain.
-func (gen *chainGen) next() ([]model.FloatObsSequence, [][]int) {
+func (gen *chainGen) next() (*model.FloatObsSequence, []string) {
 
-	var obs []model.FloatObsSequence
-	var states [][]int
+	var obs []*model.FloatObsSequence
+	var states []string
 
 	for _, h := range gen.hmms {
-		g := newGenerator(gen.r, h)
+		g := newGenerator(gen.r, gen.noNull, h)
 		o, s := g.next()
-		obs = append(obs, o)
-		states = append(states, s)
+		obs = append(obs, &o)
+		for _, one := range s {
+			states = append(states, one)
+		}
 	}
-	return obs, states
+
+	fos := model.JoinFloatObsSequence(obs...).(*model.FloatObsSequence)
+	return fos, states
 }
 
 // randTrans generates a left-to right random transition prob matrix.
@@ -123,7 +133,7 @@ func randTrans(r *rand.Rand, n int) *narray.NArray {
 	a.Set(p[0], n-2, n-2) // self
 	a.Set(p[1], n-2, n-1) // to exit (no skip)
 
-	return a
+	return narray.Log(nil, a)
 }
 
 // Get n random probabilities. Adds to one.
