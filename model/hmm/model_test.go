@@ -7,6 +7,7 @@ package hmm
 
 import (
 	"math/rand"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -265,6 +266,54 @@ func TestTrainHmmGaussian(t *testing.T) {
 	}
 
 	testDecoder(t, gen, dec, 1000)
+}
+
+func randomGaussian(r *rand.Rand, id string, dim int) *gm.Model {
+
+	var mean, sd []float64
+	startSD := 4.0
+	for i := 0; i < dim; i++ {
+		mean = append(mean, float64(r.Intn(1000)))
+		sd = append(sd, startSD)
+	}
+	return gm.NewModel(dim, gm.Name(id), gm.Mean(mean), gm.StdDev(sd))
+}
+
+func addRandomNet(r *rand.Rand, ms *Set, id string, ns, dim int) (*Net, error) {
+
+	m := []model.Modeler{nil}
+	for i := 1; i < ns-1; i++ {
+		sid := id + "-" + strconv.FormatInt(int64(i), 10)
+		g := randomGaussian(r, sid, dim)
+		m = append(m, g)
+	}
+	m = append(m, nil)
+	h := randTrans(r, ns)
+	net, e := ms.NewNet(id, h, m)
+	if e != nil {
+		return nil, e
+	}
+
+	return net, nil
+}
+
+func TestTrainHmmChain(t *testing.T) {
+
+	r := rand.New(rand.NewSource(33))
+	numModels := 10
+	dim := 2
+
+	ms0, _ := NewSet()
+	for q := 0; q < numModels; q++ {
+		ns := int(r.Intn(4) + 3)
+		id := "m" + strconv.FormatInt(int64(q), 10)
+		net, e := addRandomNet(r, ms0, id, ns, dim)
+		if e != nil {
+			t.Fatal(e)
+		}
+		_ = net
+	}
+
 }
 
 func testDecoder(t *testing.T, gen *generator, dec *graph.Decoder, numIterations int) {
