@@ -97,7 +97,7 @@ func (m *Model) UpdateOne(o model.Obs, w float64) {
 	// Print log(prob(O/model))\
 	p := chain.beta.At(0, 0, 0)
 	m.logProb += p
-	glog.Infof("update hmm stats, obsid: [%s], logProb:%.2f total:%.2f", o.ID(), p, m.logProb)
+	glog.V(1).Infof("update hmm stats, obsid: [%s], logProb:%.2f total:%.2f", o.ID(), p, m.logProb)
 }
 
 // Update updates sufficient statistics using an observation stream.
@@ -107,6 +107,8 @@ func (m *Model) Update(x model.Observer, w func(model.Obs) float64) error {
 
 // Estimate will update HMM parameters from counts.
 func (m *Model) Estimate() error {
+
+	glog.Infof("total logProb:%.2f", m.logProb)
 
 	// Reestimates HMM params in the model set.
 	m.Set.reestimate()

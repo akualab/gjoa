@@ -185,7 +185,7 @@ func TestTrainHmmGaussian(t *testing.T) {
 	g2 := gm.NewModel(1, gm.Name("g2"), gm.Mean([]float64{18}), gm.StdDev([]float64{4}))
 
 	h := narray.New(4, 4)
-	h.Set(1, 0, 1)
+	h.Set(.5, 0, 1)
 	h.Set(.5, 0, 2)
 	h.Set(.5, 1, 1)
 	h.Set(.5, 1, 2)
@@ -199,15 +199,17 @@ func TestTrainHmmGaussian(t *testing.T) {
 	fatalIf(t, e)
 	hmm := NewModel(OSet(ms))
 
-	iter := 20
+	iter := 10
 	// number of sequences
 	m := 500
 	numFrames := 0
-	r := rand.New(rand.NewSource(33))
-	gen := newGenerator(r, false, net0)
 	t0 := time.Now() // Start timer.
 	for i := 0; i < iter; i++ {
 		t.Logf("iter [%d]", i)
+
+		// Make sure we generate the same data in each iteration.
+		r := rand.New(rand.NewSource(33))
+		gen := newGenerator(r, false, net0)
 
 		// Reset all counters.
 		hmm.Clear()
@@ -247,10 +249,10 @@ func TestTrainHmmGaussian(t *testing.T) {
 	t.Logf("Time per frame: %v", dur/time.Duration(iter*numFrames*m))
 
 	gjoa.CompareSliceFloat(t, tp0.Data, tp.Data,
-		"error in Trans Probs [0]", .05)
+		"error in Trans Probs [0]", .03)
 
-	CompareGaussians(t, net0.B[1].(*gm.Model), net.B[1].(*gm.Model), 0.05)
-	CompareGaussians(t, net0.B[2].(*gm.Model), net.B[2].(*gm.Model), 0.05)
+	CompareGaussians(t, net0.B[1].(*gm.Model), net.B[1].(*gm.Model), 0.03)
+	CompareGaussians(t, net0.B[2].(*gm.Model), net.B[2].(*gm.Model), 0.03)
 
 	if t.Failed() {
 		t.FailNow()
@@ -264,6 +266,8 @@ func TestTrainHmmGaussian(t *testing.T) {
 		t.Fatal(e)
 	}
 
+	r := rand.New(rand.NewSource(5151))
+	gen := newGenerator(r, false, net0)
 	testDecoder(t, gen, dec, 1000)
 }
 
@@ -273,7 +277,8 @@ func randomGaussian(r *rand.Rand, id string, dim int) *gm.Model {
 	startSD := 4.0
 	for i := 0; i < dim; i++ {
 		mean = append(mean, float64(r.Intn(1000)))
-		sd = append(sd, startSD)
+		a := r.NormFloat64()*0.5 + 1.0 // pert 0.5 to 1.5
+		sd = append(sd, startSD*a)
 	}
 	return gm.NewModel(dim, gm.Name(id), gm.Mean(mean), gm.StdDev(sd))
 }
@@ -284,11 +289,9 @@ func initGaussian(r *rand.Rand, m model.Modeler) *gm.Model {
 	g := m.(*gm.Model)
 	var mean, sd []float64
 	for i := 0; i < g.ModelDim; i++ {
-		a := float64(r.Intn(4)) + 0.5
-		b := float64(r.Intn(6))
-		c := float64(r.Intn(1)) + 0.5
-		mean = append(mean, g.Mean[i]*a+b)
-		sd = append(sd, g.StdDev[i]*c)
+		a := r.NormFloat64()*0.2 + 1.0 // pert 0.8 to 1.2
+		mean = append(mean, g.Mean[i]*a)
+		sd = append(sd, g.StdDev[i]*a)
 	}
 	return gm.NewModel(g.ModelDim, gm.Name(g.ModelName), gm.Mean(mean), gm.StdDev(sd))
 }
@@ -302,7 +305,8 @@ func addRandomNet(r *rand.Rand, ms *Set, id string, ns, dim int) (*Net, error) {
 		m = append(m, g)
 	}
 	m = append(m, nil)
-	h := randTrans(r, ns)
+	//	h := randTrans(r, ns)
+	h := MakeLeftToRight(ns, .5, .4)
 	net, e := ms.NewNet(id, h, m)
 	if e != nil {
 		return nil, e
@@ -335,10 +339,13 @@ func initRandomSet(r *rand.Rand, in *Set) (*Set, error) {
 
 func TestTrainHmmChain(t *testing.T) {
 
-	r := rand.New(rand.NewSource(33))
-	numModels := 10
-	dim := 2
-	maxNumStates := 6
+	r := rand.New(rand.NewSource(444))
+	numModels := 1
+	dim := 1
+	maxNumStates := 4
+	iter := 6
+	numTrainSeq := 500
+	maxLength := 1 // max len of train seq
 
 	// Create reference HMM to generate random sequences.
 	ms0, _ := NewSet()
@@ -362,22 +369,24 @@ func TestTrainHmmChain(t *testing.T) {
 	hmm := NewModel(OSet(ms), OAssign(DirectAssigner{}))
 	_ = hmm
 
-	iter := 4
-	m := 20
 	numFrames := 0
-	gen := newChainGen(r, true, ms.Nets...)
 	t0 := time.Now() // Start timer.
 	for i := 0; i < iter; i++ {
 		t.Logf("iter [%d]", i)
+
+		// Make sure we generate the same data in each iteration.
+		r := rand.New(rand.NewSource(33))
+		gen := newChainGen(r, true, maxLength, ms.Nets...)
 
 		// Reset all counters.
 		hmm.Clear()
 
 		// fix the seed to get the same sequence
-		for j := 0; j < m; j++ {
+		for j := 0; j < numTrainSeq; j++ {
+
 			obs, states := gen.next()
-			t.Log(states)
-			t.Log(obs.Label())
+			//			t.Log(states)
+			//fmt.Println(obs.Label()) // debug
 			numFrames += len(states) - 2
 			hmm.UpdateOne(obs, 1.0)
 		}
@@ -385,6 +394,49 @@ func TestTrainHmmChain(t *testing.T) {
 	}
 	dur := time.Now().Sub(t0)
 	t.Log("dur: ", dur)
+
+	for name, net0 := range ms0.byName {
+		net := ms.byName[name]
+		h0 := net0.A
+		h := net.A
+		tp0 := narray.Exp(nil, h0.Copy())
+		tp := narray.Exp(nil, h.Copy())
+		ns := tp.Shape[0]
+		for i := 0; i < ns; i++ {
+			for j := 0; j < ns; j++ {
+				p0 := tp0.At(i, j)
+				logp0 := h0.At(i, j)
+				p := tp.At(i, j)
+				logp := h.At(i, j)
+				if p > smallNumber || p0 > smallNumber {
+					t.Logf("name: %s, %d=>%d, p0:%5.2f, p:%5.2f, logp0:%8.5f, logp:%8.5f", name, i, j, p0, p, logp0, logp)
+				}
+			}
+		}
+		t.Log("")
+		for i := 1; i < ns-1; i++ {
+			t.Logf("hmm0 state:%d, %s", i, net0.B[i])
+			t.Logf("hmm  state:%d, %s", i, net.B[i])
+			t.Log("")
+		}
+	}
+
+	// // Print time stats.
+	// t.Log("")
+	// t.Logf("Total time: %v", dur)
+	// t.Logf("Time per iteration: %v", dur/time.Duration(iter))
+	// t.Logf("Time per frame: %v", dur/time.Duration(iter*numFrames*m))
+
+	// gjoa.CompareSliceFloat(t, tp0.Data, tp.Data,
+	// 	"error in Trans Probs [0]", .05)
+
+	// CompareGaussians(t, net0.B[1].(*gm.Model), net.B[1].(*gm.Model), 0.05)
+	// CompareGaussians(t, net0.B[2].(*gm.Model), net.B[2].(*gm.Model), 0.05)
+
+	// if t.Failed() {
+	// 	t.FailNow()
+	// }
+
 }
 
 func testDecoder(t *testing.T, gen *generator, dec *graph.Decoder, numIterations int) {
@@ -481,9 +533,9 @@ func TestTrainHmmGmm(t *testing.T) {
 	t.Logf("Time per frame: %v", dur/time.Duration(iter*n*m))
 }
 
-func CompareGaussians(t *testing.T, g1 *gm.Model, g2 *gm.Model, eps float64) {
-	gjoa.CompareSliceFloat(t, g1.Mean, g2.Mean, "Wrong Mean", eps)
-	gjoa.CompareSliceFloat(t, g1.StdDev, g2.StdDev, "Wrong SD", eps)
+func CompareGaussians(t *testing.T, g1 *gm.Model, g2 *gm.Model, tol float64) {
+	gjoa.CompareSliceFloat(t, g1.Mean, g2.Mean, "Wrong Mean", tol)
+	gjoa.CompareSliceFloat(t, g1.StdDev, g2.StdDev, "Wrong SD", tol)
 }
 
 // func CompareHMMs(t *testing.T, hmm0 *Model, hmm *Model, eps float64) {

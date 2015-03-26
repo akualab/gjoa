@@ -58,13 +58,17 @@ var (
 
 func TestMain(m *testing.M) {
 
-	// Configure glog. Example to set debug level 6 for file viterbi.go:
+	// Configure glog. Example to set debug level 6 for file viterbi.go and 3 for everythign else:
+	// export GLOG_LEVEL=3
 	// go test -v  -run TestTrainHmmGau -vmodule=viterbi=6 > /tmp/zzz
 	flag.Set("alsologtostderr", "true")
 	flag.Set("log_dir", "/tmp/log")
-	flag.Set("v", "1")
-	flag.Parse()
-	glog.Info("Logging configured")
+	level := os.Getenv("GLOG_LEVEL")
+	if len(level) == 0 {
+		level = "0"
+	}
+	flag.Set("v", level)
+	glog.Info("glog debug level is: ", level)
 
 	ns = 5 // max num states in a model
 	nstates[0] = 5
@@ -609,10 +613,10 @@ func TestLR(t *testing.T) {
 		return scorer{op: []float64{math.Log(0.4), math.Log(0.2), math.Log(0.4)}}
 	}
 
-	hmm2, err := ms2.makeLetfToRight("model 2", 4, 0.4, 0.1,
+	hmm2, err := ms2.makeLeftToRight("model 2", 4, 0.4, 0.1,
 		[]model.Modeler{nil, testScorer(), testScorer(), nil})
 	fatalIf(t, err)
-	hmm3, errr := ms2.makeLetfToRight("model 3", 6, 0.3, 0.2,
+	hmm3, errr := ms2.makeLeftToRight("model 3", 6, 0.3, 0.2,
 		[]model.Modeler{nil, testScorer(), testScorer(), testScorer(), testScorer(), nil})
 	fatalIf(t, errr)
 	hmms2, err := ms2.chainFromNets(xobs, hmm0, hmm2, hmm3, hmm0, hmm0, hmm0, hmm0, hmm2)
@@ -648,10 +652,10 @@ func TestLRAssign(t *testing.T) {
 		return scorer{op: []float64{math.Log(0.4), math.Log(0.2), math.Log(0.4)}}
 	}
 
-	_, err := ms2.makeLetfToRight("model 2", 4, 0.4, 0.1,
+	_, err := ms2.makeLeftToRight("model 2", 4, 0.4, 0.1,
 		[]model.Modeler{nil, testScorer(), testScorer(), nil})
 	fatalIf(t, err)
-	_, errr := ms2.makeLetfToRight("model 3", 6, 0.3, 0.2,
+	_, errr := ms2.makeLeftToRight("model 3", 6, 0.3, 0.2,
 		[]model.Modeler{nil, testScorer(), testScorer(), testScorer(), testScorer(), nil})
 	fatalIf(t, errr)
 
@@ -695,10 +699,10 @@ func TestHMMModel(t *testing.T) {
 		return scorer{op: []float64{math.Log(0.4), math.Log(0.2), math.Log(0.4)}}
 	}
 
-	_, err := modelSet.makeLetfToRight("model 2", 4, 0.4, 0.1,
+	_, err := modelSet.makeLeftToRight("model 2", 4, 0.4, 0.1,
 		[]model.Modeler{nil, testScorer(), testScorer(), nil})
 	fatalIf(t, err)
-	_, errr := modelSet.makeLetfToRight("model 3", 6, 0.3, 0.2,
+	_, errr := modelSet.makeLeftToRight("model 3", 6, 0.3, 0.2,
 		[]model.Modeler{nil, testScorer(), testScorer(), testScorer(), testScorer(), nil})
 	fatalIf(t, errr)
 

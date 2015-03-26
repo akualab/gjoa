@@ -177,22 +177,19 @@ func (fo *FloatObsSequence) Add(obs FloatObs, lab string) {
 	}
 }
 
-// Join joins various FloatObsSequence objects into a new sequence.
-func JoinFloatObsSequence(inputs ...*FloatObsSequence) Obs {
+// JoinFloatObsSequence joins various FloatObsSequence objects into a new sequence.
+// id is the new id of the joined sequence.
+func JoinFloatObsSequence(id string, inputs ...*FloatObsSequence) Obs {
 	var val [][]float64
 	var lab SimpleLabel
-	var id string
 
 	for k, fos := range inputs {
 		for _, vec := range fos.value {
 			val = append(val, vec)
 		}
-
 		if k == 0 {
-			id = fos.id
 			lab = fos.label
 		} else {
-			id = id + "," + fos.id
 			lab = lab + "," + fos.label
 		}
 	}

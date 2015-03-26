@@ -11,6 +11,7 @@ import (
 
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/narray"
+	"github.com/golang/glog"
 )
 
 const seed = 33
@@ -39,12 +40,15 @@ func (gen *generator) next() (model.FloatObsSequence, []string) {
 	states := []string{name + "-0"}
 	r := gen.r
 	seq := model.NewFloatObsSequence(data, model.SimpleLabel(name), "").(model.FloatObsSequence)
-	s := gen.hmm.nextState(0, r) // entry state
+	s := gen.hmm.nextState(0, r)
 	states = append(states, name+"-"+strconv.FormatInt(int64(s), 10))
 	for {
+		glog.V(6).Infof("start loop for hmm: %s, state: %d, num states: %d", name, s, gen.hmm.ns)
 		g := gen.hmm.B[s]
 		gs, ok := g.(model.Sampler)
 		if !ok {
+			glog.Info(gen.hmm.A)
+			glog.Infof("hmm name: %s, state: %d, num states: %d", name, s, gen.hmm.ns)
 			panic("output PDF does not implement the sampler interface")
 		}
 		x := gs.Sample().(model.FloatObs)
@@ -62,20 +66,22 @@ func (gen *generator) next() (model.FloatObsSequence, []string) {
 	return seq, states
 }
 
-// Generator generates random observations using a chain of hmm model.
+// Generator generates random observations using a chain of hmm models.
 type chainGen struct {
-	hmms   []*Net
-	r      *rand.Rand
-	q      int
-	noNull bool
+	hmms      []*Net
+	r         *rand.Rand
+	q         int
+	noNull    bool
+	maxLength int
 }
 
-func newChainGen(r *rand.Rand, noNull bool, nets ...*Net) *chainGen {
+func newChainGen(r *rand.Rand, noNull bool, maxLength int, nets ...*Net) *chainGen {
 
 	return &chainGen{
-		hmms:   nets,
-		r:      r,
-		noNull: noNull,
+		hmms:      nets,
+		r:         r,
+		noNull:    noNull,
+		maxLength: maxLength,
 	}
 }
 
@@ -88,7 +94,11 @@ func (gen *chainGen) next() (*model.FloatObsSequence, []string) {
 	var obs []*model.FloatObsSequence
 	var states []string
 
-	for _, h := range gen.hmms {
+	// create a random chain of length between 1 and maxLength.
+	numNets := gen.r.Intn(gen.maxLength) + 1
+
+	for q := 0; q < numNets; q++ {
+		h := gen.hmms[gen.r.Intn(len(gen.hmms))] // pick hmm at random
 		g := newGenerator(gen.r, gen.noNull, h)
 		o, s := g.next()
 		obs = append(obs, &o)
@@ -97,7 +107,7 @@ func (gen *chainGen) next() (*model.FloatObsSequence, []string) {
 		}
 	}
 
-	fos := model.JoinFloatObsSequence(obs...).(*model.FloatObsSequence)
+	fos := model.JoinFloatObsSequence("generated", obs...).(*model.FloatObsSequence)
 	return fos, states
 }
 
@@ -132,6 +142,16 @@ func randTrans(r *rand.Rand, n int) *narray.NArray {
 	p := getProbs(r, 2)
 	a.Set(p[0], n-2, n-2) // self
 	a.Set(p[1], n-2, n-1) // to exit (no skip)
+
+	if glog.V(6) {
+		st := a.Sprint(func(na *narray.NArray, k int) bool {
+			if na.Data[k] > 0 {
+				return true
+			}
+			return false
+		})
+		glog.Info(st)
+	}
 
 	return narray.Log(nil, a)
 }

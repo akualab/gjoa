@@ -10,29 +10,35 @@ import (
 	"testing"
 )
 
-func Comparef64(f1, f2, epsilon float64) bool {
-	if math.Abs(f2-f1) < epsilon {
+// Comparef64 returns true if |f2/f1-1| < tol.
+func Comparef64(f1, f2, tol float64) bool {
+	avg := (f1 + f2) / 2.0
+	sErr := math.Abs(f2-f1) / (avg + 1)
+	if sErr < tol {
 		return true
 	}
 	return false
 }
 
-func CompareSliceFloat(t *testing.T, expected []float64, actual []float64, message string, epsilon float64) {
+// CompareSliceFloat compares slices elementwise using Comparef64.
+func CompareSliceFloat(t *testing.T, expected []float64, actual []float64, message string, tol float64) {
 	for i, _ := range expected {
-		if !Comparef64(expected[i], actual[i], epsilon) {
+		if !Comparef64(expected[i], actual[i], tol) {
 			t.Errorf("[%s]. Expected: [%f], Got: [%f]",
 				message, expected[i], actual[i])
 		}
 	}
 }
 
-func CompareFloats(t *testing.T, expected float64, actual float64, message string, epsilon float64) {
-	if !Comparef64(expected, actual, epsilon) {
+// CompareFloats compares floats using Comparef64.
+func CompareFloats(t *testing.T, expected float64, actual float64, message string, tol float64) {
+	if !Comparef64(expected, actual, tol) {
 		t.Errorf("[%s]. Expected: [%f], Got: [%f]",
 			message, expected, actual)
 	}
 }
 
+// CompareSliceInt compares two slices of ints elementwise.
 func CompareSliceInt(t *testing.T, expected []int, actual []int, message string) {
 	for i, _ := range expected {
 		if expected[i] != actual[i] {
@@ -42,6 +48,7 @@ func CompareSliceInt(t *testing.T, expected []int, actual []int, message string)
 	}
 }
 
+// CheckError calls Fatal if error is not nil.
 func CheckError(t *testing.T, e error) {
 
 	if e != nil {

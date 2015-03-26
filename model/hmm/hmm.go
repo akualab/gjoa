@@ -440,7 +440,9 @@ func (ms *Set) reestimate() {
 				v := h.TrAcc.At(i, j) / h.OccAcc.At(i)
 				h.A.Set(math.Log(v), i, j)
 				glog.V(6).Infof("reest add A %d=>%d, tracc:%6.4f, occacc:%6.4f, p:%5.3f", i, j, h.TrAcc.At(i, j), h.OccAcc.At(i), v)
-
+				if math.IsNaN(h.A.At(i, j)) {
+					panic("reestimated transition prob is NaN")
+				}
 			}
 		}
 	}
@@ -641,7 +643,7 @@ func isTeeModel(m *Net) bool {
 // ns is the total number of states including entry/exit.
 // selfProb is the prob of the self loop with value between 0 and 1.
 // skipProb is the prob of skipping next state. Make it zero for no skips.
-func (ms *Set) makeLetfToRight(name string, ns int, selfProb,
+func (ms *Set) makeLeftToRight(name string, ns int, selfProb,
 	skipProb float64, dists []model.Modeler) (*Net, error) {
 
 	if selfProb >= 1 || skipProb >= 1 || selfProb < 0 || skipProb < 0 {
@@ -682,4 +684,39 @@ func (ms *Set) makeLetfToRight(name string, ns int, selfProb,
 		return nil, err
 	}
 	return hmm, nil
+}
+
+// MakeLeftToRight creates a transition probability matrix for a left-to-right HMM.
+// ns is the total number of states including entry/exit.
+// selfProb is the prob of the self loop with value between 0 and 1.
+// skipProb is the prob of skipping next state. Make it zero for no skips.
+func MakeLeftToRight(ns int, selfProb, skipProb float64) *narray.NArray {
+
+	if selfProb >= 1 || skipProb >= 1 || selfProb < 0 || skipProb < 0 {
+		panic("probabilities must have value >= 0 and < 1")
+	}
+	if selfProb+skipProb >= 1 {
+		panic("selfProb + skipProb must be less than 1")
+	}
+	p := selfProb
+	q := skipProb
+	r := 1.0 - p - q
+
+	h := narray.New(ns, ns)
+
+	// state 0
+	h.Set(1-q, 0, 1) // entry
+	h.Set(q, 0, 2)   // skip first emmiting state
+
+	// states 1..ns-3
+	for i := 1; i < ns-2; i++ {
+		h.Set(p, i, i)   // self loop
+		h.Set(r, i, i+1) // to right
+		h.Set(q, i, i+2) // skip
+	}
+	// state ns-2
+	h.Set(p, ns-2, ns-2)   // self
+	h.Set(1-p, ns-2, ns-1) // to exit (no skip)
+
+	return narray.Log(h, h)
 }

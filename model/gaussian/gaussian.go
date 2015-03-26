@@ -6,6 +6,7 @@
 package gaussian
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -353,4 +354,17 @@ func (g *Model) WriteFile(fn string) error {
 
 	glog.Infof("Wrote model \"%s\" to file %s.", g.Name(), fn)
 	return nil
+}
+
+// ToJSON returns a json string.
+func (g *Model) ToJSON() (string, error) {
+	var b bytes.Buffer
+	err := g.Write(&b)
+	return b.String(), err
+}
+
+// String returns a json string.
+func (g *Model) String() string {
+	s, _ := g.ToJSON()
+	return s
 }
