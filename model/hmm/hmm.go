@@ -637,6 +637,7 @@ func isTeeModel(m *Net) bool {
 // ns is the total number of states including entry/exit.
 // selfProb is the prob of the self loop with value between 0 and 1.
 // skipProb is the prob of skipping next state. Make it zero for no skips.
+// for ns=3, skipProb is set to zero.
 func (ms *Set) makeLeftToRight(name string, ns int, selfProb,
 	skipProb float64, dists []model.Modeler) (*Net, error) {
 
@@ -649,9 +650,17 @@ func (ms *Set) makeLeftToRight(name string, ns int, selfProb,
 	if len(dists) != ns {
 		panic("length of dists must match number of states")
 	}
+	if ns < 3 {
+		panic("min number of states is 3")
+	}
 
 	p := selfProb
-	q := skipProb
+	var q float64
+	if ns > 3 {
+		q = skipProb
+	} else {
+		q = 0
+	}
 	r := 1.0 - p - q
 
 	h := narray.New(ns, ns)
@@ -681,9 +690,10 @@ func (ms *Set) makeLeftToRight(name string, ns int, selfProb,
 }
 
 // MakeLeftToRight creates a transition probability matrix for a left-to-right HMM.
-// ns is the total number of states including entry/exit.
-// selfProb is the prob of the self loop with value between 0 and 1.
-// skipProb is the prob of skipping next state. Make it zero for no skips.
+//   * ns is the total number of states including entry/exit. Must be 3 or greater.
+//   * selfProb is the prob of the self loop with value between 0 and 1.
+//   * skipProb is the prob of skipping next state. Make it zero for no skips.
+//   * for ns=3, skipProb is set to zero.
 func MakeLeftToRight(ns int, selfProb, skipProb float64) *narray.NArray {
 
 	if selfProb >= 1 || skipProb >= 1 || selfProb < 0 || skipProb < 0 {
@@ -692,8 +702,17 @@ func MakeLeftToRight(ns int, selfProb, skipProb float64) *narray.NArray {
 	if selfProb+skipProb >= 1 {
 		panic("selfProb + skipProb must be less than 1")
 	}
+	if ns < 3 {
+		panic("min number of states is 3")
+	}
+
 	p := selfProb
-	q := skipProb
+	var q float64
+	if ns > 3 {
+		q = skipProb
+	} else {
+		q = 0
+	}
 	r := 1.0 - p - q
 
 	h := narray.New(ns, ns)

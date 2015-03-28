@@ -14,7 +14,9 @@ import (
 	"github.com/golang/glog"
 )
 
-const seed = 33
+type sequencer interface {
+	next(id string) (*model.FloatObsSequence, []string)
+}
 
 // Generator generates random observations using an hmm model.
 type generator struct {
@@ -33,7 +35,7 @@ func newGenerator(r *rand.Rand, noNull bool, hmm *Net) *generator {
 }
 
 // Next returns the next observation sequence.
-func (gen *generator) next(id string) (model.FloatObsSequence, []string) {
+func (gen *generator) next(id string) (*model.FloatObsSequence, []string) {
 
 	var data [][]float64
 	name := gen.hmm.Name
@@ -67,7 +69,7 @@ func (gen *generator) next(id string) (model.FloatObsSequence, []string) {
 	if gen.noNull {
 		states = states[1 : len(states)-1]
 	}
-	return seq, states
+	return &seq, states
 }
 
 // Generator generates random observations using a chain of hmm models.
@@ -113,7 +115,7 @@ func (gen *chainGen) next(id string) (*model.FloatObsSequence, []string) {
 		h := gen.hmms[gen.r.Intn(len(gen.hmms))] // pick hmm at random
 		g := newGenerator(gen.r, gen.noNull, h)
 		o, s := g.next("")
-		obs = append(obs, &o)
+		obs = append(obs, o)
 		for _, one := range s {
 			states = append(states, one)
 		}
@@ -125,7 +127,7 @@ func (gen *chainGen) next(id string) (*model.FloatObsSequence, []string) {
 
 // randTrans generates a left-to right random transition prob matrix.
 // n is the total number of states including entry/exit.
-func randTrans(r *rand.Rand, n int) *narray.NArray {
+func randTrans(r *rand.Rand, n int, skip bool) *narray.NArray {
 
 	if n < 3 {
 		panic("need at least 3 states")
@@ -134,7 +136,7 @@ func randTrans(r *rand.Rand, n int) *narray.NArray {
 	a := narray.New(n, n)
 
 	// state 0
-	if n > 3 {
+	if n > 3 && skip {
 		p := getProbs(r, 2)
 		a.Set(p[0], 0, 1) // entry
 		a.Set(p[1], 0, 2) // skip first emmiting state
@@ -144,10 +146,16 @@ func randTrans(r *rand.Rand, n int) *narray.NArray {
 
 	// states 1..n-3
 	for i := 1; i < n-2; i++ {
-		p := getProbs(r, 3)
-		a.Set(p[0], i, i)   // self loop
-		a.Set(p[1], i, i+1) // to right
-		a.Set(p[2], i, i+2) // skip
+		if skip {
+			p := getProbs(r, 3)
+			a.Set(p[0], i, i)   // self loop
+			a.Set(p[1], i, i+1) // to right
+			a.Set(p[2], i, i+2) // skip
+		} else {
+			p := getProbs(r, 2)
+			a.Set(p[0], i, i)   // self loop
+			a.Set(p[1], i, i+1) // to right
+		}
 	}
 
 	// state ns-2

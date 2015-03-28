@@ -31,9 +31,6 @@ func makeHMM(t *testing.T) *Model {
 	sd2 := []float64{2}
 	g2 := gm.NewModel(1, gm.Name("g2"), gm.Mean(mean2), gm.StdDev(sd2))
 
-	//	initialStateProbs := []float64{0.8, 0.2}
-	//	transProbs := [][]float64{{0.9, 0.1}, {0.3, 0.7}}
-
 	var err error
 	h0 := narray.New(4, 4)
 	//	h0.Set(.8, 0, 1)
@@ -60,7 +57,6 @@ func TestTrainBasic(t *testing.T) {
 	m := makeHMM(t)
 	h := m.Set.Nets[0]
 	tp0 := narray.Exp(nil, h.A.Copy())
-	//	obs := model.NewFloatObsSequence(obs0, model.SimpleLabel(""), "")
 	obs := model.NewFloatObsSequence(data, model.SimpleLabel(""), "")
 
 	m.Clear()
@@ -321,16 +317,16 @@ func TestHMMGauss(t *testing.T) {
 	}
 
 	r := rand.New(rand.NewSource(5151))
-	gen := newGenerator(r, false, net0)
+	gen := newGenerator(r, true, net0)
 	testDecoder(t, gen, dec, 1000)
 }
 
 func randomGaussian(r *rand.Rand, id string, dim int) *gm.Model {
 
 	var mean, sd []float64
-	startSD := 20.0
+	startSD := 40.0
 	for i := 0; i < dim; i++ {
-		mean = append(mean, float64(r.Intn(10)*10.0))
+		mean = append(mean, float64(r.Intn(10)*100.0))
 		a := r.NormFloat64()*0.2 + 1.0 // pert 0.8 to 1.2
 		sd = append(sd, startSD*a)
 	}
@@ -359,8 +355,7 @@ func addRandomNet(r *rand.Rand, ms *Set, id string, ns, dim int) (*Net, error) {
 		m = append(m, g)
 	}
 	m = append(m, nil)
-	//	h := randTrans(r, ns)
-	h := MakeLeftToRight(ns, .5, .4)
+	h := MakeLeftToRight(ns, .5, 0)
 	net, e := ms.NewNet(id, h, m)
 	if e != nil {
 		return nil, e
@@ -380,7 +375,7 @@ func initRandomSet(r *rand.Rand, in *Set) (*Set, error) {
 			m = append(m, g)
 		}
 		m = append(m, nil)
-		hn := randTrans(r, h.ns)
+		hn := randTrans(r, h.ns, false)
 		id := "m" + strconv.FormatInt(int64(q), 10)
 		_, e := out.NewNet(id, hn, m)
 		if e != nil {
@@ -397,9 +392,11 @@ func TestHMMChain(t *testing.T) {
 	numModels := 4
 	dim := 1
 	maxNumStates := 5
-	iter := 10
+	iter := 4
 	numTrainSeq := 10000
-	maxChainLen := 2 // max number of nets in chain.
+	maxChainLen := 2     // max number of nets in chain.
+	numTestItems := 1000 // num test sequences.
+	maxTestLen := 4
 
 	// Create reference HMM to generate random sequences.
 	ms0, _ := NewSet()
@@ -437,17 +434,7 @@ func TestHMMChain(t *testing.T) {
 
 		// fix the seed to get the same sequence
 		for j := 0; j < numTrainSeq; j++ {
-
 			obs, states := gen.next("oid-" + fi(j))
-
-			// DEBUG
-			//			for k, o := range obs.ValueAsSlice() {
-			//				vec := o.([]float64)
-			//				t.Logf("OBS0 iter:%d, seq:%d, idx:%d, vec:%+v", i, j, k, vec)
-			//			}
-
-			//			t.Log(states)
-			//fmt.Println(obs.Label()) // debug
 			numFrames += len(states) - 2
 			hmm.UpdateOne(obs, 1.0)
 		}
@@ -483,34 +470,38 @@ func TestHMMChain(t *testing.T) {
 	}
 
 	t.Log("final hmm: ", hmm)
-	// // Print time stats.
-	// t.Log("")
-	// t.Logf("Total time: %v", dur)
-	// t.Logf("Time per iteration: %v", dur/time.Duration(iter))
-	// t.Logf("Time per frame: %v", dur/time.Duration(iter*numFrames*m))
 
-	// gjoa.CompareSliceFloat(t, tp0.Data, tp.Data,
-	// 	"error in Trans Probs [0]", .05)
+	// Print time stats.
+	t.Log("")
+	t.Logf("Total time: %v", dur)
+	t.Logf("Time per iteration: %v", dur/time.Duration(iter))
+	t.Logf("Time per frame: %v", dur/time.Duration(iter*numFrames*numTrainSeq))
 
-	// CompareGaussians(t, net0.B[1].(*gm.Model), net.B[1].(*gm.Model), 0.05)
-	// CompareGaussians(t, net0.B[2].(*gm.Model), net.B[2].(*gm.Model), 0.05)
+	// Recognize.
+	g := ms.SearchGraph()
 
-	// if t.Failed() {
-	// 	t.FailNow()
-	// }
+	dec, e := graph.NewDecoder(g)
+	if e != nil {
+		t.Fatal(e)
+	}
+
+	r = rand.New(rand.NewSource(5151))
+	gen := newChainGen(r, true, maxTestLen, ms0.Nets...)
+	testDecoder(t, gen, dec, numTestItems)
 
 }
 
-func testDecoder(t *testing.T, gen *generator, dec *graph.Decoder, numIterations int) {
+func testDecoder(t *testing.T, gen sequencer, dec *graph.Decoder, numIterations int) {
 
+	numErrors := 0
+	n := 0
 	for i := 0; i < numIterations; i++ {
 
 		// Generate a sequence.
 		obs, states := gen.next("oid-" + fi(i))
 		t.Log("generated states: ", states)
 		var refLabels []string
-		for i := 1; i < len(states)-1; i++ {
-			sid := states[i]
+		for _, sid := range states {
 			refLabels = append(refLabels, sid)
 		}
 
@@ -539,20 +530,21 @@ func testDecoder(t *testing.T, gen *generator, dec *graph.Decoder, numIterations
 
 		// Compare labels
 		if len(refLabels) != len(hypLabels) {
-			t.Errorf("ref/hyp length mismath")
-		} else {
-			for k, lab := range refLabels {
-				if lab != hypLabels[k] {
-					t.Error("label mismath")
-					continue
-				}
+			t.Fatal("ref/hyp length mismath")
+		}
+		for k, lab := range refLabels {
+			n++
+			if lab != hypLabels[k] {
+				numErrors++
 			}
 		}
-		if t.Failed() {
-			t.FailNow()
-		}
 	}
-
+	relErr := float64(numErrors) / float64(n)
+	t.Logf("num_labels:%d, num_errors:%d, rel_err:%5.1f%%", n, numErrors, relErr*100.0)
+	maxErr := 0.03
+	if relErr > maxErr {
+		t.Fatalf("recognition error rate is %4.1f%% which is greater than %4.1f%%", relErr*100.0, maxErr*100.0)
+	}
 }
 
 func makeGmm(mean, sd [][]float64, weights []float64) *gmm.Model {
