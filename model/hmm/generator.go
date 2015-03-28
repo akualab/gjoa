@@ -33,32 +33,36 @@ func newGenerator(r *rand.Rand, noNull bool, hmm *Net) *generator {
 }
 
 // Next returns the next observation sequence.
-func (gen *generator) next() (model.FloatObsSequence, []string) {
+func (gen *generator) next(id string) (model.FloatObsSequence, []string) {
 
 	var data [][]float64
 	name := gen.hmm.Name
 	states := []string{name + "-0"}
 	r := gen.r
-	seq := model.NewFloatObsSequence(data, model.SimpleLabel(name), "").(model.FloatObsSequence)
+	seq := model.NewFloatObsSequence(data, model.SimpleLabel(name), id).(model.FloatObsSequence)
 	s := gen.hmm.nextState(0, r)
 	states = append(states, name+"-"+strconv.FormatInt(int64(s), 10))
 	for {
-		glog.V(6).Infof("start loop for hmm: %s, state: %d, num states: %d", name, s, gen.hmm.ns)
+		if s == gen.hmm.ns-1 {
+			// Reached exit state.
+			break
+		}
+		glog.V(8).Infof("start loop for hmm: %s, state: %d, num states: %d", name, s, gen.hmm.ns)
 		g := gen.hmm.B[s]
+		if g == nil {
+			glog.Infof("hmm name: %s, state: %d, num states: %d", name, s, gen.hmm.ns)
+			panic("output PDF is nil - can't generate data")
+		}
 		gs, ok := g.(model.Sampler)
 		if !ok {
 			glog.Info(gen.hmm.A)
 			glog.Infof("hmm name: %s, state: %d, num states: %d", name, s, gen.hmm.ns)
 			panic("output PDF does not implement the sampler interface")
 		}
-		x := gs.Sample().(model.FloatObs)
+		x := gs.Sample(r).(model.FloatObs)
 		seq.Add(x, "")
 		s = gen.hmm.nextState(s, r)
 		states = append(states, name+"-"+strconv.FormatInt(int64(s), 10))
-		if s == gen.hmm.ns-1 {
-			// Reached exit state.
-			break
-		}
 	}
 	if gen.noNull {
 		states = states[1 : len(states)-1]
@@ -77,11 +81,19 @@ type chainGen struct {
 
 func newChainGen(r *rand.Rand, noNull bool, maxLength int, nets ...*Net) *chainGen {
 
+	if glog.V(8) {
+		glog.Info("New Chain Gen")
+		for q, net := range nets {
+			glog.Infof("q:%d, TP: %+v", q, net.A)
+			glog.Infof("q:%d, OP: %+v", q, net.B)
+		}
+	}
+
 	return &chainGen{
 		hmms:      nets,
 		r:         r,
 		noNull:    noNull,
-		maxLength: maxLength,
+		maxLength: maxLength, // max chain length
 	}
 }
 
@@ -89,7 +101,7 @@ func newChainGen(r *rand.Rand, noNull bool, maxLength int, nets ...*Net) *chainG
 // The output is organized as a slice of obs and a slice of state
 // sequences. Each element of the slice corresponds to a model
 // in the input chain.
-func (gen *chainGen) next() (*model.FloatObsSequence, []string) {
+func (gen *chainGen) next(id string) (*model.FloatObsSequence, []string) {
 
 	var obs []*model.FloatObsSequence
 	var states []string
@@ -100,14 +112,14 @@ func (gen *chainGen) next() (*model.FloatObsSequence, []string) {
 	for q := 0; q < numNets; q++ {
 		h := gen.hmms[gen.r.Intn(len(gen.hmms))] // pick hmm at random
 		g := newGenerator(gen.r, gen.noNull, h)
-		o, s := g.next()
+		o, s := g.next("")
 		obs = append(obs, &o)
 		for _, one := range s {
 			states = append(states, one)
 		}
 	}
 
-	fos := model.JoinFloatObsSequence("generated", obs...).(*model.FloatObsSequence)
+	fos := model.JoinFloatObsSequence(id, obs...).(*model.FloatObsSequence)
 	return fos, states
 }
 
@@ -143,7 +155,7 @@ func randTrans(r *rand.Rand, n int) *narray.NArray {
 	a.Set(p[0], n-2, n-2) // self
 	a.Set(p[1], n-2, n-1) // to exit (no skip)
 
-	if glog.V(6) {
+	if glog.V(8) {
 		st := a.Sprint(func(na *narray.NArray, k int) bool {
 			if na.Data[k] > 0 {
 				return true

@@ -14,7 +14,7 @@ import (
 	"github.com/akualab/gjoa/model"
 )
 
-const epsilon = 0.004
+const tolerance = 0.03 // |x-y| / (1+|avg(x,y)|)
 
 // Tests
 
@@ -31,7 +31,7 @@ func TestGaussian(t *testing.T) {
 	t.Logf("Prob: %f", g.prob(obs))
 
 	expected := -3.3818
-	if !gjoa.Comparef64(expected, p, epsilon) {
+	if !gjoa.Comparef64(expected, p, tolerance) {
 		t.Errorf("Wrong LogProb. Expected: [%f], Got: [%f]", expected, p)
 	}
 }
@@ -56,7 +56,7 @@ func TestWriteReadGaussian(t *testing.T) {
 	t.Logf("Original model:\n%+v\n", g)
 	t.Logf("New model read from file:\n%+v\n", g1)
 
-	CompareGaussians(t, g, g1, epsilon)
+	CompareGaussians(t, g, g1, tolerance)
 }
 
 func TestTrainGaussian(t *testing.T) {
@@ -71,7 +71,7 @@ func TestTrainGaussian(t *testing.T) {
 
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < 2000000; i++ {
-		rv := model.RandNormalVector(mean, std, r)
+		rv := model.RandNormalVector(r, mean, std)
 		g.UpdateOne(model.F64ToObs(rv, ""), 1.0)
 	}
 	g.Estimate()
@@ -79,11 +79,11 @@ func TestTrainGaussian(t *testing.T) {
 	t.Logf("STD: \n%+v", g.StdDev)
 
 	for i, _ := range mean {
-		if !gjoa.Comparef64(mean[i], g.Mean[i], epsilon) {
+		if !gjoa.Comparef64(mean[i], g.Mean[i], tolerance) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
 				i, mean[i], g.Mean[i])
 		}
-		if !gjoa.Comparef64(std[i], g.StdDev[i], epsilon) {
+		if !gjoa.Comparef64(std[i], g.StdDev[i], tolerance) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
 				i, std[i], g.StdDev[i])
 		}
@@ -107,7 +107,7 @@ func TestTrainGaussian2(t *testing.T) {
 
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < numSamp; i++ {
-		rv := model.RandNormalVector(mean, std, r)
+		rv := model.RandNormalVector(r, mean, std)
 		values[i] = rv
 	}
 
@@ -122,11 +122,11 @@ func TestTrainGaussian2(t *testing.T) {
 	t.Logf("STD: \n%+v", g.StdDev)
 
 	for i, _ := range mean {
-		if !gjoa.Comparef64(mean[i], g.Mean[i], epsilon) {
+		if !gjoa.Comparef64(mean[i], g.Mean[i], tolerance) {
 			t.Errorf("Wrong Mean[%d]. Expected: [%f], Got: [%f]",
 				i, mean[i], g.Mean[i])
 		}
-		if !gjoa.Comparef64(std[i], g.StdDev[i], epsilon) {
+		if !gjoa.Comparef64(std[i], g.StdDev[i], tolerance) {
 			t.Errorf("Wrong STD[%d]. Expected: [%f], Got: [%f]",
 				i, std[i], g.StdDev[i])
 		}
@@ -142,7 +142,7 @@ func TestCloneGaussian(t *testing.T) {
 
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < 2000; i++ {
-		rv := model.RandNormalVector(mean, std, r)
+		rv := model.RandNormalVector(r, mean, std)
 		g.UpdateOne(model.F64ToObs(rv, ""), 1.0)
 	}
 	g.Estimate()
@@ -190,7 +190,7 @@ func BenchmarkTrain(b *testing.B) {
 	r := rand.New(rand.NewSource(33))
 	buf := make([][]float64, 2000000, 2000000)
 	for i := 0; i < 2000000; i++ {
-		rv := model.RandNormalVector(mean, std, r)
+		rv := model.RandNormalVector(r, mean, std)
 		buf[i] = rv
 	}
 
@@ -221,7 +221,7 @@ func BenchmarkTrain2(b *testing.B) {
 
 	r := rand.New(rand.NewSource(33))
 	for i := 0; i < numSamp; i++ {
-		rv := model.RandNormalVector(mean, std, r)
+		rv := model.RandNormalVector(r, mean, std)
 		fs.Values[i] = rv
 	}
 	for i := 0; i < b.N; i++ {
@@ -231,7 +231,7 @@ func BenchmarkTrain2(b *testing.B) {
 	}
 }
 
-func CompareGaussians(t *testing.T, g1 *Model, g2 *Model, epsilon float64) {
-	gjoa.CompareSliceFloat(t, g1.Mean, g2.Mean, "Wrong Mean", epsilon)
-	gjoa.CompareSliceFloat(t, g1.StdDev, g2.StdDev, "Wrong SD", epsilon)
+func CompareGaussians(t *testing.T, g1 *Model, g2 *Model, tolerance float64) {
+	gjoa.CompareSliceFloat(t, g1.Mean, g2.Mean, "Wrong Mean", tolerance)
+	gjoa.CompareSliceFloat(t, g1.StdDev, g2.StdDev, "Wrong SD", tolerance)
 }

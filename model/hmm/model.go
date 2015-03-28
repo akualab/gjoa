@@ -12,9 +12,11 @@ The package can support any output distribution of type model.Modeler.
 package hmm
 
 import (
+	"bytes"
 	"math"
 	"math/rand"
 
+	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/model"
 	"github.com/golang/glog"
 )
@@ -40,8 +42,8 @@ type Model struct {
 	assigner Assigner
 	//	generator *Generator
 	maxGenLen int
-	seed      int64
 	updateTP  bool
+	updateOP  bool
 
 	logProb float64
 }
@@ -55,7 +57,7 @@ func NewModel(options ...Option) *Model {
 	m := &Model{
 		ModelName: "HMM",
 		updateTP:  true,
-		seed:      model.DefaultSeed,
+		updateOP:  true,
 		maxGenLen: 100,
 	}
 
@@ -72,7 +74,11 @@ func NewModel(options ...Option) *Model {
 	if m.Set.size() > 1 && m.assigner == nil {
 		glog.Fatalf("need assigner to create an HMM model with more than one network - use OAssign option to specify assigner")
 	}
-	//	m.generator = NewGenerator(m)
+
+	if glog.V(5) {
+		glog.Info("created new hmm model")
+		glog.Infof("model set: %s", m.Set)
+	}
 	return m
 }
 
@@ -84,7 +90,8 @@ func (m *Model) UpdateOne(o model.Obs, w float64) {
 	// The assigner has the logic for mapping labels to a chain of models.
 	chain, err := m.Set.chainFromAssigner(o, m.assigner)
 	if err != nil {
-		glog.Fatalf("failed to update hmm model stats with error: %s", err)
+		glog.Warningf("skipping, failed to update hmm model stats, oid:%s, error: %s", o.ID(), err)
+		return
 	}
 
 	// Use the forward-backward algorithm to compute counts.
@@ -97,7 +104,7 @@ func (m *Model) UpdateOne(o model.Obs, w float64) {
 	// Print log(prob(O/model))\
 	p := chain.beta.At(0, 0, 0)
 	m.logProb += p
-	glog.V(1).Infof("update hmm stats, obsid: [%s], logProb:%.2f total:%.2f", o.ID(), p, m.logProb)
+	glog.V(1).Infof("update hmm stats, oid:%s, logProb:%.2f total:%.2f", o.ID(), p, m.logProb)
 }
 
 // Update updates sufficient statistics using an observation stream.
@@ -111,7 +118,7 @@ func (m *Model) Estimate() error {
 	glog.Infof("total logProb:%.2f", m.logProb)
 
 	// Reestimates HMM params in the model set.
-	m.Set.reestimate()
+	m.Set.reestimate(m.updateTP, m.updateOP)
 	return nil
 }
 
@@ -152,151 +159,21 @@ func (m *Model) Clear() {
 	m.Set.reset()
 }
 
-// func (os *ObsSlice) UnmarshalJSON(b []byte) error {
+// ToJSON returns a json string.
+func (m *Model) ToJSON() (string, error) {
+	var b bytes.Buffer
+	err := gjoa.WriteJSON(&b, m)
+	return b.String(), err
+}
 
-// 	// We want to peek inside the message to get the model type.
-// 	// We copy the bytes to get a raw message first.
-// 	bcopy := make([]byte, len(b))
-// 	copy(bcopy, b)
-// 	rm := json.RawMessage(bcopy)
-
-// 	// Now that we have a raw message we just want to unmarshal the
-// 	// json "type" attribute into the ModelType field.
-// 	var part []model.BaseModel
-// 	e := json.Unmarshal([]byte(rm), &part)
-// 	if e != nil {
-// 		return e
-// 	}
-
-// 	// Couldn't get this to work using reflection so for now I'm using a switch.
-// 	// TODO: investigate if we can implement a generic solution using reflection.
-// 	//modelers := make([]model.Modeler, len(part))
-// 	modelers := make([]model.Modeler, 0)
-
-// 	switch part[0].ModelType {
-// 	case "Gaussian":
-// 		gslice := make([]*gaussian.Gaussian, len(part))
-// 		e = json.Unmarshal(b, &gslice)
-// 		if e != nil {
-// 			return e
-// 		}
-
-// 		for _, v := range gslice {
-// 			if v == nil {
-// 				glog.Warningf("found null in JSON file for Gaussian - ignoring")
-// 				continue
-// 			}
-// 			v.Initialize()
-// 			//modelers[k] = model.Modeler(v)
-// 			modelers = append(modelers, model.Modeler(v)) // append non-null Gaussians.
-// 		}
-
-// 	case "GMM":
-// 		gmmslice := make([]*gaussian.GMM, len(part))
-// 		e = json.Unmarshal(b, &gmmslice)
-// 		if e != nil {
-// 			return e
-// 		}
-
-// 		for k, v := range gmmslice {
-// 			v.Initialize()
-// 			modelers[k] = model.Modeler(v)
-// 		}
-
-// 	default:
-// 		return fmt.Errorf("Cannot unmarshal json into unknown Modeler type %s.", part[0].ModelType)
-// 	}
-
-// 	// Assign the slice of Modeler.
-// 	*os = (ObsSlice)(modelers)
-
-// 	return nil
-// }
-
-// // Write a collection of HMMs to a file.
-// func WriteHMMCollection(hmms map[string]*HMM, fn string) error {
-
-// 	f, e := os.Create(fn)
-// 	if e != nil {
-// 		return e
-// 	}
-// 	defer f.Close()
-// 	enc := json.NewEncoder(f)
-// 	for _, v := range hmms {
-// 		glog.V(4).Infof("write hmm %+v", v)
-// 		if filterModels(v) {
-// 			glog.Warningf("model %s has NaN, removing.", v.ModelName)
-// 			continue
-// 		}
-// 		e := enc.Encode(v)
-// 		if e != nil {
-// 			return e
-// 		}
-// 	}
-// 	return nil
-// }
-
-// // Read a collection of HMMs from a file.
-// func ReadHMMCollection(fn string) (hmms map[string]*HMM, e error) {
-
-// 	var f *os.File
-// 	f, e = os.Open(fn)
-// 	if e != nil {
-// 		return
-// 	}
-// 	defer f.Close()
-// 	reader := bufio.NewReader(f)
-
-// 	hmms = make(map[string]*HMM)
-
-// 	for {
-// 		var b []byte
-// 		b, e = reader.ReadBytes('\n')
-// 		if e == io.EOF {
-// 			e = nil
-// 			return
-// 		}
-// 		if e != nil {
-// 			return
-// 		}
-
-// 		hmm := new(HMM)
-// 		e = json.Unmarshal(b, hmm)
-// 		if e != nil {
-// 			return
-// 		}
-// 		hmms[hmm.ModelName] = hmm
-// 	}
-// 	return
-// }
-
-// // Make models json compatible.
-// // Replaces -Inf with -MaxFloat
-// // Removes models with NaN
-// func filterModels(hmm *HMM) bool {
-
-// 	for i, v := range hmm.InitProbs {
-
-// 		if math.IsInf(v, -1) {
-// 			hmm.InitProbs[i] = -math.MaxFloat64
-// 		}
-
-// 		if math.IsNaN(v) {
-// 			return true
-// 		}
-
-// 		for j, w := range hmm.TransProbs[i] {
-// 			if math.IsInf(w, -1) {
-// 				hmm.TransProbs[i][j] = -math.MaxFloat64
-// 			}
-// 			if math.IsNaN(w) {
-// 				return true
-// 			}
-
-// 		}
-// 	}
-// 	return false
-// }
+// String prints the model.
+func (m *Model) String() string {
+	s, err := m.ToJSON()
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
 
 // Name returns the name of the model.
 func (m *Model) Name() string {
@@ -313,12 +190,6 @@ func Name(name string) Option {
 	return func(m *Model) { m.setName(name) }
 }
 
-// Seed sets a seed value for random functions.
-// Uses default seed value if omitted.
-func Seed(seed int64) Option {
-	return func(m *Model) { m.seed = seed }
-}
-
 // MaxGenLen option sets the length of the sequences
 // created by the MODEL generator. Default is 100.
 func MaxGenLen(n int) Option {
@@ -330,6 +201,14 @@ func MaxGenLen(n int) Option {
 func UpdateTP(flag bool) Option {
 	return func(m *Model) {
 		m.updateTP = flag
+	}
+}
+
+// UpdateOP option to update output PDF.
+// Default is true.
+func UpdateOP(flag bool) Option {
+	return func(m *Model) {
+		m.updateOP = flag
 	}
 }
 

@@ -5,7 +5,10 @@
 
 package model
 
-import "fmt"
+import (
+	"fmt"
+	"math/rand"
+)
 
 const (
 	// DefaultSeed provided for model implementation.
@@ -98,11 +101,11 @@ type Observer interface {
 // The Sampler type generates random data using the model.
 type Sampler interface {
 	// Returns a sample drawn from the underlying distribution.
-	Sample() Obs
+	Sample(*rand.Rand) Obs
 
 	// Returns a sample of size "size" drawn from the underlying distribution.
 	// The sequence ends when the channel closes.
-	SampleChan(size int) <-chan Obs
+	SampleChan(r *rand.Rand, size int) <-chan Obs
 }
 
 // FloatObs implements the Obs interface. Values are slices of type float64.

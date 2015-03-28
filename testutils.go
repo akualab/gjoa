@@ -12,7 +12,7 @@ import (
 
 // Comparef64 returns true if |f2/f1-1| < tol.
 func Comparef64(f1, f2, tol float64) bool {
-	avg := (f1 + f2) / 2.0
+	avg := math.Abs(f1+f2) / 2.0
 	sErr := math.Abs(f2-f1) / (avg + 1)
 	if sErr < tol {
 		return true

@@ -5,8 +5,10 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/narray"
 	"github.com/golang/glog"
@@ -477,7 +479,7 @@ func TestAlphaBeta(t *testing.T) {
 		t.Fatalf("alphaLogProb:%e does not match betaLogProb:%f", alpha2, beta2)
 	}
 
-	ms.reestimate()
+	ms.reestimate(true, true)
 
 }
 
@@ -751,6 +753,17 @@ func TestModelName(t *testing.T) {
 	}
 }
 
+func TestWriteRead(t *testing.T) {
+
+	initChainFB(t)
+	modelSet, e := NewSet(hmm0, hmm1)
+	fatalIf(t, e)
+	t.Log(modelSet)
+	fn := filepath.Join(os.TempDir(), "model_set.json")
+	gjoa.WriteJSONFile(fn, modelSet)
+	t.Logf("Wrote to temp file: %s\n", fn)
+}
+
 type testModel struct{}
 
 func (m testModel) Name() string                                             { return "" }
@@ -761,5 +774,5 @@ func (m testModel) Estimate() error                                          { r
 func (m testModel) Clear()                                                   {}
 func (m testModel) Predict(x model.Observer) ([]model.Labeler, error)        { return nil, nil }
 func (m testModel) LogProb(x model.Obs) float64                              { return 0 }
-func (m testModel) Sample() model.Obs                                        { return nil }
-func (m testModel) SampleChan(size int) <-chan model.Obs                     { return nil }
+func (m testModel) Sample(r *rand.Rand) model.Obs                            { return nil }
+func (m testModel) SampleChan(r *rand.Rand, size int) <-chan model.Obs       { return nil }

@@ -12,7 +12,7 @@ import (
 )
 
 // RandNormalVector returns a random observation.
-func RandNormalVector(mean, std []float64, r *rand.Rand) []float64 {
+func RandNormalVector(r *rand.Rand, mean, std []float64) []float64 {
 
 	if len(mean) != len(std) {
 		panic(fmt.Errorf("Cannot generate random vectors because length of mean [%d] and std [%d] don't match.",

@@ -6,12 +6,14 @@
 package hmm
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"math/rand"
 	"reflect"
 	"strings"
 
+	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/narray"
 	"github.com/golang/glog"
@@ -21,7 +23,7 @@ import (
 
 // Set is a collection of unique HMMs.
 type Set struct {
-	Nets   []*Net
+	Nets   []*Net `json:"networks"`
 	byName map[string]*Net
 }
 
@@ -53,17 +55,7 @@ func (ms *Set) add(m *Net) error {
 	ms.Nets = append(ms.Nets, m)
 	ms.byName[m.Name] = m
 
-	if glog.V(3) {
-		ns := m.ns
-		for i := 0; i < ns; i++ {
-			for j := 0; j < ns; j++ {
-				p := math.Exp(m.A.At(i, j))
-				if p > smallNumber {
-					glog.Infof("added A id:%d, name:%s, from:%d, to:%d, prob:%5.3f", m.id, m.Name, i, j, p)
-				}
-			}
-		}
-	}
+	glog.V(5).Infof("added model #%d to set with name %s: %v", m.id, m.Name, narray.Exp(nil, m.A))
 	return nil
 }
 
@@ -98,19 +90,19 @@ func (ms *Set) size() int {
 // can only go from state i to state j where j >= i.
 type Net struct {
 	// Model name.
-	Name string
+	Name string `json:"name"`
 	// num states
 	ns int
 	// Unique id.
 	id int
 	// State transition probabilities. (ns x ns matrix)
-	A *narray.NArray
+	A *narray.NArray `json:"trans_prob"`
 	// Output probabilities. (ns x 1 vector)
-	B []model.Modeler
+	B []model.Modeler `json:"output_prob"`
 	// Accumulator for transition probabilities.
-	TrAcc *narray.NArray
+	TrAcc *narray.NArray `json:"tr_acc,omitempty"`
 	// Accumulator for global occupation counts.
-	OccAcc *narray.NArray
+	OccAcc *narray.NArray `json:"occ_acc,omitempty"`
 }
 
 // NewNet creates a new HMM network.
@@ -156,7 +148,9 @@ func (ms *Set) exist(m *Net) bool {
 func (m *Net) nextState(s int, r *rand.Rand) int {
 
 	dist := m.A.SubArray(s, -1)
-	return model.RandIntFromLogDist(dist.Data, r)
+	next := model.RandIntFromLogDist(dist.Data, r)
+	glog.V(8).Info("nextState dist:", dist, ", next:", next)
+	return next
 }
 
 // chain is used to concatenate hmms during training based on the labels.
@@ -192,6 +186,9 @@ func (ms *Set) chainFromNets(obs model.Obs, m ...*Net) (*chain, error) {
 	fos, ok := obs.(model.FloatObsSequence)
 	if !ok {
 		return nil, fmt.Errorf("obs must be of type model.FloatObsSequence, found type %s which is not supported", reflect.TypeOf(obs.Value()))
+	}
+	if len(fos.ValueAsSlice()) == 0 {
+		return nil, fmt.Errorf("obs sequence has no data")
 	}
 
 	ch := &chain{
@@ -251,6 +248,9 @@ func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, erro
 		return nil, fmt.Errorf("obs must be of type model.FloatObsSequence, found type %s which is not supported",
 			reflect.TypeOf(obs))
 	}
+	if len(fos.ValueAsSlice()) == 0 {
+		return nil, fmt.Errorf("obs sequence has no data")
+	}
 
 	if assigner == nil && ms.size() == 1 {
 		hmms = append(hmms, ms.Nets[0])
@@ -268,14 +268,14 @@ func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, erro
 				reflect.TypeOf(obs.Label()))
 		}
 		// Now we need to assign hmms to the chain.
-		// We will use teh sequence of labels to lookup the models by name.
+		// We will use the sequence of labels to lookup the models by name.
 		labels := strings.Split(labeler.String(), ",")
 		if len(labels) == 1 && len(labels[0]) == 0 {
 			return nil, fmt.Errorf("no label found, can't assign models")
 		}
 		modelNames := assigner.Assign(labels)
-		glog.V(5).Infoln("labels: ", labels)
-		glog.V(5).Infoln("model names: ", modelNames)
+		glog.V(5).Infof("obsid:%s, labels:%v", obs.ID(), labels)
+		glog.V(5).Infof("obsid:%s, models:%v", obs.ID(), modelNames)
 
 		for _, name := range modelNames {
 			h, ok := ms.net(name)
@@ -308,12 +308,6 @@ func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, erro
 	}
 	ch.alpha = narray.New(ch.nq, ch.maxNS, ch.nobs)
 	ch.beta = narray.New(ch.nq, ch.maxNS, ch.nobs)
-
-	if glog.V(6) {
-		glog.Info("lab: ", ch.obs.Label())
-		glog.Info("obs: ", ch.obs.Value())
-	}
-
 	ch.computeLikelihoods()
 
 	// Validate.
@@ -347,16 +341,15 @@ func (ch *chain) computeLikelihoods() {
 func (ch *chain) update() error {
 
 	ch.fb() // Compute forward-backward probabilities.
-
 	logProb := ch.beta.At(0, 0, 0)
 	totalProb := math.Exp(logProb)
 	if logProb == math.Inf(-1) {
-		return fmt.Errorf("log prob is -Inf, skipping training sequence")
+		return fmt.Errorf("oid:%s, log prob is -Inf, skipping training sequence", ch.obs.ID())
 	}
-	glog.V(2).Infof("log prob per observation:%e", logProb/float64(ch.nobs))
+	glog.V(2).Infof("oid:%s, log prob per observation:%e", ch.obs.ID(), logProb/float64(ch.nobs))
 
 	// Compute state transition counts.
-	glog.V(2).Infof("compute hmm state transition counts.")
+	glog.V(2).Infof("oid:%s, compute hmm state transition counts.", ch.obs.ID())
 	for q, h := range ch.hmms {
 		exit := ch.ns[q] - 1
 		for t, vec := range ch.vectors {
@@ -389,7 +382,7 @@ func (ch *chain) doOccAcc(q, i, t int, tp float64) float64 {
 		}
 	}
 	h.OccAcc.Inc(v/tp, i)
-	glog.V(6).Infof("q:%d, t:%d, i:%d, occ:%.0f", q, t, i, vv)
+	glog.V(6).Infof("oid:%s, q:%d, t:%d, i:%d, occ:%.0f", ch.obs.ID(), q, t, i, vv)
 	return v
 }
 
@@ -420,29 +413,30 @@ func (ch *chain) doTrAcc(q, i, t int, tp float64) {
 			continue
 		}
 		h.TrAcc.Inc(math.Exp(v)/tp, i, j)
-		glog.V(6).Infof("q:%d, t:%d, i:%d, j:%d, tracc:%.0f", q, t, i, j, v)
+		glog.V(6).Infof("oid:%s, q:%d, t:%d, i:%d, j:%d, tracc:%.0f", ch.obs.ID(), q, t, i, j, v)
 	}
 }
 
-func (ms *Set) reestimate() {
+func (ms *Set) reestimate(updateTP, updateOP bool) {
 
 	glog.V(2).Infof("reestimate state transition probabilities")
 	for _, h := range ms.Nets {
 		ns := h.ns
 		for i := 0; i < ns; i++ {
-			if i > 0 && i < ns-1 {
+			if updateOP && i > 0 && i < ns-1 {
 				err := h.B[i].Estimate()
 				if err != nil {
 					glog.Errorf("model estimation error: %s", err)
 				}
 			}
-			for j := i; j < ns && i < ns-1; j++ {
+			for j := i; updateTP && j < ns && i < ns-1; j++ {
 				v := h.TrAcc.At(i, j) / h.OccAcc.At(i)
-				h.A.Set(math.Log(v), i, j)
-				glog.V(6).Infof("reest add A %d=>%d, tracc:%6.4f, occacc:%6.4f, p:%5.3f", i, j, h.TrAcc.At(i, j), h.OccAcc.At(i), v)
-				if math.IsNaN(h.A.At(i, j)) {
-					panic("reestimated transition prob is NaN")
+				if !math.IsNaN(v) {
+					h.A.Set(math.Log(v), i, j)
+				} else {
+					glog.Warningf("skip reestimation for i:%d, j:%d, model:%s, value is NaN", i, j, h.Name)
 				}
+				glog.V(6).Infof("reest [%s] A %d=>%d, tracc:%6.4f, occacc:%6.4f, p:%5.3f", h.Name, i, j, h.TrAcc.At(i, j), h.OccAcc.At(i), v)
 			}
 		}
 	}
@@ -452,14 +446,14 @@ func (ms *Set) reestimate() {
 		for id, h := range ms.Nets {
 			ns := h.ns
 			for i := 0; i < ns; i++ {
-				glog.Infof("i:%d, total_occacc:%e (%.0f)",
+				glog.Infof("model:%s, i:%d, total_occacc:%e (%.0f)", h.Name,
 					i, h.OccAcc.At(i), math.Log(h.OccAcc.At(i)))
 				for j := 0; j < ns; j++ {
-					glog.Infof("i:%d, j:%d, total_tracc:%e (%.0f)",
+					glog.Infof("model:%s, i:%d, j:%d, total_tracc:%e (%.0f)", h.Name,
 						i, j, h.TrAcc.At(i, j), math.Log(h.TrAcc.At(i, j)))
 					p := math.Exp(h.A.At(i, j))
 					if p > smallNumber {
-						glog.Infof("reest A id:%d, name:%s, from:%d, to:%d, prob:%5.2f",
+						glog.Infof("reest A id:%d, name:%s, %d=>%d, prob:%5.2f",
 							id, h.Name, i, j, p)
 					}
 				}
@@ -719,4 +713,20 @@ func MakeLeftToRight(ns int, selfProb, skipProb float64) *narray.NArray {
 	h.Set(1-p, ns-2, ns-1) // to exit (no skip)
 
 	return narray.Log(h, h)
+}
+
+// ToJSON returns a json string.
+func (ms *Set) ToJSON() (string, error) {
+	var b bytes.Buffer
+	err := gjoa.WriteJSON(&b, ms)
+	return b.String(), err
+}
+
+// String prints the model set.
+func (ms *Set) String() string {
+	s, err := ms.ToJSON()
+	if err != nil {
+		panic(err)
+	}
+	return s
 }

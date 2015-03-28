@@ -38,13 +38,11 @@ type Model struct {
 	Sumxsq      []float64 `json:"sumx_sq,omitempty"`
 	Mean        []float64 `json:"mean"`
 	StdDev      []float64 `json:"sd"`
-	Seed        int64     `json:"seed"`
 	variance    []float64
 	varianceInv []float64
 	tmpArray    []float64
 	const1      float64 // -(N/2)log(2PI) Depends only on ModelDim.
 	const2      float64 // const1 - sum(log sigma_i) Also depends on variance.
-	rand        *rand.Rand
 }
 
 // Option type is used to pass options to NewModel().
@@ -60,14 +58,12 @@ func NewModel(dim int, options ...Option) *Model {
 		variance:    make([]float64, dim),
 		varianceInv: make([]float64, dim),
 		tmpArray:    make([]float64, dim),
-		Seed:        model.DefaultSeed,
 	}
 
 	// Set options.
 	for _, option := range options {
 		option(g)
 	}
-	g.rand = rand.New(rand.NewSource(g.Seed))
 	if len(g.Sumx) == 0 {
 		g.Sumx = make([]float64, dim)
 	}
@@ -113,14 +109,14 @@ func (g *Model) Predict(x model.Observer) ([]model.Labeler, error) {
 }
 
 // Sample returns a Gaussian sample.
-func (g *Model) Sample() model.Obs {
-	obs := model.RandNormalVector(g.Mean, g.StdDev, g.rand)
+func (g *Model) Sample(r *rand.Rand) model.Obs {
+	obs := model.RandNormalVector(r, g.Mean, g.StdDev)
 	return model.NewFloatObs(obs, model.SimpleLabel(""))
 }
 
-// SampleChan returns a channel with "size" samples drawn from teh model.
+// SampleChan returns a channel with "size" samples drawn from the model.
 // The sequence ends when the channel closes.
-func (g *Model) SampleChan(size int) <-chan model.Obs {
+func (g *Model) SampleChan(r *rand.Rand, size int) <-chan model.Obs {
 
 	if len(g.Mean) == 0 {
 		glog.Fatal("Parameter Mean is missing.")
@@ -128,13 +124,10 @@ func (g *Model) SampleChan(size int) <-chan model.Obs {
 	if len(g.StdDev) == 0 {
 		glog.Fatal("Parameter StdDev is missing.")
 	}
-	if g.rand == nil {
-		glog.Fatal("Random value generator is missing.")
-	}
 	c := make(chan model.Obs, 1000)
 	go func() {
 		for i := 0; i < size; i++ {
-			c <- g.Sample()
+			c <- g.Sample(r)
 		}
 		close(c)
 	}()
@@ -266,11 +259,6 @@ func (g *Model) setName(name string) {
 // Name is an option to set the model name.
 func Name(name string) Option {
 	return func(g *Model) { g.setName(name) }
-}
-
-// Seed sets a seed value for random functions.
-func Seed(seed int64) Option {
-	return func(g *Model) { g.Seed = seed }
 }
 
 // Clone create a clone of src.
