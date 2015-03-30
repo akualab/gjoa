@@ -389,14 +389,14 @@ func initRandomSet(r *rand.Rand, in *Set) (*Set, error) {
 func TestHMMChain(t *testing.T) {
 
 	r := rand.New(rand.NewSource(444))
-	numModels := 4
-	dim := 1
+	numModels := 8
+	dim := 8
 	maxNumStates := 5
 	iter := 4
 	numTrainSeq := 10000
 	maxChainLen := 2     // max number of nets in chain.
 	numTestItems := 1000 // num test sequences.
-	maxTestLen := 4
+	maxTestLen := 8
 
 	// Create reference HMM to generate random sequences.
 	ms0, _ := NewSet()
@@ -518,9 +518,9 @@ func testDecoder(t *testing.T, gen sequencer, dec *graph.Decoder, numIterations 
 		// Get the best hyp.
 		best := token.Best()
 
-		for _, v := range best {
-			t.Logf("best: %+v", v)
-		}
+		// for _, v := range best {
+		// 	t.Logf("best: %+v", v)
+		// }
 
 		// Put the labels is a slice, exclude null nodes.
 		hypLabels := best.Labels(true)
