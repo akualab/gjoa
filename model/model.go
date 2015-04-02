@@ -135,17 +135,19 @@ func (fo FloatObs) ID() string { return fo.id }
 // FloatObsSequence implements the Obs interface using a slice of
 // float64 slices.
 type FloatObsSequence struct {
-	value [][]float64
-	label SimpleLabel
-	id    string
+	value     [][]float64
+	label     SimpleLabel
+	id        string
+	alignment []*ANode
 }
 
 // NewFloatObsSequence creates new FloatObsSequence objects.
 func NewFloatObsSequence(val [][]float64, lab SimpleLabel, id string) Obs {
 	return FloatObsSequence{
-		value: val,
-		label: lab,
-		id:    id,
+		value:     val,
+		label:     lab,
+		id:        id,
+		alignment: nil,
 	}
 }
 
@@ -202,6 +204,16 @@ func JoinFloatObsSequence(id string, inputs ...*FloatObsSequence) Obs {
 		label: lab,
 		id:    id,
 	}
+}
+
+// SetAlignment sets the alignment object.
+func (fo FloatObsSequence) SetAlignment(a []*ANode) {
+	fo.alignment = a
+}
+
+// Alignment returns the alignment object.
+func (fo FloatObsSequence) Alignment() []*ANode {
+	return fo.alignment
 }
 
 // IntObs implements Obs for integer values.

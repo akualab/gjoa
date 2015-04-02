@@ -173,6 +173,8 @@ type chain struct {
 	vectors [][]float64
 	// number of vectors
 	nobs int
+	// train from alignments isntead of using fb
+	useAlignments bool
 	// alpha, beta arrays.
 	alpha, beta *narray.NArray
 	// the model set.
@@ -181,7 +183,7 @@ type chain struct {
 	totalProb float64
 }
 
-func (ms *Set) chainFromNets(obs model.Obs, m ...*Net) (*chain, error) {
+func (ms *Set) chainFromNets(obs model.Obs, useAlignments bool, m ...*Net) (*chain, error) {
 
 	fos, ok := obs.(model.FloatObsSequence)
 	if !ok {
@@ -192,12 +194,13 @@ func (ms *Set) chainFromNets(obs model.Obs, m ...*Net) (*chain, error) {
 	}
 
 	ch := &chain{
-		hmms:    m,
-		nq:      len(m),
-		ns:      make([]int, len(m), len(m)),
-		obs:     obs,
-		vectors: fos.Value().([][]float64),
-		nobs:    len(fos.Value().([][]float64)),
+		hmms:          m,
+		nq:            len(m),
+		ns:            make([]int, len(m), len(m)),
+		obs:           obs,
+		vectors:       fos.Value().([][]float64),
+		nobs:          len(fos.Value().([][]float64)),
+		useAlignments: useAlignments,
 	}
 
 	for k, v := range m {
@@ -235,7 +238,7 @@ func (ms *Set) chainFromNets(obs model.Obs, m ...*Net) (*chain, error) {
 
 // Use the label to create a chain of hmms.
 // If model set only has one hmm, no need to use labels, simply assign the only hmm.
-func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, error) {
+func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner, useAlignments bool) (*chain, error) {
 
 	var hmms []*Net
 	var fos model.FloatObsSequence
@@ -292,12 +295,13 @@ func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, erro
 	}
 
 	ch := &chain{
-		hmms:    hmms,
-		nq:      nq,
-		ns:      make([]int, nq, nq),
-		obs:     obs,
-		vectors: fos.Value().([][]float64),
-		nobs:    len(fos.Value().([][]float64)),
+		hmms:          hmms,
+		nq:            nq,
+		ns:            make([]int, nq, nq),
+		obs:           obs,
+		vectors:       fos.Value().([][]float64),
+		nobs:          len(fos.Value().([][]float64)),
+		useAlignments: useAlignments,
 	}
 
 	for k, hmm := range hmms {

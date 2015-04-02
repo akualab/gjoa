@@ -102,3 +102,30 @@ func TestWriteRead(t *testing.T) {
 		}
 	}
 }
+
+func TestAlignLabels(t *testing.T) {
+
+	labels := []string{"a", "a", "b", "c", "c", "c", "c", "c", "c", "d", "d", "d", "d", "e"}
+	al := AlignLabels(labels)
+	t.Log(al)
+
+	expected := []struct {
+		n    string
+		s, e int
+	}{
+		{n: "a", s: 0, e: 2},
+		{n: "b", s: 2, e: 3},
+		{n: "c", s: 3, e: 9},
+		{n: "d", s: 9, e: 13},
+		{n: "e", s: 13, e: 14},
+	}
+
+	if len(expected) != len(al) {
+		t.Fatalf("expected len %d, got len %d", len(expected), len(al))
+	}
+	for k, v := range expected {
+		if v.n != al[k].Name || v.s != al[k].Start || v.e != al[k].End {
+			t.Fatalf("expected %v, got %v", v, al[k])
+		}
+	}
+}

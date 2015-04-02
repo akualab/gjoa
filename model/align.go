@@ -12,6 +12,16 @@ import (
 	"github.com/akualab/gjoa"
 )
 
+// The Aligner interface provides access to alignment information at various levels.
+type Aligner interface {
+
+	// Alignment info for all available levels.
+	Alignment() []*ANode
+}
+
+// Alignment represents alignments as a sequence of ANodes by level.
+type Alignment [][]*ANode
+
 // ANode is an alignment node. Assumptions:
 //  * Root node (no parent) covers the full interval.
 //  * A child node interval is included in the parent interval.
@@ -29,9 +39,6 @@ type ANode struct {
 	// Pointers to child alignments one level down.
 	Children []*ANode `json:"-"`
 }
-
-// Alignment represents alignments as a sequence of ANodes by level.
-type Alignment [][]*ANode
 
 // NewANode creates a new ANode.
 func NewANode(start, end int, name string, value interface{}) *ANode {
@@ -55,7 +62,7 @@ func (a *ANode) Copy() *ANode {
 // The ANodes are NOT copied. Make explicit copies if you need an independent set of ANodes.
 func (a *ANode) Alignment() Alignment {
 
-	bl := &byLevel{data: [][]*ANode{}}
+	bl := &byLevel{data: Alignment{}}
 	root := a.Copy() // dummy root
 	root.Children = []*ANode{a}
 	root.nav(bl)
@@ -63,7 +70,7 @@ func (a *ANode) Alignment() Alignment {
 }
 
 type byLevel struct {
-	data [][]*ANode
+	data Alignment
 }
 
 func (a *ANode) nav(ss *byLevel) (*ANode, int) {
@@ -163,13 +170,6 @@ func (a *ANode) isBalanced() bool {
 	return true
 }
 
-// The Aligner interface provides access to time alignment information.
-type Aligner interface {
-
-	// Alignment info.
-	Alignments() []ANode
-}
-
 // ToJSON returns a json string.
 func (a *ANode) ToJSON() (string, error) {
 	var b bytes.Buffer
@@ -204,6 +204,31 @@ func (a Alignment) Tree() *ANode {
 		}
 	}
 	return a[depth-1][0]
+}
+
+// Level returns the list of intervals for a specific level.
+func (a Alignment) Level(level int) []*ANode {
+	return a[level]
+}
+
+// AlignLabels converts a slice of strings to an Alignment object.
+// Consecutive elements with the same label are merged into an ANode.
+func AlignLabels(labels []string) []*ANode {
+	lastLabel := labels[0]
+	anode := &ANode{Start: 0, Name: labels[0]}
+	anodes := []*ANode{}
+	for idx, v := range labels {
+		if v != lastLabel {
+			anode.End = idx
+			anodes = append(anodes, anode)
+			anode = &ANode{Start: idx, Name: v}
+			lastLabel = v
+		}
+	}
+	anode.End = len(labels)
+	anodes = append(anodes, anode)
+
+	return anodes
 }
 
 // ToJSON returns a json string.

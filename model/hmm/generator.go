@@ -69,6 +69,7 @@ func (gen *generator) next(id string) (*model.FloatObsSequence, []string) {
 	if gen.noNull {
 		states = states[1 : len(states)-1]
 	}
+	seq.SetAlignment(model.AlignLabels(states))
 	return &seq, states
 }
 

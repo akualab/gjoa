@@ -41,9 +41,10 @@ type Model struct {
 	// Train HMM params.
 	assigner Assigner
 	//	generator *Generator
-	maxGenLen int
-	updateTP  bool
-	updateOP  bool
+	maxGenLen     int
+	updateTP      bool
+	updateOP      bool
+	useAlignments bool
 
 	logProb float64
 }
@@ -88,7 +89,7 @@ func (m *Model) UpdateOne(o model.Obs, w float64) {
 	// We create a chain of hmms to update stats for an obs sequence.
 	// The chain is released once the update is done.
 	// The assigner has the logic for mapping labels to a chain of models.
-	chain, err := m.Set.chainFromAssigner(o, m.assigner)
+	chain, err := m.Set.chainFromAssigner(o, m.assigner, m.useAlignments)
 	if err != nil {
 		glog.Warningf("skipping, failed to update hmm model stats, oid:%s, error: %s", o.ID(), err)
 		return
@@ -220,4 +221,13 @@ func OSet(set *Set) Option {
 // OAssign is an option to set the label to model assigner.
 func OAssign(assigner Assigner) Option {
 	return func(m *Model) { m.assigner = assigner }
+}
+
+// UseAlignments option. When true, the output probability densities are estimated using alignment info.
+// The alignment info must be available in the obs object which shoudl implement the model.ALigner interface.
+// Will panic if the alignment data is missing.
+func UseAlignments(flag bool) Option {
+	return func(m *Model) {
+		m.useAlignments = flag
+	}
 }
