@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/akualab/gjoa"
@@ -293,6 +294,9 @@ func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner, useAlignments
 	if nq == 0 {
 		return nil, fmt.Errorf("the assigner returned no models")
 	}
+	if useAlignments {
+		glog.Info("training from alignments")
+	}
 
 	ch := &chain{
 		hmms:          hmms,
@@ -344,6 +348,10 @@ func (ch *chain) computeLikelihoods() {
 
 func (ch *chain) update() error {
 
+	if ch.useAlignments {
+		return ch.updateFromAlignments()
+	}
+
 	ch.fb() // Compute forward-backward probabilities.
 	logProb := ch.beta.At(0, 0, 0)
 	totalProb := math.Exp(logProb)
@@ -365,6 +373,44 @@ func (ch *chain) update() error {
 					h.B[i].UpdateOne(o, w) // TODO prove!
 				}
 			}
+		}
+	}
+	return nil
+}
+
+func (ch *chain) updateFromAlignments() error {
+
+	// Get alignments.
+	aligner, ok := ch.obs.(model.Aligner)
+	if !ok {
+		return fmt.Errorf("oid:%s - obs object does not implement the aligner interface", ch.obs.ID())
+	}
+	al := aligner.Alignment()
+	glog.V(6).Infof("oid:%s, alignments: %v", ch.obs.ID(), al)
+	glog.V(2).Infof("oid:%s, estimating output PDF from alignment with %d nodes", ch.obs.ID(), len(al))
+
+	if al[len(al)-1].End != ch.nobs {
+		return fmt.Errorf("oid:%s - alignment length is [%d] - does not match num observations in sequence [%d]", ch.obs.ID(), al[len(al)-1].End, ch.nobs)
+	}
+
+	// Iterate over alignment nodes. Find the net by name and state number.
+	// TODO: hardcoded for state alignments. Need to impl. net-level alignments?
+	// Also, this is using a naming convention (xxx-N), can we use a better design?
+	// Include state index in alignment node?
+	for _, node := range al {
+		s := strings.Split(node.Name, "-") // format is xxx-N where xxx is teh net name and N is the state index.
+		if len(s) != 2 {
+			return fmt.Errorf("oid:%s - there must be exactly one \"-\" in the alignment node name [%s]", ch.obs.ID(), node.Name)
+		}
+		h := ch.ms.byName[s[0]]
+		st, err := strconv.ParseInt(s[1], 10, 32)
+		if err != nil {
+			return err
+		}
+		for p := node.Start; p < node.End; p++ {
+			vec := ch.vectors[p]
+			o := model.F64ToObs(vec, "")
+			h.B[int(st)].UpdateOne(o, 1)
 		}
 	}
 	return nil
