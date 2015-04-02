@@ -75,7 +75,9 @@ func NewModel(options ...Option) *Model {
 	if m.Set.size() > 1 && m.assigner == nil {
 		glog.Fatalf("need assigner to create an HMM model with more than one network - use OAssign option to specify assigner")
 	}
-
+	if m.useAlignments {
+		m.updateTP = false
+	}
 	if glog.V(5) {
 		glog.Info("created new hmm model")
 		glog.Infof("model set: %s", m.Set)
@@ -89,23 +91,37 @@ func (m *Model) UpdateOne(o model.Obs, w float64) {
 	// We create a chain of hmms to update stats for an obs sequence.
 	// The chain is released once the update is done.
 	// The assigner has the logic for mapping labels to a chain of models.
-	chain, err := m.Set.chainFromAssigner(o, m.assigner, m.useAlignments)
+	chain, err := m.Set.chainFromAssigner(o, m.assigner)
 	if err != nil {
 		glog.Warningf("skipping, failed to update hmm model stats, oid:%s, error: %s", o.ID(), err)
 		return
 	}
 
 	// Use the forward-backward algorithm to compute counts.
-	err = chain.update()
-	if err != nil {
-		glog.Warning(err)
-		return
-	}
+	if m.useAlignments {
+		err = chain.updateFromAlignments()
+		if err != nil {
+			if glog.V(6) {
+				glog.Fatal(err)
+			}
+			glog.Warning(err)
+			return
+		}
+	} else {
+		err = chain.update()
+		if err != nil {
+			if glog.V(6) {
+				glog.Fatal(err)
+			}
+			glog.Warning(err)
+			return
+		}
 
-	// Print log(prob(O/model))\
-	p := chain.beta.At(0, 0, 0)
-	m.logProb += p
-	glog.V(1).Infof("update hmm stats, oid:%s, logProb:%.2f total:%.2f", o.ID(), p, m.logProb)
+		// Print log(prob(O/model))\
+		p := chain.beta.At(0, 0, 0)
+		m.logProb += p
+		glog.V(1).Infof("update hmm stats, oid:%s, logProb:%.2f total:%.2f", o.ID(), p, m.logProb)
+	}
 }
 
 // Update updates sufficient statistics using an observation stream.

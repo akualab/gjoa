@@ -427,7 +427,7 @@ func TestAlphaBeta(t *testing.T) {
 
 	initChainFB(t)
 	var err error
-	hmms, err = ms.chainFromNets(xobs, false, hmm0, hmm1)
+	hmms, err = ms.chainFromNets(xobs, hmm0, hmm1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -576,7 +576,7 @@ func TestTeeModel(t *testing.T) {
 		[]model.Modeler{nil, testScorer(), testScorer(), nil})
 	fatalIf(t, errr)
 
-	hmms2, err := ms2.chainFromNets(xobs, false, hmm0, hmm2, hmm3, hmm0, hmm0, hmm0, hmm0, hmm2)
+	hmms2, err := ms2.chainFromNets(xobs, hmm0, hmm2, hmm3, hmm0, hmm0, hmm0, hmm0, hmm2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -595,12 +595,12 @@ func TestTeeModel(t *testing.T) {
 		t.Fatalf("alphaLogProb:%f does not match betaLogProb:%f", alpha2, beta2)
 	}
 
-	_, err = ms2.chainFromNets(xobs, false, hmm3, hmm0, hmm2, hmm2)
+	_, err = ms2.chainFromNets(xobs, hmm3, hmm0, hmm2, hmm2)
 	if err == nil {
 		t.Fatal("expected error, got nil - first model has trans from entry to exit")
 	}
 
-	_, err = ms2.chainFromNets(xobs, false, hmm1, hmm0, hmm2, hmm3)
+	_, err = ms2.chainFromNets(xobs, hmm1, hmm0, hmm2, hmm3)
 	if err == nil {
 		t.Errorf("expected error, got nil - last model has trans from entry to exit")
 	}
@@ -621,7 +621,7 @@ func TestLR(t *testing.T) {
 	hmm3, errr := ms2.makeLeftToRight("model 3", 6, 0.3, 0.2,
 		[]model.Modeler{nil, testScorer(), testScorer(), testScorer(), testScorer(), nil})
 	fatalIf(t, errr)
-	hmms2, err := ms2.chainFromNets(xobs, false, hmm0, hmm2, hmm3, hmm0, hmm0, hmm0, hmm0, hmm2)
+	hmms2, err := ms2.chainFromNets(xobs, hmm0, hmm2, hmm3, hmm0, hmm0, hmm0, hmm0, hmm2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -669,7 +669,7 @@ func TestLRAssign(t *testing.T) {
 	sl := oo.Label().(model.SimpleLabel)
 	glog.V(5).Infoln("read label: ", sl)
 	var assigner DirectAssigner
-	hmms2, err := ms2.chainFromAssigner(oo, assigner, false)
+	hmms2, err := ms2.chainFromAssigner(oo, assigner)
 	if err != nil {
 		t.Fatal(err)
 	}

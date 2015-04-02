@@ -207,7 +207,7 @@ func JoinFloatObsSequence(id string, inputs ...*FloatObsSequence) Obs {
 }
 
 // SetAlignment sets the alignment object.
-func (fo FloatObsSequence) SetAlignment(a []*ANode) {
+func (fo *FloatObsSequence) SetAlignment(a []*ANode) {
 	fo.alignment = a
 }
 

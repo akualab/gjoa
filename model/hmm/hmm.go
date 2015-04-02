@@ -174,8 +174,6 @@ type chain struct {
 	vectors [][]float64
 	// number of vectors
 	nobs int
-	// train from alignments isntead of using fb
-	useAlignments bool
 	// alpha, beta arrays.
 	alpha, beta *narray.NArray
 	// the model set.
@@ -184,7 +182,7 @@ type chain struct {
 	totalProb float64
 }
 
-func (ms *Set) chainFromNets(obs model.Obs, useAlignments bool, m ...*Net) (*chain, error) {
+func (ms *Set) chainFromNets(obs model.Obs, m ...*Net) (*chain, error) {
 
 	fos, ok := obs.(model.FloatObsSequence)
 	if !ok {
@@ -195,13 +193,13 @@ func (ms *Set) chainFromNets(obs model.Obs, useAlignments bool, m ...*Net) (*cha
 	}
 
 	ch := &chain{
-		hmms:          m,
-		nq:            len(m),
-		ns:            make([]int, len(m), len(m)),
-		obs:           obs,
-		vectors:       fos.Value().([][]float64),
-		nobs:          len(fos.Value().([][]float64)),
-		useAlignments: useAlignments,
+		hmms:    m,
+		nq:      len(m),
+		ns:      make([]int, len(m), len(m)),
+		obs:     obs,
+		vectors: fos.Value().([][]float64),
+		nobs:    len(fos.Value().([][]float64)),
+		ms:      ms,
 	}
 
 	for k, v := range m {
@@ -239,7 +237,7 @@ func (ms *Set) chainFromNets(obs model.Obs, useAlignments bool, m ...*Net) (*cha
 
 // Use the label to create a chain of hmms.
 // If model set only has one hmm, no need to use labels, simply assign the only hmm.
-func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner, useAlignments bool) (*chain, error) {
+func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner) (*chain, error) {
 
 	var hmms []*Net
 	var fos model.FloatObsSequence
@@ -268,7 +266,7 @@ func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner, useAlignments
 		// otherwise return error.
 		labeler, ok := obs.Label().(model.SimpleLabel)
 		if !ok {
-			return nil, fmt.Errorf("labeler mas be of type model.SimpleLabel, found type %s which is not supported",
+			return nil, fmt.Errorf("labeler must be of type model.SimpleLabel, found type %s which is not supported",
 				reflect.TypeOf(obs.Label()))
 		}
 		// Now we need to assign hmms to the chain.
@@ -294,18 +292,14 @@ func (ms *Set) chainFromAssigner(obs model.Obs, assigner Assigner, useAlignments
 	if nq == 0 {
 		return nil, fmt.Errorf("the assigner returned no models")
 	}
-	if useAlignments {
-		glog.Info("training from alignments")
-	}
-
 	ch := &chain{
-		hmms:          hmms,
-		nq:            nq,
-		ns:            make([]int, nq, nq),
-		obs:           obs,
-		vectors:       fos.Value().([][]float64),
-		nobs:          len(fos.Value().([][]float64)),
-		useAlignments: useAlignments,
+		hmms:    hmms,
+		nq:      nq,
+		ns:      make([]int, nq, nq),
+		obs:     obs,
+		vectors: fos.Value().([][]float64),
+		nobs:    len(fos.Value().([][]float64)),
+		ms:      ms,
 	}
 
 	for k, hmm := range hmms {
@@ -348,10 +342,6 @@ func (ch *chain) computeLikelihoods() {
 
 func (ch *chain) update() error {
 
-	if ch.useAlignments {
-		return ch.updateFromAlignments()
-	}
-
 	ch.fb() // Compute forward-backward probabilities.
 	logProb := ch.beta.At(0, 0, 0)
 	totalProb := math.Exp(logProb)
@@ -387,6 +377,9 @@ func (ch *chain) updateFromAlignments() error {
 	}
 	al := aligner.Alignment()
 	glog.V(6).Infof("oid:%s, alignments: %v", ch.obs.ID(), al)
+	if len(al) == 0 {
+		return fmt.Errorf("oid:%s - alignment object has zero length", ch.obs.ID())
+	}
 	glog.V(2).Infof("oid:%s, estimating output PDF from alignment with %d nodes", ch.obs.ID(), len(al))
 
 	if al[len(al)-1].End != ch.nobs {
@@ -398,10 +391,11 @@ func (ch *chain) updateFromAlignments() error {
 	// Also, this is using a naming convention (xxx-N), can we use a better design?
 	// Include state index in alignment node?
 	for _, node := range al {
-		s := strings.Split(node.Name, "-") // format is xxx-N where xxx is teh net name and N is the state index.
+		s := strings.Split(node.Name, "-") // format is xxx-N where xxx is the net name and N is the state index.
 		if len(s) != 2 {
 			return fmt.Errorf("oid:%s - there must be exactly one \"-\" in the alignment node name [%s]", ch.obs.ID(), node.Name)
 		}
+		glog.V(6).Infof("oid:%s - align node name: %s, state: %s", ch.obs.ID(), s[0], s[1])
 		h := ch.ms.byName[s[0]]
 		st, err := strconv.ParseInt(s[1], 10, 32)
 		if err != nil {

@@ -416,7 +416,8 @@ func TestHMMChain(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	hmm := NewModel(OSet(ms), OAssign(DirectAssigner{}), UpdateTP(true), UpdateOP(true))
+	//	hmm := NewModel(OSet(ms), OAssign(DirectAssigner{}), UpdateTP(true), UpdateOP(true))
+	hmm := NewModel(OSet(ms), OAssign(DirectAssigner{}), UseAlignments(true))
 	t.Log("initial hmm: ", hmm)
 
 	numFrames := 0

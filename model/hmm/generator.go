@@ -69,7 +69,6 @@ func (gen *generator) next(id string) (*model.FloatObsSequence, []string) {
 	if gen.noNull {
 		states = states[1 : len(states)-1]
 	}
-	seq.SetAlignment(model.AlignLabels(states))
 	return &seq, states
 }
 
@@ -123,6 +122,8 @@ func (gen *chainGen) next(id string) (*model.FloatObsSequence, []string) {
 	}
 
 	fos := model.JoinFloatObsSequence(id, obs...).(*model.FloatObsSequence)
+	fos.SetAlignment(model.AlignLabels(states))
+	glog.V(8).Infof("align labels %v", model.AlignLabels(states))
 	return fos, states
 }
 
