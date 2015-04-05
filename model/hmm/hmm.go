@@ -346,7 +346,7 @@ func (ch *chain) update() error {
 	logProb := ch.beta.At(0, 0, 0)
 	totalProb := math.Exp(logProb)
 	if logProb == math.Inf(-1) {
-		return fmt.Errorf("oid:%s, log prob is -Inf, skipping training sequence", ch.obs.ID())
+		return fmt.Errorf("oid:%s, log prob is -Inf, skipping training sequence, num vectos:%d, chain len:%d, states per chain:%v", ch.obs.ID(), ch.nobs, ch.nq, ch.ns)
 	}
 	glog.V(2).Infof("oid:%s, log prob per observation:%e", ch.obs.ID(), logProb/float64(ch.nobs))
 

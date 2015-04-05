@@ -46,7 +46,9 @@ type Model struct {
 	updateOP      bool
 	useAlignments bool
 
-	logProb float64
+	logProb         float64
+	updateFailCount int
+	updateCount     int
 }
 
 // Option type is used to pass options to NewModel().
@@ -87,7 +89,7 @@ func NewModel(options ...Option) *Model {
 
 // UpdateOne updates model using a single weighted sample.
 func (m *Model) UpdateOne(o model.Obs, w float64) {
-
+	m.updateCount++
 	// We create a chain of hmms to update stats for an obs sequence.
 	// The chain is released once the update is done.
 	// The assigner has the logic for mapping labels to a chain of models.
@@ -101,6 +103,7 @@ func (m *Model) UpdateOne(o model.Obs, w float64) {
 	if m.useAlignments {
 		err = chain.updateFromAlignments()
 		if err != nil {
+			m.updateFailCount++
 			if glog.V(6) {
 				glog.Fatal(err)
 			}
@@ -110,6 +113,7 @@ func (m *Model) UpdateOne(o model.Obs, w float64) {
 	} else {
 		err = chain.update()
 		if err != nil {
+			m.updateFailCount++
 			if glog.V(6) {
 				glog.Fatal(err)
 			}
@@ -124,6 +128,19 @@ func (m *Model) UpdateOne(o model.Obs, w float64) {
 	}
 }
 
+// SetFlags sets various flags in the model.
+func (m *Model) SetFlags(useAlignments, updateTP, updateOP bool) {
+
+	m.useAlignments = useAlignments
+	m.updateTP = updateTP
+	m.updateOP = updateOP
+
+	if m.useAlignments && updateTP {
+		glog.Warning("updateTP must be false when useAlignments is true - setting updateTP=false")
+		m.updateTP = false
+	}
+}
+
 // Update updates sufficient statistics using an observation stream.
 func (m *Model) Update(x model.Observer, w func(model.Obs) float64) error {
 	return nil
@@ -132,6 +149,7 @@ func (m *Model) Update(x model.Observer, w func(model.Obs) float64) error {
 // Estimate will update HMM parameters from counts.
 func (m *Model) Estimate() error {
 
+	glog.Infof("total update counts:%d, update fails:%4.1f%%", m.updateCount, float64(m.updateFailCount*100)/float64(m.updateCount))
 	glog.Infof("total logProb:%.2f", m.logProb)
 
 	// Reestimates HMM params in the model set.
@@ -173,6 +191,8 @@ func (m *Model) Dim() int {
 // Clear accumulators.
 func (m *Model) Clear() {
 	m.logProb = 0
+	m.updateFailCount = 0
+	m.updateCount = 0
 	m.Set.reset()
 }
 

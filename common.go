@@ -73,6 +73,7 @@ func ReadResults(fn string) (results map[string]*Result, e error) {
 	return
 }
 
+// Fatal logs a fatal errors and exits.
 func Fatal(err error) {
 	if err != nil {
 		glog.Fatal(err)

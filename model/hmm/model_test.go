@@ -388,14 +388,16 @@ func initRandomSet(r *rand.Rand, in *Set) (*Set, error) {
 func TestHMMChain(t *testing.T) {
 
 	r := rand.New(rand.NewSource(444))
-	numModels := 8
-	dim := 8
-	maxNumStates := 5
-	iter := 4
-	numTrainSeq := 10000
-	maxChainLen := 2     // max number of nets in chain.
+	numModels := 20
+	dim := 4 //8
+	maxNumStates := 6
+	iter0 := 1 // from alignments
+	iter1 := 2 // FB
+	ntrain0 := 1000
+	ntrain1 := 20000
+	maxChainLen := 8     // max number of nets in chain.
 	numTestItems := 1000 // num test sequences.
-	maxTestLen := 8
+	maxTestLen := 10
 
 	// Create reference HMM to generate random sequences.
 	ms0, _ := NewSet()
@@ -422,7 +424,8 @@ func TestHMMChain(t *testing.T) {
 
 	numFrames := 0
 	t0 := time.Now() // Start timer.
-	for i := 0; i < iter; i++ {
+	t.Log("start training from alignments")
+	for i := 0; i < iter0; i++ {
 		t.Logf("iter [%d]", i)
 
 		// Make sure we generate the same data in each iteration.
@@ -433,13 +436,35 @@ func TestHMMChain(t *testing.T) {
 		hmm.Clear()
 
 		// fix the seed to get the same sequence
-		for j := 0; j < numTrainSeq; j++ {
+		for j := 0; j < ntrain0; j++ {
 			obs, states := gen.next("oid-" + fi(j))
 			numFrames += len(states) - 2
 			hmm.UpdateOne(obs, 1.0)
 		}
 		hmm.Estimate()
 	}
+
+	t.Log("start training using forward-backward algo")
+	hmm.SetFlags(false, true, true)
+	for i := 0; i < iter1; i++ {
+		t.Logf("iter [%d]", i)
+
+		// Make sure we generate the same data in each iteration.
+		r := rand.New(rand.NewSource(55))
+		gen := newChainGen(r, true, maxChainLen, ms0.Nets...)
+
+		// Reset all counters.
+		hmm.Clear()
+
+		// fix the seed to get the same sequence
+		for j := 0; j < ntrain1; j++ {
+			obs, states := gen.next("oid-" + fi(j))
+			numFrames += len(states) - 2
+			hmm.UpdateOne(obs, 1.0)
+		}
+		hmm.Estimate()
+	}
+
 	dur := time.Now().Sub(t0)
 	t.Log("dur: ", dur)
 
@@ -474,8 +499,8 @@ func TestHMMChain(t *testing.T) {
 	// Print time stats.
 	t.Log("")
 	t.Logf("Total time: %v", dur)
-	t.Logf("Time per iteration: %v", dur/time.Duration(iter))
-	t.Logf("Time per frame: %v", dur/time.Duration(iter*numFrames*numTrainSeq))
+	t.Logf("Time per iteration: %v", dur/time.Duration(iter1))
+	t.Logf("Time per frame: %v", dur/time.Duration(iter1*numFrames*ntrain1))
 
 	// Recognize.
 	g := ms.SearchGraph()
