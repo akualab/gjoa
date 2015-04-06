@@ -6,9 +6,13 @@
 package model
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
+
+	"github.com/golang/glog"
 )
 
 // RandNormalVector returns a random observation.
@@ -61,4 +65,54 @@ func RandIntFromLogDist(dist []float64, r *rand.Rand) int {
 		}
 	}
 	return N - 1
+}
+
+// ObsElem is an observation vector.
+type ObsElem struct {
+	Value [][]float64 `json:"value"`
+	Label string      `json:"label"`
+	ID    string      `json:"id"`
+}
+
+// StreamObserver implements an observer to stream FloatObs objects.
+// Not safe to use with multiple goroutines.
+type StreamObserver struct {
+	reader io.Reader
+}
+
+// NewStreamObserver creates a new StreamObserver.
+// Values are read from a reader as json format.
+func NewStreamObserver(reader io.Reader) (*StreamObserver, error) {
+	so := &StreamObserver{
+		reader: reader,
+	}
+	return so, nil
+}
+
+// ObsChan implements the ObsChan method for the observer interface.
+func (so StreamObserver) ObsChan() (<-chan Obs, error) {
+
+	obsChan := make(chan Obs, 1000)
+	go func() {
+
+		dec := json.NewDecoder(so.reader)
+		for {
+			var v ObsElem
+			if err := dec.Decode(&v); err != nil {
+				glog.Warning(err)
+				return
+			}
+			// Check if this is a sequence.
+			seqLen := len(v.Value)
+
+			if seqLen == 1 {
+				obsChan <- NewFloatObs(v.Value[0], SimpleLabel(v.Label))
+			} else {
+				obsChan <- NewFloatObsSequence(v.Value, SimpleLabel(v.Label), v.ID)
+			}
+		}
+		close(obsChan)
+	}()
+
+	return obsChan, nil
 }
