@@ -72,6 +72,7 @@ type ObsElem struct {
 	Value [][]float64 `json:"value"`
 	Label string      `json:"label"`
 	ID    string      `json:"id"`
+	IsSeq bool        `json:"seq"`
 }
 
 // StreamObserver implements an observer to stream FloatObs objects.
@@ -98,17 +99,18 @@ func (so StreamObserver) ObsChan() (<-chan Obs, error) {
 		dec := json.NewDecoder(so.reader)
 		for {
 			var v ObsElem
-			if err := dec.Decode(&v); err != nil {
-				glog.Warning(err)
-				return
+			err := dec.Decode(&v)
+			if err == io.EOF {
+				break
 			}
-			// Check if this is a sequence.
-			seqLen := len(v.Value)
-
-			if seqLen == 1 {
-				obsChan <- NewFloatObs(v.Value[0], SimpleLabel(v.Label))
-			} else {
+			if err != nil {
+				glog.Warning(err)
+				break
+			}
+			if v.IsSeq {
 				obsChan <- NewFloatObsSequence(v.Value, SimpleLabel(v.Label), v.ID)
+			} else {
+				obsChan <- NewFloatObs(v.Value[0], SimpleLabel(v.Label))
 			}
 		}
 		close(obsChan)
