@@ -83,6 +83,16 @@ type StreamObserver struct {
 
 // NewStreamObserver creates a new StreamObserver.
 // Values are read from a reader as json format.
+//
+// Example to create an StreamObserver from a file (error handling ignored for brevity).
+// The data must be a stream of JSON-encoded ObsElem values.
+//
+//   r, _ = os.Open(fn)              // Open file.
+//   obs, _ = NewStreamObserver(r)   // Create observer that reads from file.
+//   c, _ = obs.ObsChan()            // Get channel. (See model.Observer interface.)
+//                                   // Obs type is of type model.FloatObs or
+//                                   // model.FloatObsSequence (if seq=true)
+//  _ = obs.Close()                  // Closes the underlying file reader.
 func NewStreamObserver(reader io.Reader) (*StreamObserver, error) {
 	so := &StreamObserver{
 		reader: reader,
@@ -117,4 +127,17 @@ func (so StreamObserver) ObsChan() (<-chan Obs, error) {
 	}()
 
 	return obsChan, nil
+}
+
+// Close underlying reader if reader implements the io.Closer interface.
+func (so StreamObserver) Close() error {
+
+	c, ok := so.reader.(io.Closer)
+	if ok {
+		e := c.Close()
+		if e != nil {
+			return e
+		}
+	}
+	return nil
 }

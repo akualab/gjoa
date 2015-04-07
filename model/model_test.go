@@ -14,6 +14,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -97,6 +98,68 @@ func TestStreamObserver(t *testing.T) {
 		}
 		i++
 	}
+
+	// Write to a file
+	reader = makeObsData(r, numObs, dim, maxSeqLen)
+	data = reader.(*obsReader).data // use to assert
+	fn := filepath.Join(os.TempDir(), "streamobs.json")
+	w, err := os.Create(fn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	io.Copy(w, reader)
+	w.Close()
+
+	// Read file.
+	rr, ee := os.Open(fn)
+	if ee != nil {
+		t.Fatal(ee)
+	}
+	dec := json.NewDecoder(rr)
+	for i := 0; ; i++ {
+		var oe ObsElem
+		e := dec.Decode(&oe)
+		if e == io.EOF {
+			break
+		}
+		if e != nil {
+			t.Fatal(e)
+		}
+		for j, exp := range data[i].Value {
+			got := oe.Value[j]
+			gjoa.CompareSliceFloat(t, exp, got, "value mismatch", 0.001)
+		}
+	}
+	rr.Close()
+
+	// Read file and pass reader to stream observer.
+	rr, ee = os.Open(fn)
+	if ee != nil {
+		t.Fatal(ee)
+	}
+	obs, err = NewStreamObserver(rr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, e2 = obs.ObsChan()
+	if e2 != nil {
+		t.Fatal(e2)
+	}
+	i = 0
+	for v := range c {
+		if len(v.Value().([][]float64)) != len(data[i].Value) {
+			t.Fatalf("length mismatch - i:%d, got:%d, expected:%d", i, len(v.Value().([][]float64)), len(data[i].Value))
+		}
+		for j, exp := range data[i].Value {
+			got := v.Value().([][]float64)[j]
+			gjoa.CompareSliceFloat(t, exp, got, "value mismatch", 0.001)
+		}
+		i++
+	}
+	err = obs.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 type obsReader struct {
@@ -120,6 +183,7 @@ func (or *obsReader) Read(p []byte) (int, error) {
 	if len(b) > len(p) {
 		return 0, fmt.Errorf("buffer too short b:%d > p:%d", len(b), len(p))
 	}
+	b = append(b, '\n')
 	n := copy(p, b)
 	return n, nil
 }
