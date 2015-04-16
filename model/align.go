@@ -9,7 +9,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/akualab/gjoa"
+	"github.com/akualab/ju"
 )
 
 // The Aligner interface provides access to alignment information at various levels.
@@ -35,7 +35,7 @@ type ANode struct {
 	// Name of unit being aligned.
 	Name string `json:"n"`
 	// Value is an arbitrary object associated to an interval.
-	Value interface{} `json:"v"`
+	Value interface{} `json:"v,omitempty"`
 	// Pointers to child alignments one level down.
 	Children []*ANode `json:"-"`
 }
@@ -173,7 +173,7 @@ func (a *ANode) isBalanced() bool {
 // ToJSON returns a json string.
 func (a *ANode) ToJSON() (string, error) {
 	var b bytes.Buffer
-	err := gjoa.WriteJSON(&b, a)
+	err := ju.WriteJSON(&b, a)
 	return b.String(), err
 }
 
@@ -234,7 +234,7 @@ func AlignLabels(labels []string) []*ANode {
 // ToJSON returns a json string.
 func (a Alignment) ToJSON() (string, error) {
 	var b bytes.Buffer
-	err := gjoa.WriteJSON(&b, a)
+	err := ju.WriteJSON(&b, a)
 	return b.String(), err
 }
 

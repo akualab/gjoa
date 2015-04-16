@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/akualab/gjoa"
+	"github.com/akualab/ju"
 )
 
 func TestValid(t *testing.T) {
@@ -83,11 +83,11 @@ func TestWriteRead(t *testing.T) {
 	root := makeTree()
 	al := root.Alignment()
 	fn := filepath.Join(os.TempDir(), "align.json")
-	gjoa.WriteJSONFile(fn, al)
+	ju.WriteJSONFile(fn, al)
 	t.Logf("Wrote to temp file: %s\n", fn)
 
 	var al2 Alignment
-	gjoa.ReadJSONFile(fn, &al2)
+	ju.ReadJSONFile(fn, &al2)
 	t.Log(al2)
 
 	for level := range al {

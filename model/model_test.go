@@ -39,7 +39,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestStreamObserver(t *testing.T) {
+func TestSeqObserver(t *testing.T) {
 
 	dim := 4
 	maxSeqLen := 10
@@ -51,7 +51,7 @@ func TestStreamObserver(t *testing.T) {
 	// Test non sequence data.
 	reader := makeObsData(r, numObs, dim, 1)
 	data := reader.(*obsReader).data // use to assert
-	obs, err := NewStreamObserver(reader)
+	obs, err := NewSeqObserver(reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,10 +61,10 @@ func TestStreamObserver(t *testing.T) {
 	}
 	i := 0
 	for v := range c {
-		if len(v.Value().([]float64)) != len(data[i].Value[0]) {
-			t.Fatalf("length mismatch - got %d, expected %d", len(v.Value().([]float64)), len(data[i].Value[0]))
+		if len(v.Value().([]float64)) != len(data[i].Vectors[0]) {
+			t.Fatalf("length mismatch - got %d, expected %d", len(v.Value().([]float64)), len(data[i].Vectors[0]))
 		}
-		for j, exp := range data[i].Value[0] {
+		for j, exp := range data[i].Vectors[0] {
 			got := v.Value().([]float64)[j]
 			if exp != got {
 				t.Logf("got: %5.3f, expected: %5.3f", exp, got)
@@ -77,7 +77,7 @@ func TestStreamObserver(t *testing.T) {
 	reader = makeObsData(r, numObs, dim, maxSeqLen)
 	data = reader.(*obsReader).data // use to assert
 	bufReader := bufio.NewReaderSize(reader, bufSize)
-	obs, err = NewStreamObserver(bufReader)
+	obs, err = NewSeqObserver(bufReader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,10 +89,10 @@ func TestStreamObserver(t *testing.T) {
 	i = 0
 	for v := range c {
 
-		if len(v.Value().([][]float64)) != len(data[i].Value) {
-			t.Fatalf("length mismatch - i:%d, got:%d, expected:%d", i, len(v.Value().([][]float64)), len(data[i].Value))
+		if len(v.Value().([][]float64)) != len(data[i].Vectors) {
+			t.Fatalf("length mismatch - i:%d, got:%d, expected:%d", i, len(v.Value().([][]float64)), len(data[i].Vectors))
 		}
-		for j, exp := range data[i].Value {
+		for j, exp := range data[i].Vectors {
 			got := v.Value().([][]float64)[j]
 			gjoa.CompareSliceFloat(t, exp, got, "value mismatch", 0.001)
 		}
@@ -117,7 +117,7 @@ func TestStreamObserver(t *testing.T) {
 	}
 	dec := json.NewDecoder(rr)
 	for i := 0; ; i++ {
-		var oe ObsElem
+		var oe Seq
 		e := dec.Decode(&oe)
 		if e == io.EOF {
 			break
@@ -125,8 +125,8 @@ func TestStreamObserver(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		for j, exp := range data[i].Value {
-			got := oe.Value[j]
+		for j, exp := range data[i].Vectors {
+			got := oe.Vectors[j]
 			gjoa.CompareSliceFloat(t, exp, got, "value mismatch", 0.001)
 		}
 	}
@@ -137,7 +137,7 @@ func TestStreamObserver(t *testing.T) {
 	if ee != nil {
 		t.Fatal(ee)
 	}
-	obs, err = NewStreamObserver(rr)
+	obs, err = NewSeqObserver(rr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,10 +147,10 @@ func TestStreamObserver(t *testing.T) {
 	}
 	i = 0
 	for v := range c {
-		if len(v.Value().([][]float64)) != len(data[i].Value) {
-			t.Fatalf("length mismatch - i:%d, got:%d, expected:%d", i, len(v.Value().([][]float64)), len(data[i].Value))
+		if len(v.Value().([][]float64)) != len(data[i].Vectors) {
+			t.Fatalf("length mismatch - i:%d, got:%d, expected:%d", i, len(v.Value().([][]float64)), len(data[i].Vectors))
 		}
-		for j, exp := range data[i].Value {
+		for j, exp := range data[i].Vectors {
 			got := v.Value().([][]float64)[j]
 			gjoa.CompareSliceFloat(t, exp, got, "value mismatch", 0.001)
 		}
@@ -163,7 +163,7 @@ func TestStreamObserver(t *testing.T) {
 }
 
 type obsReader struct {
-	data []ObsElem
+	data []Seq
 	idx  int
 }
 
@@ -190,21 +190,16 @@ func (or *obsReader) Read(p []byte) (int, error) {
 
 func makeObsData(r *rand.Rand, numObs, dim, maxSeqLen int) io.Reader {
 
-	var isSeq bool
 	if maxSeqLen < 1 {
 		maxSeqLen = 1
 	}
-	if maxSeqLen > 1 {
-		isSeq = true
-	}
-	data := make([]ObsElem, numObs, numObs)
+	data := make([]Seq, numObs, numObs)
 	for k := range data {
 		seqLen := r.Intn(maxSeqLen) + 1
-		data[k] = ObsElem{
-			ID:    "test-" + strconv.Itoa(k),
-			Label: "len_" + strconv.Itoa(seqLen),
-			Value: randFloats(r, seqLen, dim),
-			IsSeq: isSeq,
+		data[k] = Seq{
+			ID:      "test-" + strconv.Itoa(k),
+			Labels:  []string{"len_" + strconv.Itoa(seqLen)},
+			Vectors: randFloats(r, seqLen, dim),
 		}
 	}
 	return &obsReader{data: data}

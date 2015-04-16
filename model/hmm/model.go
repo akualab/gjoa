@@ -13,11 +13,15 @@ package hmm
 
 import (
 	"bytes"
+	"io"
 	"math"
 	"math/rand"
+	"os"
+	"path/filepath"
+	"reflect"
 
-	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/model"
+	"github.com/akualab/ju"
 	"github.com/golang/glog"
 )
 
@@ -31,13 +35,12 @@ type ObsSlice []model.Modeler
 
 // Model is a hidden Markov model.
 type Model struct {
-
+	// Model type.
+	Type string `json:"type"`
 	// Model name.
 	ModelName string `json:"name"`
-
 	// Model Set
 	Set *Set `json:"hmm_set"`
-
 	// Train HMM params.
 	assigner Assigner
 	//	generator *Generator
@@ -63,6 +66,7 @@ func NewModel(options ...Option) *Model {
 		updateOP:  true,
 		maxGenLen: 100,
 	}
+	m.Type = reflect.TypeOf(*m).String()
 
 	// Set options.
 	for _, option := range options {
@@ -199,7 +203,7 @@ func (m *Model) Clear() {
 // ToJSON returns a json string.
 func (m *Model) ToJSON() (string, error) {
 	var b bytes.Buffer
-	err := gjoa.WriteJSON(&b, m)
+	err := ju.WriteJSON(&b, m)
 	return b.String(), err
 }
 
@@ -266,4 +270,49 @@ func UseAlignments(flag bool) Option {
 	return func(m *Model) {
 		m.useAlignments = flag
 	}
+}
+
+// IO
+
+// ReadJSON unmarshals json data from an io.Reader anc creates a new HMM model.
+func ReadJSON(r io.Reader) (*Model, error) {
+	m := NewModel()
+	err := ju.ReadJSON(r, m)
+	if err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// ReadJSONFile unmarshals json data from a file.
+func ReadJSONFile(fn string) (*Model, error) {
+	f, err := os.Open(fn)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return ReadJSON(f)
+}
+
+// WriteJSON writes HMM model to an io.Writer.
+func (m *Model) WriteJSON(w io.Writer) error {
+	err := ju.WriteJSON(w, m)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// WriteJSONFile writes to a file.
+func (m *Model) WriteJSONFile(fn string) error {
+	e := os.MkdirAll(filepath.Dir(fn), 0755)
+	if e != nil {
+		return e
+	}
+	f, err := os.Create(fn)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return m.WriteJSON(f)
 }

@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/model"
+	"github.com/akualab/ju"
 	"github.com/akualab/narray"
 	"github.com/golang/glog"
 )
@@ -760,7 +760,7 @@ func TestWriteRead(t *testing.T) {
 	fatalIf(t, e)
 	t.Log(modelSet)
 	fn := filepath.Join(os.TempDir(), "model_set.json")
-	gjoa.WriteJSONFile(fn, modelSet)
+	ju.WriteJSONFile(fn, modelSet)
 	t.Logf("Wrote to temp file: %s\n", fn)
 }
 

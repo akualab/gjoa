@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
@@ -30,6 +31,7 @@ const (
 
 // Model is a multivariate Gaussian distribution.
 type Model struct {
+	Type        string    `json:"type"`
 	ModelName   string    `json:"name,omitempty"`
 	ModelDim    int       `json:"dim"`
 	NSamples    float64   `json:"nsamples"`
@@ -59,6 +61,7 @@ func NewModel(dim int, options ...Option) *Model {
 		varianceInv: make([]float64, dim),
 		tmpArray:    make([]float64, dim),
 	}
+	g.Type = reflect.TypeOf(*g).String()
 
 	// Set options.
 	for _, option := range options {

@@ -6,13 +6,9 @@
 package model
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"math/rand"
-
-	"github.com/golang/glog"
 )
 
 // RandNormalVector returns a random observation.
@@ -65,79 +61,4 @@ func RandIntFromLogDist(dist []float64, r *rand.Rand) int {
 		}
 	}
 	return N - 1
-}
-
-// ObsElem is an observation vector.
-type ObsElem struct {
-	Value [][]float64 `json:"value"`
-	Label string      `json:"label"`
-	ID    string      `json:"id"`
-	IsSeq bool        `json:"seq"`
-}
-
-// StreamObserver implements an observer to stream FloatObs objects.
-// Not safe to use with multiple goroutines.
-type StreamObserver struct {
-	reader io.Reader
-}
-
-// NewStreamObserver creates a new StreamObserver.
-// Values are read from a reader as json format.
-//
-// Example to create an StreamObserver from a file (error handling ignored for brevity).
-// The data must be a stream of JSON-encoded ObsElem values.
-//
-//   r, _ = os.Open(fn)              // Open file.
-//   obs, _ = NewStreamObserver(r)   // Create observer that reads from file.
-//   c, _ = obs.ObsChan()            // Get channel. (See model.Observer interface.)
-//                                   // Obs type is of type model.FloatObs or
-//                                   // model.FloatObsSequence (if seq=true)
-//  _ = obs.Close()                  // Closes the underlying file reader.
-func NewStreamObserver(reader io.Reader) (*StreamObserver, error) {
-	so := &StreamObserver{
-		reader: reader,
-	}
-	return so, nil
-}
-
-// ObsChan implements the ObsChan method for the observer interface.
-func (so StreamObserver) ObsChan() (<-chan Obs, error) {
-
-	obsChan := make(chan Obs, 1000)
-	go func() {
-
-		dec := json.NewDecoder(so.reader)
-		for {
-			var v ObsElem
-			err := dec.Decode(&v)
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				glog.Warning(err)
-				break
-			}
-			if v.IsSeq {
-				obsChan <- NewFloatObsSequence(v.Value, SimpleLabel(v.Label), v.ID)
-			} else {
-				obsChan <- NewFloatObs(v.Value[0], SimpleLabel(v.Label))
-			}
-		}
-		close(obsChan)
-	}()
-
-	return obsChan, nil
-}
-
-// Close underlying reader if reader implements the io.Closer interface.
-func (so StreamObserver) Close() error {
-
-	c, ok := so.reader.(io.Closer)
-	if ok {
-		e := c.Close()
-		if e != nil {
-			return e
-		}
-	}
-	return nil
 }

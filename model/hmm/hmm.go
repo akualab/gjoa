@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/akualab/gjoa"
 	"github.com/akualab/gjoa/model"
+	"github.com/akualab/ju"
 	"github.com/akualab/narray"
 	"github.com/golang/glog"
 )
@@ -781,7 +781,7 @@ func MakeLeftToRight(ns int, selfProb, skipProb float64) *narray.NArray {
 // ToJSON returns a json string.
 func (ms *Set) ToJSON() (string, error) {
 	var b bytes.Buffer
-	err := gjoa.WriteJSON(&b, ms)
+	err := ju.WriteJSON(&b, ms)
 	return b.String(), err
 }
 

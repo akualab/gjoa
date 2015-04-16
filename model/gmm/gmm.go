@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 
 	"github.com/akualab/gjoa/floatx"
 	"github.com/akualab/gjoa/model"
@@ -24,6 +25,7 @@ import (
 
 // Model is a mixture of Gaussian distributions.
 type Model struct {
+	Type         string            `json:"type"`
 	ModelName    string            `json:"name"`
 	ModelDim     int               `json:"dim"`
 	NSamples     float64           `json:"nsamples"`
@@ -51,6 +53,7 @@ func NewModel(dim, numComponents int, options ...Option) *Model {
 		Diag:        true,
 		tmpProbs:    make([]float64, numComponents),
 	}
+	gmm.Type = reflect.TypeOf(*gmm).String()
 
 	// Set options.
 	for _, option := range options {

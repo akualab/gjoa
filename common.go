@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/golang/glog"
 )
@@ -80,55 +79,9 @@ func Fatal(err error) {
 	}
 }
 
-// ReadJSON unmarshals json data from an io.Reader.
-// The param "o" must be a pointer to an object.
-func ReadJSON(r io.Reader, o interface{}) error {
-	dec := json.NewDecoder(r)
-	err := dec.Decode(o)
-	if err != nil && err != io.EOF {
-		return err
-	}
-	return nil
-}
-
-// ReadJSONFile unmarshals json data from a file.
-func ReadJSONFile(fn string, o interface{}) error {
-
-	f, err := os.Open(fn)
+// PanicIf panics if error is not nil.
+func PanicIf(err error) {
 	if err != nil {
-		return err
+		panic(err)
 	}
-	defer f.Close()
-	return ReadJSON(f, o)
-}
-
-// WriteJSON writes an object to an io.Writer.
-func WriteJSON(w io.Writer, o interface{}) error {
-
-	enc := json.NewEncoder(w)
-	err := enc.Encode(o)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// WriteJSONFile writes to a file.
-func WriteJSONFile(fn string, o interface{}) error {
-
-	e := os.MkdirAll(filepath.Dir(fn), 0755)
-	if e != nil {
-		return e
-	}
-	f, err := os.Create(fn)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	ee := WriteJSON(f, o)
-	if ee != nil {
-		return ee
-	}
-	return nil
 }
