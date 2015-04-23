@@ -10,7 +10,7 @@ import (
 
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/ju"
-	"github.com/akualab/narray"
+	narray "github.com/akualab/narray/na64"
 	"github.com/golang/glog"
 )
 

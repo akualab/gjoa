@@ -10,7 +10,7 @@ import (
 	"strconv"
 
 	"github.com/akualab/gjoa/model"
-	"github.com/akualab/narray"
+	narray "github.com/akualab/narray/na64"
 	"github.com/golang/glog"
 )
 

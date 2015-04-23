@@ -16,8 +16,9 @@ import (
 
 	"github.com/akualab/gjoa/model"
 	"github.com/akualab/ju"
-	"github.com/akualab/narray"
 	"github.com/golang/glog"
+
+	narray "github.com/akualab/narray/na64"
 )
 
 // HMM network implementation.

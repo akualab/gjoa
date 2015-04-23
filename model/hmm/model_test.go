@@ -15,7 +15,7 @@ import (
 	"github.com/akualab/gjoa/model"
 	gm "github.com/akualab/gjoa/model/gaussian"
 	"github.com/akualab/graph"
-	"github.com/akualab/narray"
+	narray "github.com/akualab/narray/na64"
 )
 
 func makeHMM(t *testing.T) *Model {
